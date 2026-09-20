@@ -1,0 +1,25 @@
+# Build artifacts
+build/
+output/
+bin/
+obj/
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+
+# Output test images
+test_output_*
+*.ppm
+*.jpg
+*.tif
+*.tiff
+*.webp
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*~
