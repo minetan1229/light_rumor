@@ -41,44 +41,30 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build APK with Gradle
-        id: gradle_build
         run: |
-          ./gradlew assembleDebug --stacktrace 2>&1 | tee gradle_debug.log
-          ./gradlew assembleRelease --stacktrace 2>&1 | tee gradle_release.log || true
-
-      - name: Report Build Output on Failure
-        if: failure()
-        run: |
-          echo "## ❌ Gradle Build Failure Log" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          if [ -f gradle_debug.log ]; then
-            tail -n 120 gradle_debug.log >> $GITHUB_STEP_SUMMARY
-          fi
-          if [ -f gradle_release.log ]; then
-            tail -n 120 gradle_release.log >> $GITHUB_STEP_SUMMARY
-          fi
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleRelease --stacktrace || true
 
       - name: Locate and Stage APK
         run: |
           mkdir -p dist
-          # Find generated debug or release APK
-          APK_FILE=$(find app/build/outputs/apk/debug -name "*.apk" 2>/dev/null | head -n 1)
-          if [ -z "$APK_FILE" ]; then
-            APK_FILE=$(find app/build/outputs/apk/release -name "*.apk" 2>/dev/null | head -n 1)
-          fi
-          if [ -z "$APK_FILE" ]; then
-            APK_FILE=$(find app/build/outputs/apk -name "*.apk" 2>/dev/null | head -n 1)
-          fi
-          
-          if [ -n "$APK_FILE" ] && [ -f "$APK_FILE" ]; then
-            cp "$APK_FILE" dist/light_rumor.apk
-            echo "Successfully staged APK from $APK_FILE to dist/light_rumor.apk"
+          shopt -s globstar nullglob
+          apks=(**/build/outputs/apk/**/*.apk)
+          if [ ${#apks[@]} -gt 0 ]; then
+            echo "Found APK: ${apks[0]}"
+            cp "${apks[0]}" dist/light_rumor.apk
             ls -lh dist/light_rumor.apk
           else
-            echo "Error: No APK file found in build outputs!"
-            find app/build/outputs/ -type f || true
-            exit 1
+            echo "Searching all .apk files in workspace..."
+            all_apks=(**/*.apk)
+            if [ ${#all_apks[@]} -gt 0 ]; then
+              echo "Found APK: ${all_apks[0]}"
+              cp "${all_apks[0]}" dist/light_rumor.apk
+              ls -lh dist/light_rumor.apk
+            else
+              echo "Error: No APK file found!"
+              exit 1
+            fi
           fi
 
       - name: Upload APK as Workflow Artifact
