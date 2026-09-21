@@ -19,9 +19,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lightrumor.HapticManager
-import com.lightrumor.HistoryManager
-import com.lightrumor.HistoryNode
+import com.lightrumor.*
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale

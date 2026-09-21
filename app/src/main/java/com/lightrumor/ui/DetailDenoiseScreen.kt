@@ -16,8 +16,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lightrumor.DevelopmentParams
-import com.lightrumor.HapticManager
+import com.lightrumor.*
 
 /**
  * DetailDenoiseScreen: High-Fidelity Sharpening, Dual-Domain Noise Reduction & Lens Optics.

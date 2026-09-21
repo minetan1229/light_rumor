@@ -22,8 +22,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lightrumor.LightRumorMotionSpecs
-import com.lightrumor.HapticManager
+import com.lightrumor.*
 import kotlin.math.*
 
 /**

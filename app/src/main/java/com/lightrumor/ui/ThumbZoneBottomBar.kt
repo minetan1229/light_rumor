@@ -20,9 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lightrumor.LightRumorMotionSpecs
-import com.lightrumor.DevelopmentParams
-import com.lightrumor.HapticManager
+import com.lightrumor.*
 
 enum class ThumbTab(val title: String) {
     Light("LIGHT"),
