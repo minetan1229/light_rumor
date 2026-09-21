@@ -212,8 +212,9 @@ class HistoryManager(initialParams: DevelopmentParams = DevelopmentParams()) {
         // 2. Traverse down through active branch to leaf
         var forward = nodes[currentNodeId]
         while (forward != null && forward.childrenIds.isNotEmpty()) {
-            val child = forward.childrenIds.firstOrNull { nodes[it]?.branchId == activeBranchId }
-                ?: forward.childrenIds.firstOrNull()?.let { nodes[it] }
+            val childId = forward.childrenIds.firstOrNull { nodes[it]?.branchId == activeBranchId }
+                ?: forward.childrenIds.firstOrNull()
+            val child = childId?.let { nodes[it] }
             if (child != null) {
                 timeline.add(child)
                 forward = child

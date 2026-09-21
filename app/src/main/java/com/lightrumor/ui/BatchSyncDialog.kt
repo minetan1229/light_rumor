@@ -152,8 +152,8 @@ fun BatchSyncDialog(
                 SyncCheckboxRow(
                     title = "RATING & CULLING FLAGS",
                     description = "Rating (${sourceItem.metadata.rating}/5), Flag (${sourceItem.metadata.pickStatus}), Label (${sourceItem.metadata.colorLabel.labelName})",
-                    checked = options.syncRatingFlags,
-                    onCheckedChange = { options = options.copy(syncRatingFlags = it) }
+                    checked = options.syncRatingAndLabel,
+                    onCheckedChange = { options = options.copy(syncRatingAndLabel = it) }
                 )
 
                 Spacer(modifier = Modifier.height(20.dp))

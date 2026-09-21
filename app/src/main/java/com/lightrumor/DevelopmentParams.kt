@@ -275,7 +275,7 @@ data class RetouchStrokeState(
 data class ExportConfig(
     val format: ExportFormat = ExportFormat.JPEG,
     val jpegQuality: Int = 98,
-    val chromaSubsampling: ChromaSubsampling = ChromaSubsampling::YUV444,
+    val chromaSubsampling: ChromaSubsampling = ChromaSubsampling.YUV444,
     val tileSize: Int = 2048,
     val tilePadding: Int = 16
 )

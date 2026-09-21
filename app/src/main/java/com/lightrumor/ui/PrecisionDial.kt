@@ -67,7 +67,7 @@ fun PrecisionDial(
                 .background(colors.surfaceElevated, RoundedCornerShape(8.dp))
                 .border(1.dp, colors.borderStrong, RoundedCornerShape(8.dp))
                 .padding(20.dp),
-            horizontalAlignment = Alignment.CenterVertically
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Dial Title & Close
             Row(
@@ -179,7 +179,7 @@ fun PrecisionDial(
                 }
 
                 // Center readout display
-                Column(horizontalAlignment = Alignment.CenterVertically) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     val sign = if (value > 0f) "+" else ""
                     Text(
                         text = String.format("%s%.2f", sign, animatedValue),
