@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <iostream>
 
-namespace apex {
+namespace lightrumor {
 
 namespace {
 
@@ -156,4 +156,4 @@ bool SoftProofingEngine::applySoftProof(const std::vector<FloatRGBA>& inPixels,
     return true;
 }
 
-} // namespace apex
+} // namespace lightrumor

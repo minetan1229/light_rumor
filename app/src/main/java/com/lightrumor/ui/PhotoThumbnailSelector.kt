@@ -21,7 +21,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lightrumor.ApexTheme
 
 /**
  * ThumbnailItem: A photographic option represented by an actual photo thumbnail.
@@ -48,7 +47,7 @@ fun PhotoThumbnailSelector(
     onItemSelected: (PhotoThumbnailItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val colors = ApexTheme.colors
+    val colors = LightRumorTheme.colors
 
     LazyRow(
         modifier = modifier.fillMaxWidth(),

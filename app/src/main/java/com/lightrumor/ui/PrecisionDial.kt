@@ -22,8 +22,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lightrumor.ApexMotionSpecs
-import com.lightrumor.ApexTheme
+import com.lightrumor.LightRumorMotionSpecs
 import com.lightrumor.HapticManager
 import kotlin.math.*
 
@@ -44,13 +43,13 @@ fun PrecisionDial(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val colors = ApexTheme.colors
+    val colors = LightRumorTheme.colors
     var accumulatedAngle by remember { mutableFloatStateOf(0f) }
     var lastAngle by remember { mutableFloatStateOf(0f) }
 
     val animatedValue by animateFloatAsState(
         targetValue = value,
-        animationSpec = ApexMotionSpecs.MechanicalSpring,
+        animationSpec = LightRumorMotionSpecs.MechanicalSpring,
         label = "DialValue"
     )
 
@@ -77,7 +76,7 @@ fun PrecisionDial(
             ) {
                 Text(
                     text = "FINE DETENT DIAL: $label",
-                    style = ApexTheme.typography.Header,
+                    style = LightRumorTheme.typography.Header,
                     color = colors.textPrimary,
                     fontSize = 12.sp
                 )
@@ -238,7 +237,7 @@ fun PrecisionDial(
 
 @Composable
 private fun FineStepButton(text: String, onClick: () -> Unit) {
-    val colors = ApexTheme.colors
+    val colors = LightRumorTheme.colors
     Box(
         modifier = Modifier
             .background(colors.surfacePressed, RoundedCornerShape(3.dp))

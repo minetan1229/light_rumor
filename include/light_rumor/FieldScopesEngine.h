@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <memory>
 
-namespace apex {
+namespace lightrumor {
 
 /**
  * Cinema Field Assistance Scopes Engine.
@@ -55,4 +55,4 @@ public:
     static FloatRGBA mapIREToFalseColor(float ire);
 };
 
-} // namespace apex
+} // namespace lightrumor

@@ -4,7 +4,7 @@
 #include <iostream>
 #include <cstring>
 
-namespace apex {
+namespace lightrumor {
 
 namespace {
 
@@ -710,4 +710,4 @@ void PoissonSolver::solve(const std::vector<FloatRGBA>& destImage,
     }
 }
 
-} // namespace apex
+} // namespace lightrumor

@@ -6,14 +6,14 @@
 #include <cstring>
 #include <random>
 
-#if defined(APEX_ENABLE_LIBRAW)
+#if defined(LIGHT_RUMOR_ENABLE_LIBRAW)
 #include <libraw/libraw.h>
 #endif
 
-namespace apex {
+namespace lightrumor {
 
 struct RawDecoder::Impl {
-#if defined(APEX_ENABLE_LIBRAW)
+#if defined(LIGHT_RUMOR_ENABLE_LIBRAW)
     LibRaw rawProcessor;
     bool hasLibRaw = true;
 #else
@@ -35,7 +35,7 @@ void RawDecoder::close() {
     m_isLoaded = false;
     m_linearBuffer.clear();
     m_linearBuffer.shrink_to_fit();
-#if defined(APEX_ENABLE_LIBRAW)
+#if defined(LIGHT_RUMOR_ENABLE_LIBRAW)
     m_impl->rawProcessor.recycle();
 #endif
 }
@@ -43,7 +43,7 @@ void RawDecoder::close() {
 bool RawDecoder::openFile(const std::string& filePath) {
     close();
 
-#if defined(APEX_ENABLE_LIBRAW)
+#if defined(LIGHT_RUMOR_ENABLE_LIBRAW)
     int ret = m_impl->rawProcessor.open_file(filePath.c_str());
     if (ret != LIBRAW_SUCCESS) {
         std::cerr << "[RawDecoder] LibRaw open_file failed: " << libraw_strerror(ret) << std::endl;
@@ -118,7 +118,7 @@ bool RawDecoder::openFile(const std::string& filePath) {
 
 bool RawDecoder::openBuffer(const uint8_t* data, size_t size) {
     close();
-#if defined(APEX_ENABLE_LIBRAW)
+#if defined(LIGHT_RUMOR_ENABLE_LIBRAW)
     int ret = m_impl->rawProcessor.open_buffer(data, size);
     if (ret != LIBRAW_SUCCESS) return false;
     ret = m_impl->rawProcessor.unpack();
@@ -394,4 +394,4 @@ bool RawDecoder::extractEmbeddedThumbnail(const std::string& filePath,
     return extractEmbeddedThumbnailFromBuffer(buffer.data(), readSize, outJpegBytes, outWidth, outHeight);
 }
 
-} // namespace apex
+} // namespace lightrumor

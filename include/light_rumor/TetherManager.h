@@ -8,7 +8,7 @@
 #include <atomic>
 #include <mutex>
 
-namespace apex {
+namespace lightrumor {
 
 /**
  * High-speed USB-C Direct Tethered Shooting Manager.
@@ -73,4 +73,4 @@ private:
     std::unique_ptr<Impl> m_impl;
 };
 
-} // namespace apex
+} // namespace lightrumor

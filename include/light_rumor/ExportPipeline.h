@@ -8,7 +8,7 @@
 #include <vector>
 #include <memory>
 
-namespace apex {
+namespace lightrumor {
 
 class ExportPipeline {
 public:
@@ -49,4 +49,4 @@ private:
     std::unique_ptr<VulkanCompute> m_vulkan;
 };
 
-} // namespace apex
+} // namespace lightrumor

@@ -5,7 +5,7 @@
 #include <memory>
 #include <array>
 
-namespace apex {
+namespace lightrumor {
 
 struct StarPoint {
     float x = 0.0f;           // Sub-pixel centroid X
@@ -84,4 +84,4 @@ public:
                                 std::vector<FloatRGBA>& outStacked);
 };
 
-} // namespace apex
+} // namespace lightrumor

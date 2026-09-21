@@ -19,7 +19,7 @@ import java.util.concurrent.Executors
 class ExportService : Service() {
 
     companion object {
-        const val CHANNEL_ID = "apex_field_export_channel"
+        const val CHANNEL_ID = "light_rumor_export_channel"
         const val NOTIFICATION_ID = 1001
 
         const val ACTION_START_EXPORT = "com.lightrumor.action.START_EXPORT"
@@ -73,7 +73,7 @@ class ExportService : Service() {
 
     private fun acquireWakeLock() {
         val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
-        wakeLock = powerManager?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ApexField::ExportWakeLock")
+        wakeLock = powerManager?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "LightRumor::ExportWakeLock")
         wakeLock?.acquire(60 * 60 * 1000L) // 1 hour max timeout
     }
 
@@ -142,7 +142,7 @@ class ExportService : Service() {
                 )
                 val params = DevelopmentParams()
 
-                val success = ApexNativeEngine.exportPhoto(
+                val success = LightRumorNativeEngine.exportPhoto(
                     inputPath = inputPath,
                     outputPath = outputPath,
                     config = config,

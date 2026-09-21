@@ -11,7 +11,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace apex {
+namespace lightrumor {
 
 // Color space enum
 enum class ColorSpace : uint32_t {
@@ -65,7 +65,7 @@ struct ExifMetadata {
     std::string model = "ILCE-7RM5";
     std::string lensModel = "FE 24-70mm F2.8 GM II";
     std::string dateTimeOriginal = "2026:09:20 12:30:45";
-    std::string software = "Project APEX FIELD 1.0";
+    std::string software = "light_rumor 1.0";
     
     // Exposure parameters
     double exposureTime = 1.0 / 250.0; // seconds (e.g. 1/250s)
@@ -687,10 +687,10 @@ struct ExportRecipe {
     bool enableWatermark = false;
 };
 
-} // namespace apex
+} // namespace lightrumor
 
 namespace light_rumor {
-    using namespace apex;
+    using namespace lightrumor;
 }
 
 

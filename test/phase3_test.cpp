@@ -8,7 +8,7 @@
 #include <cassert>
 #include <algorithm>
 
-#define APEX_TEST_ASSERT(cond, msg) \
+#define LR_TEST_ASSERT(cond, msg) \
     do { \
         if (!(cond)) { \
             std::cerr << "\n[TEST FAILED] " << msg << " (" << __FILE__ << ":" << __LINE__ << ")\n" << std::endl; \
@@ -83,17 +83,17 @@ bool testWaveformOverlayAndColorMixing() {
         }
     }
 
-    apex::WaveformEngine engine;
-    APEX_TEST_ASSERT(engine.init(), "Engine init failed");
+    lightrumor::WaveformEngine engine;
+    LR_TEST_ASSERT(engine.init(), "Engine init failed");
 
-    apex::WaveformData waveData;
+    lightrumor::WaveformData waveData;
     int waveW = 512;
     int waveH = 256;
-    double elapsed = engine.computeFromRGBA8(pixels.data(), imgW, imgH, apex::WaveformMode::RgbOverlay, waveW, waveH, waveData);
+    double elapsed = engine.computeFromRGBA8(pixels.data(), imgW, imgH, lightrumor::WaveformMode::RgbOverlay, waveW, waveH, waveData);
 
-    APEX_TEST_ASSERT(waveData.width == waveW, "Width mismatch");
-    APEX_TEST_ASSERT(waveData.height == waveH, "Height mismatch");
-    APEX_TEST_ASSERT(!waveData.rgbaPixels.empty(), "Empty waveform pixels");
+    LR_TEST_ASSERT(waveData.width == waveW, "Width mismatch");
+    LR_TEST_ASSERT(waveData.height == waveH, "Height mismatch");
+    LR_TEST_ASSERT(!waveData.rgbaPixels.empty(), "Empty waveform pixels");
 
     // Check color mixing in waveform:
     // Signal level for 240 is near top: search around row 15
@@ -105,28 +105,28 @@ bool testWaveformOverlayAndColorMixing() {
             break;
         }
     }
-    APEX_TEST_ASSERT(targetY != -1, "Signal row for value 240 must be found");
+    LR_TEST_ASSERT(targetY != -1, "Signal row for value 240 must be found");
 
     // Left side (x = 50): pure red
     uint32_t pxLeft = waveData.rgbaPixels[targetY * waveW + 50];
     uint8_t rLeft = pxLeft & 0xFF;
     uint8_t gLeft = (pxLeft >> 8) & 0xFF;
     uint8_t bLeft = (pxLeft >> 16) & 0xFF;
-    APEX_TEST_ASSERT(rLeft > 100 && gLeft < 50 && bLeft < 50, "Left side must be pure red trace");
+    LR_TEST_ASSERT(rLeft > 100 && gLeft < 50 && bLeft < 50, "Left side must be pure red trace");
 
     // Middle side (x = 256): yellow (R + G)
     uint32_t pxMid = waveData.rgbaPixels[targetY * waveW + 256];
     uint8_t rMid = pxMid & 0xFF;
     uint8_t gMid = (pxMid >> 8) & 0xFF;
     uint8_t bMid = (pxMid >> 16) & 0xFF;
-    APEX_TEST_ASSERT(rMid > 100 && gMid > 100 && bMid < 50, "Middle side must be yellow (R+G additive mixing)");
+    LR_TEST_ASSERT(rMid > 100 && gMid > 100 && bMid < 50, "Middle side must be yellow (R+G additive mixing)");
 
     // Right side (x = 450): white (R + G + B)
     uint32_t pxRight = waveData.rgbaPixels[targetY * waveW + 450];
     uint8_t rRight = pxRight & 0xFF;
     uint8_t gRight = (pxRight >> 8) & 0xFF;
     uint8_t bRight = (pxRight >> 16) & 0xFF;
-    APEX_TEST_ASSERT(rRight > 100 && gRight > 100 && bRight > 100, "Right side must be white (R+G+B neutral white)");
+    LR_TEST_ASSERT(rRight > 100 && gRight > 100 && bRight > 100, "Right side must be white (R+G+B neutral white)");
 
     std::cout << "  ✓ Waveform computed in: " << elapsed << " ms\n";
     std::cout << "  ✓ Additive color mixing verified:\n";
@@ -149,38 +149,38 @@ bool testWaveformParadePartition() {
     int imgH = 200;
     std::vector<uint8_t> pixels(static_cast<size_t>(imgW) * imgH * 4, 180); // mid-gray
 
-    apex::WaveformEngine engine;
-    apex::WaveformData paradeData;
+    lightrumor::WaveformEngine engine;
+    lightrumor::WaveformData paradeData;
     int waveW = 512;
     int waveH = 256;
-    engine.computeFromRGBA8(pixels.data(), imgW, imgH, apex::WaveformMode::RgbParade, waveW, waveH, paradeData);
+    engine.computeFromRGBA8(pixels.data(), imgW, imgH, lightrumor::WaveformMode::RgbParade, waveW, waveH, paradeData);
 
     int subW = waveW / 3;
     // Check divider lines at subW and 2*subW
     uint32_t div1 = paradeData.rgbaPixels[100 * waveW + subW];
     uint32_t div2 = paradeData.rgbaPixels[100 * waveW + 2 * subW];
-    APEX_TEST_ASSERT(div1 == 0xFF2D2F33, "Divider 1 mismatch");
-    APEX_TEST_ASSERT(div2 == 0xFF2D2F33, "Divider 2 mismatch");
+    LR_TEST_ASSERT(div1 == 0xFF2D2F33, "Divider 1 mismatch");
+    LR_TEST_ASSERT(div2 == 0xFF2D2F33, "Divider 2 mismatch");
 
     // Column 1 (Red parade) at x = subW / 2
     uint32_t pxCol1 = paradeData.rgbaPixels[75 * waveW + (subW / 2)];
     uint8_t r1 = pxCol1 & 0xFF;
     uint8_t g1 = (pxCol1 >> 8) & 0xFF;
     uint8_t b1 = (pxCol1 >> 16) & 0xFF;
-    APEX_TEST_ASSERT(r1 > 50 && g1 == 0 && b1 == 0, "Col 1 must be pure red parade channel");
+    LR_TEST_ASSERT(r1 > 50 && g1 == 0 && b1 == 0, "Col 1 must be pure red parade channel");
 
     // Column 2 (Green parade) at x = subW + subW / 2
     uint32_t pxCol2 = paradeData.rgbaPixels[75 * waveW + (subW + subW / 2)];
     uint8_t r2 = pxCol2 & 0xFF;
     uint8_t g2 = (pxCol2 >> 8) & 0xFF;
     uint8_t b2 = (pxCol2 >> 16) & 0xFF;
-    APEX_TEST_ASSERT(r2 == 0 && g2 > 50 && b2 == 0, "Col 2 must be pure green parade channel");
+    LR_TEST_ASSERT(r2 == 0 && g2 > 50 && b2 == 0, "Col 2 must be pure green parade channel");
 
     // Column 3 (Blue parade) at x = 2*subW + subW / 2
     uint32_t pxCol3 = paradeData.rgbaPixels[75 * waveW + (2 * subW + subW / 2)];
     uint8_t r3 = pxCol3 & 0xFF;
     uint8_t b3 = (pxCol3 >> 16) & 0xFF;
-    APEX_TEST_ASSERT(r3 == 0 && b3 > 50, "Col 3 must be pure blue parade channel");
+    LR_TEST_ASSERT(r3 == 0 && b3 > 50, "Col 3 must be pure blue parade channel");
 
     std::cout << "  ✓ 3-Column RGB Parade partition and titanium dividers verified:\n";
     std::cout << "    - Partition 1 (Red channel):   [0 .. " << subW - 1 << "]\n";
@@ -206,17 +206,17 @@ bool testWaveformPerformanceBenchmark() {
         hdFrame[i] = static_cast<uint8_t>(i % 256);
     }
 
-    apex::WaveformEngine engine;
-    apex::WaveformData outData;
+    lightrumor::WaveformEngine engine;
+    lightrumor::WaveformData outData;
 
     // Warmup
-    engine.computeFromRGBA8(hdFrame.data(), imgW, imgH, apex::WaveformMode::RgbOverlay, 512, 256, outData);
+    engine.computeFromRGBA8(hdFrame.data(), imgW, imgH, lightrumor::WaveformMode::RgbOverlay, 512, 256, outData);
 
     // Measure average of 10 runs
     double totalMs = 0.0;
     const int runs = 10;
     for (int r = 0; r < runs; ++r) {
-        double ms = engine.computeFromRGBA8(hdFrame.data(), imgW, imgH, apex::WaveformMode::RgbOverlay, 512, 256, outData);
+        double ms = engine.computeFromRGBA8(hdFrame.data(), imgW, imgH, lightrumor::WaveformMode::RgbOverlay, 512, 256, outData);
         totalMs += ms;
     }
     double avgMs = totalMs / runs;
@@ -226,7 +226,7 @@ bool testWaveformPerformanceBenchmark() {
     std::cout << "  - 60fps Budget:   16.6 ms\n";
     std::cout << "  - Headroom:       " << (16.6 - avgMs) << " ms (" << (avgMs / 16.6 * 100.0) << "% budget used)\n";
 
-    APEX_TEST_ASSERT(avgMs < 16.6, "Waveform generation must be under 16.6ms (60fps)");
+    LR_TEST_ASSERT(avgMs < 16.6, "Waveform generation must be under 16.6ms (60fps)");
     std::cout << "  ✓ 60fps-120fps ultra-fluid real-time tracking guaranteed.\n";
     std::cout << "  [PASS] Test 3 passed successfully.\n";
     return true;
@@ -250,12 +250,12 @@ bool testCssCubicBezierPhysics() {
     double y0_8 = evaluateCubicBezier(p1x, p1y, p2x, p2y, 0.8);
     double y1_0 = evaluateCubicBezier(p1x, p1y, p2x, p2y, 1.0);
 
-    APEX_TEST_ASSERT(std::abs(y0_0 - 0.0) < 1e-4, "t=0 must be 0");
-    APEX_TEST_ASSERT(std::abs(y1_0 - 1.0) < 1e-4, "t=1 must be 1");
-    APEX_TEST_ASSERT(y0_2 > 0.70, "Rapid acceleration: at 20% duration, progress must be >70%");
-    APEX_TEST_ASSERT(y0_5 > 0.90, "At 50% duration, progress must be >90%");
-    APEX_TEST_ASSERT(y0_8 > 0.98, "At 80% duration, progress must be >98%");
-    APEX_TEST_ASSERT(y1_0 <= 1.0001, "No overshoot past 1.0 allowed in mechanical snap");
+    LR_TEST_ASSERT(std::abs(y0_0 - 0.0) < 1e-4, "t=0 must be 0");
+    LR_TEST_ASSERT(std::abs(y1_0 - 1.0) < 1e-4, "t=1 must be 1");
+    LR_TEST_ASSERT(y0_2 > 0.70, "Rapid acceleration: at 20% duration, progress must be >70%");
+    LR_TEST_ASSERT(y0_5 > 0.90, "At 50% duration, progress must be >90%");
+    LR_TEST_ASSERT(y0_8 > 0.98, "At 80% duration, progress must be >98%");
+    LR_TEST_ASSERT(y1_0 <= 1.0001, "No overshoot past 1.0 allowed in mechanical snap");
 
     std::cout << "  ✓ Dial Snap cubic-bezier(0.16, 1, 0.3, 1) trajectory:\n";
     std::cout << "    - t = 0.0: " << y0_0 << "\n";
@@ -268,8 +268,8 @@ bool testCssCubicBezierPhysics() {
     double q1x = 0.05, q1y = 0.7, q2x = 0.1, q2y = 1.0;
     double py0_2 = evaluateCubicBezier(q1x, q1y, q2x, q2y, 0.2);
     double py0_5 = evaluateCubicBezier(q1x, q1y, q2x, q2y, 0.5);
-    APEX_TEST_ASSERT(py0_2 > 0.60, "Panel slide must be swift");
-    APEX_TEST_ASSERT(py0_5 > 0.85, "Panel slide must ease smoothly");
+    LR_TEST_ASSERT(py0_2 > 0.60, "Panel slide must be swift");
+    LR_TEST_ASSERT(py0_5 > 0.85, "Panel slide must ease smoothly");
 
     std::cout << "  [PASS] Test 4 passed successfully.\n";
     return true;
@@ -321,13 +321,13 @@ bool testHapticZeroSnapLogic() {
     }
 
     // Must have detected exactly 1 zero-crossing click
-    APEX_TEST_ASSERT(state.clickCount == 1, "Must detect exactly 1 zero-point snap click");
+    LR_TEST_ASSERT(state.clickCount == 1, "Must detect exactly 1 zero-point snap click");
     // Must have throttled ticks to at most 1 every 20ms
-    APEX_TEST_ASSERT(state.tickCount >= 4 && state.tickCount <= 6, "Ticks must be cleanly throttled");
+    LR_TEST_ASSERT(state.tickCount >= 4 && state.tickCount <= 6, "Ticks must be cleanly throttled");
 
     // Hit boundary min
     state.onSliderMove(-5.0f, -5.0f, +5.0f, 150.0);
-    APEX_TEST_ASSERT(state.thudCount == 1, "Boundary hit must trigger thud haptic");
+    LR_TEST_ASSERT(state.thudCount == 1, "Boundary hit must trigger thud haptic");
 
     std::cout << "  ✓ Zero-point crossing triggered sharp PRIMITIVE_CLICK\n";
     std::cout << "  ✓ Rotary stepping ticks smoothly throttled (no haptic spam)\n";
@@ -341,7 +341,7 @@ bool testHapticZeroSnapLogic() {
 // -------------------------------------------------------------------------
 int main() {
     std::cout << "=======================================================\n";
-    std::cout << "  PROJECT: APEX FIELD - PHASE 3 NATIVE VERIFICATION\n";
+    std::cout << "  light_rumor - PHASE 3 NATIVE VERIFICATION\n";
     std::cout << "=======================================================\n";
 
     bool allPassed = true;

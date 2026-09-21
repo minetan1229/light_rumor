@@ -20,7 +20,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lightrumor.ApexTheme
 import com.lightrumor.HapticManager
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -50,7 +49,7 @@ fun LightroomSlider(
     onLongPressDial: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val colors = ApexTheme.colors
+    val colors = LightRumorTheme.colors
     var trackWidthPx by remember { mutableFloatStateOf(1f) }
     var previousValue by remember { mutableFloatStateOf(value) }
 
@@ -91,7 +90,7 @@ fun LightroomSlider(
         ) {
             Text(
                 text = label.uppercase(),
-                style = ApexTheme.typography.Label,
+                style = LightRumorTheme.typography.Label,
                 color = if (isNonZero) colors.textPrimary else colors.textSecondary,
                 fontSize = 11.sp
             )

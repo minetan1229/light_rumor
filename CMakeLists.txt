@@ -107,5 +107,4 @@ if(NOT ANDROID)
     endif()
 
     # Compatibility aliases
-    add_custom_target(apex_phase6_test DEPENDS light_rumor_phase6_test)
 endif()

@@ -2,8 +2,6 @@ package com.lightrumor
 
 import androidx.compose.animation.core.*
 
-typealias ApexMotionSpecs = LightRumorMotionSpecs
-
 object LightRumorMotionSpecs {
 
     /**

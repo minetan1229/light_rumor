@@ -82,7 +82,7 @@ object SoftProofingManager {
     ): IntArray {
         if (!_state.value.isEnabled) return rgbaPixels
         // Direct invocation via native JNI or engine
-        return ApexNativeEngine.nativeApplySoftProof(
+        return LightRumorNativeEngine.nativeApplySoftProof(
             pixels = rgbaPixels,
             width = width,
             height = height,

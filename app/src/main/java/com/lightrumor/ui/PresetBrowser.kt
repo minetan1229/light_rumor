@@ -47,7 +47,7 @@ fun PresetBrowser(
     onExportXmp: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val colors = ApexTheme.colors
+    val colors = LightRumorTheme.colors
     var selectedCategory by remember { mutableStateOf("ALL") }
     var selectedPreset by remember { mutableStateOf<XmpPreset?>(null) }
     var presetAmount by remember { mutableStateOf(100.0f) } // 0% to 200%
@@ -243,7 +243,7 @@ private fun PresetCard(
     onHover: (Boolean) -> Unit,
     onClick: () -> Unit
 ) {
-    val colors = ApexTheme.colors
+    val colors = LightRumorTheme.colors
 
     Box(
         modifier = Modifier

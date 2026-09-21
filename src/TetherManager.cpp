@@ -7,7 +7,7 @@
 #include <thread>
 #include <algorithm>
 
-namespace apex {
+namespace lightrumor {
 
 // PTP (Picture Transfer Protocol) v1.1 USB Container definition
 #pragma pack(push, 1)
@@ -293,4 +293,4 @@ bool TetherManager::handlePtpDataPacket(const uint8_t* packetData, size_t length
     return true;
 }
 
-} // namespace apex
+} // namespace lightrumor

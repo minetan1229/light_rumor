@@ -136,7 +136,7 @@ class MultiExportRecipeManager(
                     )
 
                     // Execute export
-                    val success = ApexNativeEngine.nativeProcessRawMultiRecipe(
+                    val success = LightRumorNativeEngine.nativeProcessRawMultiRecipe(
                         inputPath = inputRawPath,
                         outputPath = outFile,
                         format = recipe.format.id,

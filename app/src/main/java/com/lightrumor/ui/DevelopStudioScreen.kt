@@ -69,8 +69,8 @@ fun DevelopStudioScreen(
         }
     }
 
-    ApexTheme(isDark = isDarkTheme) {
-        val colors = ApexTheme.colors
+    LightRumorTheme(isDark = isDarkTheme) {
+        val colors = LightRumorTheme.colors
 
         Box(
             modifier = Modifier

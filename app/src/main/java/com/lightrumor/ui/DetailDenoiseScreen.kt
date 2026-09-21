@@ -16,7 +16,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lightrumor.ApexTheme
 import com.lightrumor.DevelopmentParams
 import com.lightrumor.HapticManager
 
@@ -37,7 +36,7 @@ fun DetailDenoiseScreen(
     hapticManager: HapticManager? = null,
     modifier: Modifier = Modifier
 ) {
-    val colors = ApexTheme.colors
+    val colors = LightRumorTheme.colors
 
     Column(
         modifier = modifier
@@ -58,7 +57,7 @@ fun DetailDenoiseScreen(
         ) {
             Text(
                 text = "SHARPENING & EDGE MASKING",
-                style = ApexTheme.typography.Header,
+                style = LightRumorTheme.typography.Header,
                 color = colors.accentAmber,
                 fontSize = 11.sp
             )
@@ -148,7 +147,7 @@ fun DetailDenoiseScreen(
         // ---------------------------------------------------------------------
         Text(
             text = "LUMINANCE NOISE REDUCTION",
-            style = ApexTheme.typography.Header,
+            style = LightRumorTheme.typography.Header,
             color = colors.accentAmber,
             fontSize = 11.sp,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
@@ -197,7 +196,7 @@ fun DetailDenoiseScreen(
         // ---------------------------------------------------------------------
         Text(
             text = "COLOR NOISE REDUCTION (CHROMA)",
-            style = ApexTheme.typography.Header,
+            style = LightRumorTheme.typography.Header,
             color = colors.accentAmber,
             fontSize = 11.sp,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
@@ -246,7 +245,7 @@ fun DetailDenoiseScreen(
         // ---------------------------------------------------------------------
         Text(
             text = "OPTICS & DEFRINGE",
-            style = ApexTheme.typography.Header,
+            style = LightRumorTheme.typography.Header,
             color = colors.accentAmber,
             fontSize = 11.sp,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)

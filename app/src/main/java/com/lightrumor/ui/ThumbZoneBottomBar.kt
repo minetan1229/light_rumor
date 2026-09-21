@@ -20,8 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lightrumor.ApexMotionSpecs
-import com.lightrumor.ApexTheme
+import com.lightrumor.LightRumorMotionSpecs
 import com.lightrumor.DevelopmentParams
 import com.lightrumor.HapticManager
 
@@ -47,7 +46,7 @@ fun ThumbZoneBottomBar(
     onOpenPrecisionDial: (label: String, value: Float, range: ClosedFloatingPointRange<Float>, unit: String, onUpdate: (Float) -> Unit) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val colors = ApexTheme.colors
+    val colors = LightRumorTheme.colors
     var activeTab by remember { mutableStateOf(ThumbTab.Light) }
     var selectedProfileId by remember { mutableStateOf("cinetone") }
     var selectedFilterId by remember { mutableStateOf("std") }
@@ -95,7 +94,7 @@ fun ThumbZoneBottomBar(
                 ) {
                     Text(
                         text = tab.title,
-                        style = ApexTheme.typography.Tab,
+                        style = LightRumorTheme.typography.Tab,
                         color = if (isSelected) colors.accentAmber else colors.textSecondary,
                         fontSize = 11.sp
                     )
@@ -114,8 +113,8 @@ fun ThumbZoneBottomBar(
         AnimatedContent(
             targetState = activeTab,
             transitionSpec = {
-                fadeIn(animationSpec = tween(ApexMotionSpecs.DURATION_SNAP_MS, easing = ApexMotionSpecs.PanelSlideEasing)) togetherWith
-                fadeOut(animationSpec = tween(ApexMotionSpecs.DURATION_FADE_MS))
+                fadeIn(animationSpec = tween(LightRumorMotionSpecs.DURATION_SNAP_MS, easing = LightRumorMotionSpecs.PanelSlideEasing)) togetherWith
+                fadeOut(animationSpec = tween(LightRumorMotionSpecs.DURATION_FADE_MS))
             },
             modifier = Modifier
                 .fillMaxWidth()
@@ -216,7 +215,7 @@ fun ThumbZoneBottomBar(
                         // Photographic Profile Selector Tile Strip (Zero emojis)
                         Text(
                             text = "COLOR PROFILES",
-                            style = ApexTheme.typography.Label,
+                            style = LightRumorTheme.typography.Label,
                             color = colors.textSecondary,
                             modifier = Modifier.padding(start = 12.dp, top = 4.dp)
                         )
@@ -304,7 +303,7 @@ fun ThumbZoneBottomBar(
                     ThumbTab.Optics -> {
                         Text(
                             text = "MONOCHROME OPTICAL FILTERS",
-                            style = ApexTheme.typography.Label,
+                            style = LightRumorTheme.typography.Label,
                             color = colors.textSecondary,
                             modifier = Modifier.padding(start = 12.dp, top = 4.dp)
                         )

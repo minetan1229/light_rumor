@@ -5,7 +5,7 @@
 #include <vector>
 #include <cstdint>
 
-namespace apex {
+namespace lightrumor {
 
 class ImageWriter {
 public:
@@ -54,4 +54,4 @@ public:
     static std::vector<uint8_t> buildExifPayload(const ExifMetadata& metadata);
 };
 
-} // namespace apex
+} // namespace lightrumor

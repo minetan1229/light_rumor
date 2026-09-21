@@ -5,7 +5,7 @@
 #include <string>
 #include <memory>
 
-namespace apex {
+namespace lightrumor {
 
 /**
  * MaskEngine: Phase 5 Multi-Layer Local Masking & Retouch Engine.
@@ -108,4 +108,4 @@ public:
                       std::vector<FloatRGBA>& outHealedImage);
 };
 
-} // namespace apex
+} // namespace lightrumor

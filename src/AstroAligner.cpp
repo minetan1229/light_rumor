@@ -5,7 +5,7 @@
 #include <random>
 #include <iostream>
 
-namespace apex {
+namespace lightrumor {
 
 AstroAligner::AstroAligner() = default;
 AstroAligner::~AstroAligner() = default;
@@ -384,4 +384,4 @@ bool AstroAligner::stackKappaSigma(const std::vector<std::vector<FloatRGBA>>& fr
     return true;
 }
 
-} // namespace apex
+} // namespace lightrumor

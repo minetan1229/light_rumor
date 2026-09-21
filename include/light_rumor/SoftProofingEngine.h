@@ -5,7 +5,7 @@
 #include <string>
 #include <memory>
 
-namespace apex {
+namespace lightrumor {
 
 struct PaperProfileInfo {
     std::string profileId;
@@ -52,4 +52,4 @@ public:
     static std::vector<PaperProfileInfo> getStandardPaperProfiles();
 };
 
-} // namespace apex
+} // namespace lightrumor

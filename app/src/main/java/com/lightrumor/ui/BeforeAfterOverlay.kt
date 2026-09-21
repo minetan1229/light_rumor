@@ -31,7 +31,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lightrumor.ApexTheme
 
 enum class CompareMode {
     Off,
@@ -55,7 +54,7 @@ fun BeforeAfterOverlay(
     onCompareModeChange: (CompareMode) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val colors = ApexTheme.colors
+    val colors = LightRumorTheme.colors
     var isHoldBefore by remember { mutableStateOf(false) }
     var splitFractionX by remember { mutableFloatStateOf(0.5f) }
     var splitFractionY by remember { mutableFloatStateOf(0.5f) }
@@ -298,7 +297,7 @@ fun BeforeAfterOverlay(
 
 @Composable
 private fun CompareTabButton(text: String, active: Boolean, onClick: () -> Unit) {
-    val colors = ApexTheme.colors
+    val colors = LightRumorTheme.colors
     Box(
         modifier = Modifier
             .background(if (active) colors.accentAmber else colors.surfacePressed, RoundedCornerShape(2.dp))

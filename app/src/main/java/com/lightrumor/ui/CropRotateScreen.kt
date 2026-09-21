@@ -42,7 +42,7 @@ fun CropRotateScreen(
     hapticManager: HapticManager? = null,
     modifier: Modifier = Modifier
 ) {
-    val colors = ApexTheme.colors
+    val colors = LightRumorTheme.colors
     val geom = params.geometry
 
     // Interactive Horizon Ruler dragging state
@@ -62,7 +62,7 @@ fun CropRotateScreen(
         // ---------------------------------------------------------------------
         Text(
             text = "ASPECT RATIO",
-            style = ApexTheme.typography.Header,
+            style = LightRumorTheme.typography.Header,
             color = colors.accentAmber,
             fontSize = 11.sp,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
@@ -97,7 +97,7 @@ fun CropRotateScreen(
                 ) {
                     Text(
                         text = mode.label.uppercase(),
-                        style = ApexTheme.typography.Tab,
+                        style = LightRumorTheme.typography.Tab,
                         color = if (isSelected) colors.accentAmber else colors.textSecondary,
                         fontSize = 10.sp
                     )
@@ -112,7 +112,7 @@ fun CropRotateScreen(
         // ---------------------------------------------------------------------
         Text(
             text = "COMPOSITION GUIDE OVERLAYS",
-            style = ApexTheme.typography.Header,
+            style = LightRumorTheme.typography.Header,
             color = colors.accentAmber,
             fontSize = 11.sp,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
@@ -147,7 +147,7 @@ fun CropRotateScreen(
                 ) {
                     Text(
                         text = guide.label.uppercase(),
-                        style = ApexTheme.typography.Tab,
+                        style = LightRumorTheme.typography.Tab,
                         color = if (isSelected) colors.accentCyan else colors.textSecondary,
                         fontSize = 10.sp
                     )
@@ -162,7 +162,7 @@ fun CropRotateScreen(
         // ---------------------------------------------------------------------
         Text(
             text = "DISCRETE ORIENTATION",
-            style = ApexTheme.typography.Header,
+            style = LightRumorTheme.typography.Header,
             color = colors.accentAmber,
             fontSize = 11.sp,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
@@ -190,7 +190,7 @@ fun CropRotateScreen(
             ) {
                 Text(
                     text = "ROTATE -90 DEG",
-                    style = ApexTheme.typography.Tab,
+                    style = LightRumorTheme.typography.Tab,
                     color = colors.textPrimary,
                     fontSize = 10.sp
                 )
@@ -212,7 +212,7 @@ fun CropRotateScreen(
             ) {
                 Text(
                     text = "ROTATE +90 DEG",
-                    style = ApexTheme.typography.Tab,
+                    style = LightRumorTheme.typography.Tab,
                     color = colors.textPrimary,
                     fontSize = 10.sp
                 )
@@ -241,7 +241,7 @@ fun CropRotateScreen(
             ) {
                 Text(
                     text = if (isFlipH) "FLIP H [ON]" else "FLIP H",
-                    style = ApexTheme.typography.Tab,
+                    style = LightRumorTheme.typography.Tab,
                     color = if (isFlipH) colors.accentAmber else colors.textPrimary,
                     fontSize = 10.sp
                 )
@@ -270,7 +270,7 @@ fun CropRotateScreen(
             ) {
                 Text(
                     text = if (isFlipV) "FLIP V [ON]" else "FLIP V",
-                    style = ApexTheme.typography.Tab,
+                    style = LightRumorTheme.typography.Tab,
                     color = if (isFlipV) colors.accentAmber else colors.textPrimary,
                     fontSize = 10.sp
                 )
@@ -291,7 +291,7 @@ fun CropRotateScreen(
         ) {
             Text(
                 text = "STRAIGHTEN & AUTO-HORIZON",
-                style = ApexTheme.typography.Header,
+                style = LightRumorTheme.typography.Header,
                 color = colors.accentAmber,
                 fontSize = 11.sp
             )
@@ -396,7 +396,7 @@ fun CropRotateScreen(
         // ---------------------------------------------------------------------
         Text(
             text = "PERSPECTIVE UPRIGHT & DISTORTION",
-            style = ApexTheme.typography.Header,
+            style = LightRumorTheme.typography.Header,
             color = colors.accentAmber,
             fontSize = 11.sp,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
@@ -456,7 +456,7 @@ fun CropRotateScreen(
         ) {
             Text(
                 text = "RESET CROP & GEOMETRY TO DEFAULT",
-                style = ApexTheme.typography.Tab,
+                style = LightRumorTheme.typography.Tab,
                 color = colors.textSecondary,
                 fontSize = 10.sp
             )

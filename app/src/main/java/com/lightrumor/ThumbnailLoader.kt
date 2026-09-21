@@ -65,7 +65,7 @@ object ThumbnailLoader {
         try {
             // 1. If it's a RAW file with a direct path, attempt native embedded thumbnail extraction (<10ms)
             if (item.filePath.isNotEmpty() && isRawFile(item.filePath)) {
-                val thumbBytes = ApexNativeEngine.extractThumbnailBytes(item.filePath)
+                val thumbBytes = LightRumorNativeEngine.extractThumbnailBytes(item.filePath)
                 if (thumbBytes != null && thumbBytes.isNotEmpty()) {
                     val bmp = decodeSampledBitmapFromByteArray(thumbBytes, targetWidth, targetHeight)
                     if (bmp != null) return@withContext bmp

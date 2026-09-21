@@ -19,8 +19,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lightrumor.ApexNativeEngine
-import com.lightrumor.ApexTheme
 import com.lightrumor.DevelopmentParams
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -38,7 +36,7 @@ fun ColorWaveformView(
     onToggleExpanded: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val colors = ApexTheme.colors
+    val colors = LightRumorTheme.colors
     var mode by remember { mutableIntStateOf(0) } // 0: RGB Overlay, 1: RGB Parade, 2: Histogram
     var waveformBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
@@ -74,7 +72,7 @@ fun ColorWaveformView(
                 byteBuf[i * 4 + 3] = (0xFF).toByte()
             }
 
-            val wavePixels = ApexNativeEngine.computeWaveform(
+            val wavePixels = LightRumorNativeEngine.computeWaveform(
                 rgbaBytes = byteBuf,
                 width = srcW,
                 height = srcH,
@@ -169,7 +167,7 @@ fun ColorWaveformView(
 
 @Composable
 private fun ScopeModeButton(text: String, active: Boolean, onClick: () -> Unit) {
-    val colors = ApexTheme.colors
+    val colors = LightRumorTheme.colors
     Box(
         modifier = Modifier
             .background(

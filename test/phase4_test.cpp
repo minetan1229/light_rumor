@@ -11,7 +11,7 @@
 #include <numeric>
 #include <random>
 
-#define APEX_TEST_ASSERT(cond, msg) \
+#define LR_TEST_ASSERT(cond, msg) \
     do { \
         if (!(cond)) { \
             std::cerr << "\n[TEST FAILED] " << msg << " (" << __FILE__ << ":" << __LINE__ << ")\n" << std::endl; \
@@ -40,28 +40,28 @@ bool testWhiteBalanceAndTint() {
     std::cout << "=======================================================\n";
 
     // Neutral gray 18% patch
-    std::vector<apex::FloatRGBA> neutralTile(16 * 16, apex::FloatRGBA(0.18f, 0.18f, 0.18f, 1.0f));
-    std::vector<apex::FloatRGBA> outTile;
+    std::vector<lightrumor::FloatRGBA> neutralTile(16 * 16, lightrumor::FloatRGBA(0.18f, 0.18f, 0.18f, 1.0f));
+    std::vector<lightrumor::FloatRGBA> outTile;
 
     // Test 1: Neutral Tint = 0
-    apex::DevelopmentParams params0;
+    lightrumor::DevelopmentParams params0;
     params0.kelvin = 5500.0f;
     params0.tint = 0.0f;
-    apex::ExportPipeline::processTileLinear(neutralTile, 16, 16, 16, 16, 0, params0, outTile);
+    lightrumor::ExportPipeline::processTileLinear(neutralTile, 16, 16, 16, 16, 0, params0, outTile);
     float gRatio0 = outTile[0].g / ((outTile[0].r + outTile[0].b) * 0.5f);
 
     // Test 2: Green Tint = -100
-    apex::DevelopmentParams paramsGreen;
+    lightrumor::DevelopmentParams paramsGreen;
     paramsGreen.kelvin = 5500.0f;
     paramsGreen.tint = -100.0f;
-    apex::ExportPipeline::processTileLinear(neutralTile, 16, 16, 16, 16, 0, paramsGreen, outTile);
+    lightrumor::ExportPipeline::processTileLinear(neutralTile, 16, 16, 16, 16, 0, paramsGreen, outTile);
     float gRatioGreen = outTile[0].g / ((outTile[0].r + outTile[0].b) * 0.5f);
 
     // Test 3: Magenta Tint = +100
-    apex::DevelopmentParams paramsMagenta;
+    lightrumor::DevelopmentParams paramsMagenta;
     paramsMagenta.kelvin = 5500.0f;
     paramsMagenta.tint = +100.0f;
-    apex::ExportPipeline::processTileLinear(neutralTile, 16, 16, 16, 16, 0, paramsMagenta, outTile);
+    lightrumor::ExportPipeline::processTileLinear(neutralTile, 16, 16, 16, 16, 0, paramsMagenta, outTile);
     float gRatioMagenta = outTile[0].g / ((outTile[0].r + outTile[0].b) * 0.5f);
 
     std::cout << "  ✓ Tint Shift Ratios (G / ((R+B)/2)):\n";
@@ -69,21 +69,21 @@ bool testWhiteBalanceAndTint() {
     std::cout << "    - Tint    0 (Neutral): " << gRatio0 << "\n";
     std::cout << "    - Tint +100 (Magenta): " << gRatioMagenta << " (Green channel suppressed, Magenta dominant)\n";
 
-    APEX_TEST_ASSERT(gRatioGreen > gRatio0, "Negative tint must boost Green relative to Magenta");
-    APEX_TEST_ASSERT(gRatioMagenta < gRatio0, "Positive tint must suppress Green (Magenta dominance)");
-    APEX_TEST_ASSERT(gRatioGreen > 1.25f, "Tint -100 should provide strong green compensation");
-    APEX_TEST_ASSERT(gRatioMagenta < 0.80f, "Tint +100 should provide strong magenta compensation");
+    LR_TEST_ASSERT(gRatioGreen > gRatio0, "Negative tint must boost Green relative to Magenta");
+    LR_TEST_ASSERT(gRatioMagenta < gRatio0, "Positive tint must suppress Green (Magenta dominance)");
+    LR_TEST_ASSERT(gRatioGreen > 1.25f, "Tint -100 should provide strong green compensation");
+    LR_TEST_ASSERT(gRatioMagenta < 0.80f, "Tint +100 should provide strong magenta compensation");
 
     // Test 4: Extended Kelvin range (2,000K to 50,000K)
-    apex::DevelopmentParams params2000K;
+    lightrumor::DevelopmentParams params2000K;
     params2000K.kelvin = 2000.0f;
-    apex::ExportPipeline::processTileLinear(neutralTile, 16, 16, 16, 16, 0, params2000K, outTile);
-    APEX_TEST_ASSERT(outTile[0].r > outTile[0].b * 1.5f, "2000K must have warm red dominance");
+    lightrumor::ExportPipeline::processTileLinear(neutralTile, 16, 16, 16, 16, 0, params2000K, outTile);
+    LR_TEST_ASSERT(outTile[0].r > outTile[0].b * 1.5f, "2000K must have warm red dominance");
 
-    apex::DevelopmentParams params50000K;
+    lightrumor::DevelopmentParams params50000K;
     params50000K.kelvin = 50000.0f;
-    apex::ExportPipeline::processTileLinear(neutralTile, 16, 16, 16, 16, 0, params50000K, outTile);
-    APEX_TEST_ASSERT(outTile[0].b > outTile[0].r * 2.0f, "50000K must have intense cool blue dominance");
+    lightrumor::ExportPipeline::processTileLinear(neutralTile, 16, 16, 16, 16, 0, params50000K, outTile);
+    LR_TEST_ASSERT(outTile[0].b > outTile[0].r * 2.0f, "50000K must have intense cool blue dominance");
 
     std::cout << "  [PASS] Criterion 1 passed successfully.\n";
     return true;
@@ -100,25 +100,25 @@ bool testSkinProtectedVibrance() {
     // Create 2 test pixels:
     // Pixel 1: Caucasian / Asian skin tone (Hue ~ 28°, R=0.78, G=0.55, B=0.45)
     // Pixel 2: Dull desaturated background / foliage / sky (R=0.40, G=0.45, B=0.48, Saturation ~ 0.16)
-    std::vector<apex::FloatRGBA> testTile = {
-        apex::FloatRGBA(0.78f, 0.55f, 0.45f, 1.0f), // Skin
-        apex::FloatRGBA(0.40f, 0.45f, 0.48f, 1.0f)  // Dull background
+    std::vector<lightrumor::FloatRGBA> testTile = {
+        lightrumor::FloatRGBA(0.78f, 0.55f, 0.45f, 1.0f), // Skin
+        lightrumor::FloatRGBA(0.40f, 0.45f, 0.48f, 1.0f)  // Dull background
     };
-    std::vector<apex::FloatRGBA> outTileBase;
-    std::vector<apex::FloatRGBA> outTileBoost;
+    std::vector<lightrumor::FloatRGBA> outTileBase;
+    std::vector<lightrumor::FloatRGBA> outTileBoost;
 
     // Baseline (Vibrance = 0)
-    apex::DevelopmentParams params0;
+    lightrumor::DevelopmentParams params0;
     params0.vibrance = 0.0f;
-    apex::ExportPipeline::processTileLinear(testTile, 2, 1, 2, 1, 0, params0, outTileBase);
+    lightrumor::ExportPipeline::processTileLinear(testTile, 2, 1, 2, 1, 0, params0, outTileBase);
 
     // Boosted (Vibrance = +80)
-    apex::DevelopmentParams paramsBoost;
+    lightrumor::DevelopmentParams paramsBoost;
     paramsBoost.vibrance = 80.0f;
-    apex::ExportPipeline::processTileLinear(testTile, 2, 1, 2, 1, 0, paramsBoost, outTileBoost);
+    lightrumor::ExportPipeline::processTileLinear(testTile, 2, 1, 2, 1, 0, paramsBoost, outTileBoost);
 
     // Calculate saturation delta: (max - min) / max
-    auto calcSat = [](const apex::FloatRGBA& p) {
+    auto calcSat = [](const lightrumor::FloatRGBA& p) {
         float maxC = std::max({p.r, p.g, p.b});
         float minC = std::min({p.r, p.g, p.b});
         return (maxC > 1e-5f) ? (maxC - minC) / maxC : 0.0f;
@@ -138,9 +138,9 @@ bool testSkinProtectedVibrance() {
     std::cout << "    - Background Saturation: " << bgSat0 << " -> " << bgSatBoost
               << " (+" << bgSatPctChange << "% change - strong selective boost)\n";
 
-    APEX_TEST_ASSERT(bgSatPctChange > skinSatPctChange * 2.0f, "Background saturation boost must significantly exceed skin tone change");
-    APEX_TEST_ASSERT(skinSatPctChange < 25.0f, "Skin tone saturation must be protected under 25% change");
-    APEX_TEST_ASSERT(bgSatPctChange > 35.0f, "Dull background saturation must receive >35% boost");
+    LR_TEST_ASSERT(bgSatPctChange > skinSatPctChange * 2.0f, "Background saturation boost must significantly exceed skin tone change");
+    LR_TEST_ASSERT(skinSatPctChange < 25.0f, "Skin tone saturation must be protected under 25% change");
+    LR_TEST_ASSERT(bgSatPctChange > 35.0f, "Dull background saturation must receive >35% boost");
 
     std::cout << "  [PASS] Criterion 2 passed successfully.\n";
     return true;
@@ -155,27 +155,27 @@ bool testAdvancedMonochromeMixer() {
     std::cout << "=======================================================\n";
 
     // Test pixel: Deep blue sky (Hue ~ 235°, R=0.10, G=0.20, B=0.90)
-    std::vector<apex::FloatRGBA> skyTile = {
-        apex::FloatRGBA(0.10f, 0.20f, 0.90f, 1.0f)
+    std::vector<lightrumor::FloatRGBA> skyTile = {
+        lightrumor::FloatRGBA(0.10f, 0.20f, 0.90f, 1.0f)
     };
-    std::vector<apex::FloatRGBA> outTile;
+    std::vector<lightrumor::FloatRGBA> outTile;
 
     // Mode: Monochrome with default weights (Blue = 0.06)
-    apex::DevelopmentParams paramsDefaultMono;
+    lightrumor::DevelopmentParams paramsDefaultMono;
     paramsDefaultMono.isMonochrome = true;
-    apex::ExportPipeline::processTileLinear(skyTile, 1, 1, 1, 1, 0, paramsDefaultMono, outTile);
+    lightrumor::ExportPipeline::processTileLinear(skyTile, 1, 1, 1, 1, 0, paramsDefaultMono, outTile);
     float lumaDefault = outTile[0].r;
 
     // Mode: Monochrome with Blue channel dropped to near zero (weight = 0.005) -> Dark Sky
-    apex::DevelopmentParams paramsDarkSky = paramsDefaultMono;
+    lightrumor::DevelopmentParams paramsDarkSky = paramsDefaultMono;
     paramsDarkSky.monochromeWeights[5] = 0.005f; // Blue band
-    apex::ExportPipeline::processTileLinear(skyTile, 1, 1, 1, 1, 0, paramsDarkSky, outTile);
+    lightrumor::ExportPipeline::processTileLinear(skyTile, 1, 1, 1, 1, 0, paramsDarkSky, outTile);
     float lumaDarkSky = outTile[0].r;
 
     // Mode: Monochrome with Blue channel boosted (weight = 0.40) -> High Key White Sky
-    apex::DevelopmentParams paramsBrightSky = paramsDefaultMono;
+    lightrumor::DevelopmentParams paramsBrightSky = paramsDefaultMono;
     paramsBrightSky.monochromeWeights[5] = 0.40f; // Blue band
-    apex::ExportPipeline::processTileLinear(skyTile, 1, 1, 1, 1, 0, paramsBrightSky, outTile);
+    lightrumor::ExportPipeline::processTileLinear(skyTile, 1, 1, 1, 1, 0, paramsBrightSky, outTile);
     float lumaBrightSky = outTile[0].r;
 
     std::cout << "  ✓ Blue Sky Luminance in Monochrome Mode:\n";
@@ -183,9 +183,9 @@ bool testAdvancedMonochromeMixer() {
     std::cout << "    - Default Panchromatic Response:    " << lumaDefault << "\n";
     std::cout << "    - Blue Maximized (Bright White Sky): " << lumaBrightSky << "\n";
 
-    APEX_TEST_ASSERT(lumaDarkSky < lumaDefault * 0.4f, "Lowering blue slider must dramatically darken blue skies");
-    APEX_TEST_ASSERT(lumaBrightSky > lumaDefault * 2.0f, "Boosting blue slider must dramatically brighten blue skies");
-    APEX_TEST_ASSERT(lumaDarkSky < 0.15f, "Blue minimized must pull sky towards deep black");
+    LR_TEST_ASSERT(lumaDarkSky < lumaDefault * 0.4f, "Lowering blue slider must dramatically darken blue skies");
+    LR_TEST_ASSERT(lumaBrightSky > lumaDefault * 2.0f, "Boosting blue slider must dramatically brighten blue skies");
+    LR_TEST_ASSERT(lumaDarkSky < 0.15f, "Blue minimized must pull sky towards deep black");
 
     std::cout << "  [PASS] Criterion 3 passed successfully.\n";
     return true;
@@ -201,7 +201,7 @@ bool testDualDomainNoiseReduction() {
 
     const int W = 64;
     const int H = 64;
-    std::vector<apex::FloatRGBA> noisyTile(W * H);
+    std::vector<lightrumor::FloatRGBA> noisyTile(W * H);
 
     // Create a flat gray area with synthetic high-ISO noise:
     // 1. Luminance noise (grain)
@@ -222,7 +222,7 @@ bool testDualDomainNoiseReduction() {
         float b = std::clamp(baseLuma + cb, 0.0f, 1.0f);
         float g = std::clamp((baseLuma - 0.2126f * r - 0.0722f * b) / 0.7152f, 0.0f, 1.0f);
 
-        noisyTile[i] = apex::FloatRGBA(r, g, b, 1.0f);
+        noisyTile[i] = lightrumor::FloatRGBA(r, g, b, 1.0f);
         origChromaR[i] = cr;
         origChromaB[i] = cb;
     }
@@ -230,9 +230,9 @@ bool testDualDomainNoiseReduction() {
     double origChromaStdDev = (calculateStdDev(origChromaR) + calculateStdDev(origChromaB)) * 0.5;
 
     // Apply Chroma NR & Luminance NR via DenoiseEngine
-    std::vector<apex::FloatRGBA> denoisedTile(W * H);
-    apex::DenoiseEngine::applyChromaNR(noisyTile.data(), denoisedTile.data(), W, H, 80.0f, 50.0f, 60.0f);
-    apex::DenoiseEngine::applyLuminanceNR(denoisedTile.data(), denoisedTile.data(), W, H, 60.0f, 50.0f, 10.0f);
+    std::vector<lightrumor::FloatRGBA> denoisedTile(W * H);
+    lightrumor::DenoiseEngine::applyChromaNR(noisyTile.data(), denoisedTile.data(), W, H, 80.0f, 50.0f, 60.0f);
+    lightrumor::DenoiseEngine::applyLuminanceNR(denoisedTile.data(), denoisedTile.data(), W, H, 60.0f, 50.0f, 10.0f);
 
     std::vector<float> cleanChromaR(W * H);
     std::vector<float> cleanChromaB(W * H);
@@ -250,8 +250,8 @@ bool testDualDomainNoiseReduction() {
     std::cout << "    - Cleaned Chroma StdDev: " << cleanChromaStdDev << "\n";
     std::cout << "    - Noise Suppression:     " << chromaNoiseReductionPct << "%\n";
 
-    APEX_TEST_ASSERT(cleanChromaStdDev < origChromaStdDev * 0.35, "Chroma NR must eliminate >65% false-color variance");
-    APEX_TEST_ASSERT(chromaNoiseReductionPct >= 65.0, "Chroma noise reduction threshold met");
+    LR_TEST_ASSERT(cleanChromaStdDev < origChromaStdDev * 0.35, "Chroma NR must eliminate >65% false-color variance");
+    LR_TEST_ASSERT(chromaNoiseReductionPct >= 65.0, "Chroma noise reduction threshold met");
 
     std::cout << "  [PASS] Criterion 4 passed successfully.\n";
     return true;
@@ -267,7 +267,7 @@ bool testEdgeMaskedSharpening() {
 
     const int W = 32;
     const int H = 32;
-    std::vector<apex::FloatRGBA> testImage(W * H, apex::FloatRGBA(0.5f, 0.5f, 0.5f, 1.0f));
+    std::vector<lightrumor::FloatRGBA> testImage(W * H, lightrumor::FloatRGBA(0.5f, 0.5f, 0.5f, 1.0f));
 
     // Create a high-contrast sharp vertical edge at x = 16:
     // Left half (x < 16): Flat gray 0.2
@@ -275,13 +275,13 @@ bool testEdgeMaskedSharpening() {
     for (int y = 0; y < H; ++y) {
         for (int x = 0; x < W; ++x) {
             float val = (x < 16) ? 0.2f : 0.8f;
-            testImage[y * W + x] = apex::FloatRGBA(val, val, val, 1.0f);
+            testImage[y * W + x] = lightrumor::FloatRGBA(val, val, val, 1.0f);
         }
     }
 
     // 1. Sharpening WITH Masking (Masking = 60)
-    std::vector<apex::FloatRGBA> maskedSharpened(W * H);
-    apex::DenoiseEngine::applySharpening(testImage.data(), maskedSharpened.data(), W, H,
+    std::vector<lightrumor::FloatRGBA> maskedSharpened(W * H);
+    lightrumor::DenoiseEngine::applySharpening(testImage.data(), maskedSharpened.data(), W, H,
                                         100.0f, 1.0f, 50.0f, 60.0f, false);
 
     // Check smooth flat area (x = 4): must NOT be modified
@@ -298,12 +298,12 @@ bool testEdgeMaskedSharpening() {
     std::cout << "    - Flat Sky/Skin (x=4):  Diff = " << flatDiff << " (Flat area untouched)\n";
     std::cout << "    - High Edge (x=15):     Diff = " << edgeDiff << " (Edge highlighted)\n";
 
-    APEX_TEST_ASSERT(flatDiff < 1e-4f, "Flat areas must not be sharpened when masking is active");
-    APEX_TEST_ASSERT(edgeDiff > 0.05f, "Real edges must receive crisp unsharp masking");
+    LR_TEST_ASSERT(flatDiff < 1e-4f, "Flat areas must not be sharpened when masking is active");
+    LR_TEST_ASSERT(edgeDiff > 0.05f, "Real edges must receive crisp unsharp masking");
 
     // 2. Professional Masking Preview Mode (Visualizer)
-    std::vector<apex::FloatRGBA> maskPreview(W * H);
-    apex::DenoiseEngine::applySharpening(testImage.data(), maskPreview.data(), W, H,
+    std::vector<lightrumor::FloatRGBA> maskPreview(W * H);
+    lightrumor::DenoiseEngine::applySharpening(testImage.data(), maskPreview.data(), W, H,
                                         100.0f, 1.0f, 50.0f, 60.0f, true);
 
     float previewFlat = maskPreview[16 * W + 4].r;
@@ -313,8 +313,8 @@ bool testEdgeMaskedSharpening() {
     std::cout << "    - Flat Area Output:  " << previewFlat << " (Pure Black = 0.0)\n";
     std::cout << "    - Edge Area Output:  " << previewEdge << " (Pure White = 1.0)\n";
 
-    APEX_TEST_ASSERT(previewFlat < 1e-4f, "Mask preview must be black on flat areas");
-    APEX_TEST_ASSERT(previewEdge > 0.80f, "Mask preview must be bright white on edges");
+    LR_TEST_ASSERT(previewFlat < 1e-4f, "Mask preview must be black on flat areas");
+    LR_TEST_ASSERT(previewEdge > 0.80f, "Mask preview must be bright white on edges");
 
     std::cout << "  [PASS] Criterion 5 passed successfully.\n";
     return true;
@@ -330,7 +330,7 @@ bool testCropAndGeometryTransform() {
 
     // 1. Hasselblad XPan Panorama aspect ratio verification
     double xpanRatio = 65.0 / 24.0;
-    APEX_TEST_ASSERT(std::abs(xpanRatio - 2.7083333333333335) < 1e-5, "XPan ratio must equal 65:24 (~2.7083)");
+    LR_TEST_ASSERT(std::abs(xpanRatio - 2.7083333333333335) < 1e-5, "XPan ratio must equal 65:24 (~2.7083)");
 
     // 2. Horizon Ruler Angle Auto-Calculation:
     // Drag line from (100, 200) to (500, 250) -> Horizon is tilted down to the right
@@ -346,22 +346,22 @@ bool testCropAndGeometryTransform() {
     std::cout << "    - Measured Tilt: " << measuredAngleDeg << " deg\n";
     std::cout << "    - Auto-Straighten Correction Angle: " << correctionAngleDeg << " deg\n";
 
-    APEX_TEST_ASSERT(measuredAngleDeg > 7.0 && measuredAngleDeg < 7.2, "Tilt angle should be ~7.125 deg");
-    APEX_TEST_ASSERT(correctionAngleDeg < -7.0 && correctionAngleDeg > -7.2, "Correction angle must counter-rotate to level horizon");
+    LR_TEST_ASSERT(measuredAngleDeg > 7.0 && measuredAngleDeg < 7.2, "Tilt angle should be ~7.125 deg");
+    LR_TEST_ASSERT(correctionAngleDeg < -7.0 && correctionAngleDeg > -7.2, "Correction angle must counter-rotate to level horizon");
 
     // 3. Aspect Ratio Presets
-    std::vector<std::pair<apex::AspectRatioMode, double>> ratios = {
-        {apex::AspectRatioMode::Ratio1x1, 1.0},
-        {apex::AspectRatioMode::Ratio4x5, 4.0 / 5.0},
-        {apex::AspectRatioMode::Ratio3x2, 3.0 / 2.0},
-        {apex::AspectRatioMode::Ratio16x9, 16.0 / 9.0},
-        {apex::AspectRatioMode::Ratio2x1, 2.0},
-        {apex::AspectRatioMode::Ratio65x24, 65.0 / 24.0},
-        {apex::AspectRatioMode::GoldenRatio, 1.6180339887}
+    std::vector<std::pair<lightrumor::AspectRatioMode, double>> ratios = {
+        {lightrumor::AspectRatioMode::Ratio1x1, 1.0},
+        {lightrumor::AspectRatioMode::Ratio4x5, 4.0 / 5.0},
+        {lightrumor::AspectRatioMode::Ratio3x2, 3.0 / 2.0},
+        {lightrumor::AspectRatioMode::Ratio16x9, 16.0 / 9.0},
+        {lightrumor::AspectRatioMode::Ratio2x1, 2.0},
+        {lightrumor::AspectRatioMode::Ratio65x24, 65.0 / 24.0},
+        {lightrumor::AspectRatioMode::GoldenRatio, 1.6180339887}
     };
 
     for (const auto& r : ratios) {
-        APEX_TEST_ASSERT(r.second > 0.5 && r.second < 3.0, "Aspect ratios must be within valid physical camera bounds");
+        LR_TEST_ASSERT(r.second > 0.5 && r.second < 3.0, "Aspect ratios must be within valid physical camera bounds");
     }
 
     std::cout << "  [PASS] Criterion 6 passed successfully.\n";
@@ -376,26 +376,26 @@ bool testLensfunCorrection() {
     std::cout << "▶ [Criterion 7/8] Lensfun Profile Matching, TCA & Defringe\n";
     std::cout << "=======================================================\n";
 
-    apex::LensfunIntegration lensfun;
-    APEX_TEST_ASSERT(lensfun.init(), "Lensfun init failed");
+    lightrumor::LensfunIntegration lensfun;
+    LR_TEST_ASSERT(lensfun.init(), "Lensfun init failed");
 
     // 1. Exif matching test
-    apex::ExifMetadata exif;
+    lightrumor::ExifMetadata exif;
     exif.make = "Sony";
     exif.lensModel = "FE 24-70mm F2.8 GM II";
 
-    apex::LensProfile profile;
+    lightrumor::LensProfile profile;
     bool found = lensfun.findProfile(exif, profile);
-    APEX_TEST_ASSERT(found, "Must match Sony FE 24-70mm F2.8 GM II profile");
-    APEX_TEST_ASSERT(profile.k1 < 0.0f, "24-70 GM II has barrel distortion at 24mm (k1 < 0)");
-    APEX_TEST_ASSERT(profile.v1 < 0.0f, "Vignetting polynomial must fall off towards perimeter");
+    LR_TEST_ASSERT(found, "Must match Sony FE 24-70mm F2.8 GM II profile");
+    LR_TEST_ASSERT(profile.k1 < 0.0f, "24-70 GM II has barrel distortion at 24mm (k1 < 0)");
+    LR_TEST_ASSERT(profile.v1 < 0.0f, "Vignetting polynomial must fall off towards perimeter");
 
     // 2. Vignetting correction check
     const int W = 32, H = 32;
-    std::vector<apex::FloatRGBA> flatImage(W * H, apex::FloatRGBA(0.5f, 0.5f, 0.5f, 1.0f));
-    std::vector<apex::FloatRGBA> vignettedCorrected(W * H);
+    std::vector<lightrumor::FloatRGBA> flatImage(W * H, lightrumor::FloatRGBA(0.5f, 0.5f, 0.5f, 1.0f));
+    std::vector<lightrumor::FloatRGBA> vignettedCorrected(W * H);
 
-    apex::LensfunIntegration::applyVignettingCorrection(flatImage.data(), vignettedCorrected.data(),
+    lightrumor::LensfunIntegration::applyVignettingCorrection(flatImage.data(), vignettedCorrected.data(),
                                                        W, H, profile, 100.0f);
 
     float centerLum = vignettedCorrected[16 * W + 16].r;
@@ -404,20 +404,20 @@ bool testLensfunCorrection() {
     std::cout << "    - Center Luminance: " << centerLum << "\n";
     std::cout << "    - Corner Luminance: " << cornerLum << " (Peripheral boost applied)\n";
 
-    APEX_TEST_ASSERT(cornerLum > centerLum * 1.15f, "Corner luminance must be boosted by vignetting compensation");
+    LR_TEST_ASSERT(cornerLum > centerLum * 1.15f, "Corner luminance must be boosted by vignetting compensation");
 
     // 3. Defringe check
-    std::vector<apex::FloatRGBA> fringeImage = {
-        apex::FloatRGBA(0.85f, 0.20f, 0.90f, 1.0f) // Intense purple fringe
+    std::vector<lightrumor::FloatRGBA> fringeImage = {
+        lightrumor::FloatRGBA(0.85f, 0.20f, 0.90f, 1.0f) // Intense purple fringe
     };
-    std::vector<apex::FloatRGBA> defringed(1);
-    apex::LensfunIntegration::applyDefringe(fringeImage.data(), defringed.data(), 1, 1, 80.0f, 0.0f);
+    std::vector<lightrumor::FloatRGBA> defringed(1);
+    lightrumor::LensfunIntegration::applyDefringe(fringeImage.data(), defringed.data(), 1, 1, 80.0f, 0.0f);
 
     float purpleDiff = std::abs(defringed[0].r - defringed[0].g);
     float origDiff = std::abs(fringeImage[0].r - fringeImage[0].g);
     std::cout << "  ✓ Defringe Suppression: |R - G| reduced from " << origDiff << " to " << purpleDiff << "\n";
 
-    APEX_TEST_ASSERT(purpleDiff < origDiff * 0.6f, "Defringe must attenuate purple chromatic fringing");
+    LR_TEST_ASSERT(purpleDiff < origDiff * 0.6f, "Defringe must attenuate purple chromatic fringing");
 
     std::cout << "  [PASS] Criterion 7 passed successfully.\n";
     return true;
@@ -434,10 +434,10 @@ bool testRealtimePerformanceBenchmark() {
     // 1080p preview tile (1920x1080)
     const int W = 1920;
     const int H = 1080;
-    std::vector<apex::FloatRGBA> hdFrame(W * H, apex::FloatRGBA(0.4f, 0.5f, 0.6f, 1.0f));
-    std::vector<apex::FloatRGBA> outFrame;
+    std::vector<lightrumor::FloatRGBA> hdFrame(W * H, lightrumor::FloatRGBA(0.4f, 0.5f, 0.6f, 1.0f));
+    std::vector<lightrumor::FloatRGBA> outFrame;
 
-    apex::DevelopmentParams params;
+    lightrumor::DevelopmentParams params;
     params.kelvin = 6200.0f;
     params.tint = 15.0f;
     params.exposureEV = 0.5f;
@@ -447,18 +447,18 @@ bool testRealtimePerformanceBenchmark() {
     params.sharpeningMasking = 30.0f;
 
     // Warmup
-    std::vector<apex::FloatRGBA> warmupTile(256 * 256, apex::FloatRGBA(0.4f, 0.5f, 0.6f, 1.0f));
-    apex::ExportPipeline::processTileLinear(warmupTile, 256, 256, 256, 256, 0, params, outFrame);
+    std::vector<lightrumor::FloatRGBA> warmupTile(256 * 256, lightrumor::FloatRGBA(0.4f, 0.5f, 0.6f, 1.0f));
+    lightrumor::ExportPipeline::processTileLinear(warmupTile, 256, 256, 256, 256, 0, params, outFrame);
 
     // Measure latency for interactive preview tile (512x512)
     const int previewW = 512;
     const int previewH = 512;
-    std::vector<apex::FloatRGBA> previewTile(previewW * previewH, apex::FloatRGBA(0.4f, 0.5f, 0.6f, 1.0f));
+    std::vector<lightrumor::FloatRGBA> previewTile(previewW * previewH, lightrumor::FloatRGBA(0.4f, 0.5f, 0.6f, 1.0f));
 
     auto t0 = std::chrono::high_resolution_clock::now();
     const int iterations = 10;
     for (int i = 0; i < iterations; ++i) {
-        apex::ExportPipeline::processTileLinear(previewTile, previewW, previewH, previewW, previewH, 0, params, outFrame);
+        lightrumor::ExportPipeline::processTileLinear(previewTile, previewW, previewH, previewW, previewH, 0, params, outFrame);
     }
     auto t1 = std::chrono::high_resolution_clock::now();
     double totalMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -469,7 +469,7 @@ bool testRealtimePerformanceBenchmark() {
     std::cout << "  - 60fps Budget:   16.6 ms\n";
     std::cout << "  - Headroom:       " << (16.6 - avgMs) << " ms (" << (avgMs / 16.6 * 100.0) << "% budget used)\n";
 
-    APEX_TEST_ASSERT(avgMs < 16.6, "Interactive processing must maintain <16.6ms (60fps)");
+    LR_TEST_ASSERT(avgMs < 16.6, "Interactive processing must maintain <16.6ms (60fps)");
     std::cout << "  ✓ 60fps fluid real-time slider responsiveness guaranteed.\n";
 
     std::cout << "  [PASS] Criterion 8 passed successfully.\n";
@@ -481,7 +481,7 @@ bool testRealtimePerformanceBenchmark() {
 // -------------------------------------------------------------------------
 int main() {
     std::cout << "=======================================================" << std::endl;
-    std::cout << "  PROJECT: APEX FIELD - PHASE 4 NATIVE VERIFICATION" << std::endl;
+    std::cout << "  light_rumor - PHASE 4 NATIVE VERIFICATION" << std::endl;
     std::cout << "=======================================================" << std::endl;
 
     std::cout << "[Trace] Starting Test 1..." << std::endl;

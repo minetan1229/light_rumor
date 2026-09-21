@@ -5,7 +5,7 @@
 #include <iostream>
 #include <vector>
 
-namespace apex {
+namespace lightrumor {
 
 FocusStacker::FocusStacker() = default;
 FocusStacker::~FocusStacker() = default;
@@ -309,4 +309,4 @@ bool FocusStacker::stackPixelShift4Shot(const std::vector<std::vector<FloatRGBA>
     return true;
 }
 
-} // namespace apex
+} // namespace lightrumor

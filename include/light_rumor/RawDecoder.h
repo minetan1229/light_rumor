@@ -5,7 +5,7 @@
 #include <vector>
 #include <memory>
 
-namespace apex {
+namespace lightrumor {
 
 class RawDecoder {
 public:
@@ -72,4 +72,4 @@ private:
     std::vector<FloatRGBA> m_linearBuffer;
 };
 
-} // namespace apex
+} // namespace lightrumor

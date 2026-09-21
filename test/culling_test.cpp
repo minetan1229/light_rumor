@@ -13,7 +13,7 @@
 #include <sstream>
 #include <regex>
 
-#define APEX_TEST_ASSERT(cond, msg) \
+#define LR_TEST_ASSERT(cond, msg) \
     do { \
         if (!(cond)) { \
             std::cerr << "\n[TEST FAILED] " << msg << " (" << __FILE__ << ":" << __LINE__ << ")\n" << std::endl; \
@@ -43,11 +43,11 @@ bool testFastThumbnailExtraction() {
     }
 
     std::vector<uint8_t> jpegBytes;
-    bool writeOk = apex::ImageWriter::writeJPEGMemory(
-        rgb.data(), testW, testH, 85, apex::ChromaSubsampling::YUV420, nullptr, jpegBytes
+    bool writeOk = lightrumor::ImageWriter::writeJPEGMemory(
+        rgb.data(), testW, testH, 85, lightrumor::ChromaSubsampling::YUV420, nullptr, jpegBytes
     );
-    APEX_TEST_ASSERT(writeOk, "Failed to create source JPEG stream");
-    APEX_TEST_ASSERT(jpegBytes.size() > 1000, "JPEG stream unexpectedly small");
+    LR_TEST_ASSERT(writeOk, "Failed to create source JPEG stream");
+    LR_TEST_ASSERT(jpegBytes.size() > 1000, "JPEG stream unexpectedly small");
 
     // Embed this JPEG inside a simulated 4MB RAW stream with arbitrary padding
     std::vector<uint8_t> simulatedRaw(4 * 1024 * 1024, 0xAA);
@@ -59,20 +59,20 @@ bool testFastThumbnailExtraction() {
     std::vector<uint8_t> extractedThumb;
     int32_t outW = 0, outH = 0;
 
-    bool extractOk = apex::RawDecoder::extractEmbeddedThumbnailFromBuffer(
+    bool extractOk = lightrumor::RawDecoder::extractEmbeddedThumbnailFromBuffer(
         simulatedRaw.data(), simulatedRaw.size(), extractedThumb, outW, outH
     );
     auto t1 = std::chrono::high_resolution_clock::now();
     double elapsedMs = std::chrono::duration<double, std::milli>(t1 - t0).count();
 
-    APEX_TEST_ASSERT(extractOk, "Failed to extract embedded thumbnail from RAW");
-    APEX_TEST_ASSERT(outW == testW && outH == testH, "Extracted thumbnail dimensions mismatch");
-    APEX_TEST_ASSERT(extractedThumb.size() >= jpegBytes.size(), "Extracted bytes shorter than original");
-    APEX_TEST_ASSERT(extractedThumb[0] == 0xFF && extractedThumb[1] == 0xD8, "Missing JPEG SOI marker");
+    LR_TEST_ASSERT(extractOk, "Failed to extract embedded thumbnail from RAW");
+    LR_TEST_ASSERT(outW == testW && outH == testH, "Extracted thumbnail dimensions mismatch");
+    LR_TEST_ASSERT(extractedThumb.size() >= jpegBytes.size(), "Extracted bytes shorter than original");
+    LR_TEST_ASSERT(extractedThumb[0] == 0xFF && extractedThumb[1] == 0xD8, "Missing JPEG SOI marker");
 
     std::cout << "  ✓ Embedded thumbnail extracted in: " << elapsedMs << " ms (Target < 10ms)\n";
     std::cout << "  ✓ Dimensions: " << outW << "x" << outH << ", Size: " << extractedThumb.size() / 1024 << " KB\n";
-    APEX_TEST_ASSERT(elapsedMs < 20.0, "Thumbnail extraction took longer than budget");
+    LR_TEST_ASSERT(elapsedMs < 20.0, "Thumbnail extraction took longer than budget");
 
     std::cout << "  [PASS] Test 1 passed successfully.\n";
     return true;
@@ -137,7 +137,7 @@ bool testLRUCacheAndPrefetch() {
     std::cout << "  - Cache Hits: " << hits << " / " << (hits + misses) << " (" << hitRate << "%)\n";
     std::cout << "  - Cache Misses: " << misses << "\n";
 
-    APEX_TEST_ASSERT(hitRate >= 95.0, "Cache hit rate must be >= 95% during continuous flicking");
+    LR_TEST_ASSERT(hitRate >= 95.0, "Cache hit rate must be >= 95% during continuous flicking");
     std::cout << "  ✓ 0-millisecond flicking guaranteed without loading spinners.\n";
     std::cout << "  [PASS] Test 2 passed successfully.\n";
     return true;
@@ -151,12 +151,12 @@ bool testXmpSidecar() {
     std::cout << "▶ [Phase 2 Test 3/4] Non-Destructive XMP Sidecar Engine\n";
     std::cout << "=======================================================\n";
 
-    apex::CullingItemMetadata meta;
+    lightrumor::CullingItemMetadata meta;
     meta.rating = 4;
-    meta.pickStatus = apex::PickStatus::Picked;
-    meta.colorLabel = apex::ColorLabel::Red;
+    meta.pickStatus = lightrumor::PickStatus::Picked;
+    meta.colorLabel = lightrumor::ColorLabel::Red;
 
-    apex::DevelopmentParams params;
+    lightrumor::DevelopmentParams params;
     params.kelvin = 6200.0f;
     params.tint = 12.5f;
     params.exposureEV = 0.75f;
@@ -189,22 +189,22 @@ bool testXmpSidecar() {
         return ss.str();
     }();
 
-    APEX_TEST_ASSERT(xmpPacket.find("xmp:Rating=\"4\"") != std::string::npos, "Rating tag missing in XMP");
-    APEX_TEST_ASSERT(xmpPacket.find("xmp:Label=\"Red\"") != std::string::npos, "Color label missing in XMP");
-    APEX_TEST_ASSERT(xmpPacket.find("crs:Pick=\"1\"") != std::string::npos, "Pick flag missing in XMP");
-    APEX_TEST_ASSERT(xmpPacket.find("crs:Temperature=\"6200\"") != std::string::npos, "Temperature missing in XMP");
+    LR_TEST_ASSERT(xmpPacket.find("xmp:Rating=\"4\"") != std::string::npos, "Rating tag missing in XMP");
+    LR_TEST_ASSERT(xmpPacket.find("xmp:Label=\"Red\"") != std::string::npos, "Color label missing in XMP");
+    LR_TEST_ASSERT(xmpPacket.find("crs:Pick=\"1\"") != std::string::npos, "Pick flag missing in XMP");
+    LR_TEST_ASSERT(xmpPacket.find("crs:Temperature=\"6200\"") != std::string::npos, "Temperature missing in XMP");
 
     // Parse back values
     std::smatch match;
     std::regex ratingRegex("xmp:Rating=\"(\\d+)\"");
-    APEX_TEST_ASSERT(std::regex_search(xmpPacket, match, ratingRegex), "Regex failed to match Rating");
+    LR_TEST_ASSERT(std::regex_search(xmpPacket, match, ratingRegex), "Regex failed to match Rating");
     int parsedRating = std::stoi(match[1]);
-    APEX_TEST_ASSERT(parsedRating == 4, "Parsed rating does not match original");
+    LR_TEST_ASSERT(parsedRating == 4, "Parsed rating does not match original");
 
     std::regex expRegex("crs:Exposure2012=\"([+-]?\\d*\\.?\\d+)\"");
-    APEX_TEST_ASSERT(std::regex_search(xmpPacket, match, expRegex), "Regex failed to match Exposure");
+    LR_TEST_ASSERT(std::regex_search(xmpPacket, match, expRegex), "Regex failed to match Exposure");
     float parsedExp = std::stof(match[1]);
-    APEX_TEST_ASSERT(std::abs(parsedExp - 0.75f) < 0.01f, "Parsed Exposure does not match original");
+    LR_TEST_ASSERT(std::abs(parsedExp - 0.75f) < 0.01f, "Parsed Exposure does not match original");
 
     std::cout << "  ✓ Adobe XMP packet generated and verified:\n";
     std::cout << "    - Rating: ★" << parsedRating << "\n";
@@ -224,7 +224,7 @@ bool testBatchSyncSelectiveMask() {
     std::cout << "=======================================================\n";
 
     // Source photo adjustments
-    apex::DevelopmentParams source;
+    lightrumor::DevelopmentParams source;
     source.kelvin = 7200.0f;        // Warm
     source.tint = 22.0f;           // Magenta
     source.exposureEV = 1.25f;      // +1.25 EV
@@ -236,7 +236,7 @@ bool testBatchSyncSelectiveMask() {
     source.toneCurveLUT = { 0.0f, 0.2f, 0.5f, 0.8f, 1.0f }; // Custom curve
 
     // Target photo with its own existing individual exposure & crop
-    apex::DevelopmentParams target;
+    lightrumor::DevelopmentParams target;
     target.kelvin = 5000.0f;
     target.tint = 0.0f;
     target.exposureEV = -0.5f;     // Unique exposure that user wants to keep!
@@ -248,31 +248,31 @@ bool testBatchSyncSelectiveMask() {
     target.toneCurveLUT.clear();
 
     // 1. Case A: Sync WhiteBalance and DetailNR ONLY (Exclude Basic Tone and Curves)
-    uint32_t maskA = apex::BatchSyncMask::WhiteBalance | apex::BatchSyncMask::DetailNR;
-    apex::mergeDevelopmentParams(source, target, maskA);
+    uint32_t maskA = lightrumor::BatchSyncMask::WhiteBalance | lightrumor::BatchSyncMask::DetailNR;
+    lightrumor::mergeDevelopmentParams(source, target, maskA);
 
     // Assert WhiteBalance was updated
-    APEX_TEST_ASSERT(target.kelvin == 7200.0f, "Kelvin should be synced from source");
-    APEX_TEST_ASSERT(target.tint == 22.0f, "Tint should be synced from source");
+    LR_TEST_ASSERT(target.kelvin == 7200.0f, "Kelvin should be synced from source");
+    LR_TEST_ASSERT(target.tint == 22.0f, "Tint should be synced from source");
 
     // Assert DetailNR was updated
-    APEX_TEST_ASSERT(target.luminanceNR == 65.0f, "Luminance NR should be synced");
-    APEX_TEST_ASSERT(target.sharpeningAmount == 85.0f, "Sharpening should be synced");
+    LR_TEST_ASSERT(target.luminanceNR == 65.0f, "Luminance NR should be synced");
+    LR_TEST_ASSERT(target.sharpeningAmount == 85.0f, "Sharpening should be synced");
 
     // CRITICAL: Assert target's individual exposure was NOT overwritten!
-    APEX_TEST_ASSERT(target.exposureEV == -0.5f, "Target's exposure was overwritten when it should be preserved!");
-    APEX_TEST_ASSERT(target.highlights == 0.0f, "Target's highlights should remain untouched");
-    APEX_TEST_ASSERT(target.toneCurveLUT.empty(), "Target's tone curve should remain untouched");
+    LR_TEST_ASSERT(target.exposureEV == -0.5f, "Target's exposure was overwritten when it should be preserved!");
+    LR_TEST_ASSERT(target.highlights == 0.0f, "Target's highlights should remain untouched");
+    LR_TEST_ASSERT(target.toneCurveLUT.empty(), "Target's tone curve should remain untouched");
 
     std::cout << "  ✓ Mask A (WB + NR): WB and NR copied; Target's unique -0.5 EV safely preserved!\n";
 
     // 2. Case B: Sync All Basic (WB, BasicTone, ColorMixer, DetailNR)
-    uint32_t maskB = apex::BatchSyncMask::AllBasic;
-    apex::mergeDevelopmentParams(source, target, maskB);
+    uint32_t maskB = lightrumor::BatchSyncMask::AllBasic;
+    lightrumor::mergeDevelopmentParams(source, target, maskB);
 
-    APEX_TEST_ASSERT(target.exposureEV == 1.25f, "Target exposure should now be synced under AllBasic");
-    APEX_TEST_ASSERT(target.highlights == -40.0f, "Target highlights should now be synced under AllBasic");
-    APEX_TEST_ASSERT(target.toneCurveLUT.empty(), "Tone curve still preserved (excluded from AllBasic)");
+    LR_TEST_ASSERT(target.exposureEV == 1.25f, "Target exposure should now be synced under AllBasic");
+    LR_TEST_ASSERT(target.highlights == -40.0f, "Target highlights should now be synced under AllBasic");
+    LR_TEST_ASSERT(target.toneCurveLUT.empty(), "Tone curve still preserved (excluded from AllBasic)");
 
     std::cout << "  ✓ Mask B (All Basic): Basic tone synced, Tone curve preserved.\n";
     std::cout << "  [PASS] Test 4 passed successfully.\n";
@@ -284,7 +284,7 @@ bool testBatchSyncSelectiveMask() {
 // -------------------------------------------------------------------------
 int main() {
     std::cout << "=======================================================\n";
-    std::cout << "  PROJECT: APEX FIELD - PHASE 2 VERIFICATION SUITE\n";
+    std::cout << "  light_rumor - PHASE 2 VERIFICATION SUITE\n";
     std::cout << "=======================================================\n";
 
     bool allPassed = true;

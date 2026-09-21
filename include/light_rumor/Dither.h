@@ -5,7 +5,7 @@
 #include <cmath>
 #include <algorithm>
 
-namespace apex {
+namespace lightrumor {
 
 class Dither {
 public:
@@ -46,4 +46,4 @@ public:
     }
 };
 
-} // namespace apex
+} // namespace lightrumor

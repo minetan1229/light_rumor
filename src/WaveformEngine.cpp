@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <iostream>
 
-namespace apex {
+namespace lightrumor {
 
 struct WaveformEngine::Impl {
     std::vector<uint32_t> countR;
@@ -282,4 +282,4 @@ void WaveformEngine::drawGraticuleLines(WaveformData& waveform, bool isDarkTheme
     drawDottedLine(y0, graticuleColor);
 }
 
-} // namespace apex
+} // namespace lightrumor

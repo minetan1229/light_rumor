@@ -45,7 +45,7 @@ fun MaskLayerManager(
     hapticManager: HapticManager?,
     modifier: Modifier = Modifier
 ) {
-    val colors = ApexTheme.colors
+    val colors = LightRumorTheme.colors
     var showAddDialog by remember { mutableStateOf(false) }
     var activeSubTab by remember { mutableStateOf(0) } // 0: LAYERS, 1: ADJUST, 2: STYLUS
 
@@ -262,7 +262,7 @@ private fun MaskLayerRow(
     onBooleanOpChange: (BooleanOp) -> Unit,
     onDelete: () -> Unit
 ) {
-    val colors = ApexTheme.colors
+    val colors = LightRumorTheme.colors
 
     Row(
         modifier = Modifier
@@ -380,7 +380,7 @@ private fun LocalAdjustmentsPanel(
     onLayerUpdated: (MaskLayerState) -> Unit,
     hapticManager: HapticManager?
 ) {
-    val colors = ApexTheme.colors
+    val colors = LightRumorTheme.colors
     val adj = layer.adjustments
 
     Column(
@@ -484,7 +484,7 @@ private fun LocalSliderMini(
     unit: String,
     onValueChange: (Float) -> Unit
 ) {
-    val colors = ApexTheme.colors
+    val colors = LightRumorTheme.colors
     Column(
         modifier = Modifier
             .width(90.dp)
@@ -544,7 +544,7 @@ private fun StylusBrushCanvas(
     onStrokeAdded: (BrushStrokePoint) -> Unit,
     onClearStrokes: () -> Unit
 ) {
-    val colors = ApexTheme.colors
+    val colors = LightRumorTheme.colors
     var isEraserMode by remember { mutableStateOf(false) }
     var currentPressure by remember { mutableStateOf(1.0f) }
     var currentRadius by remember { mutableStateOf(25.0f) }
@@ -645,7 +645,7 @@ private fun AddMaskModal(
     onDismiss: () -> Unit,
     onAddMask: (MaskType) -> Unit
 ) {
-    val colors = ApexTheme.colors
+    val colors = LightRumorTheme.colors
 
     Box(
         modifier = Modifier

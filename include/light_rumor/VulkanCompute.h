@@ -5,7 +5,7 @@
 #include <memory>
 #include <string>
 
-namespace apex {
+namespace lightrumor {
 
 class VulkanCompute {
 public:
@@ -32,4 +32,4 @@ private:
     bool m_isAvailable = false;
 };
 
-} // namespace apex
+} // namespace lightrumor

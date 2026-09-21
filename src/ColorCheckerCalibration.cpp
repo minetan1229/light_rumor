@@ -4,7 +4,7 @@
 #include <iostream>
 #include <numeric>
 
-namespace apex {
+namespace lightrumor {
 
 namespace {
 
@@ -395,4 +395,4 @@ bool ColorCheckerCalibration::calibrate(const std::vector<FloatRGBA>& frame,
     return true;
 }
 
-} // namespace apex
+} // namespace lightrumor

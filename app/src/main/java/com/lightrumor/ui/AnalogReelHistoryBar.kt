@@ -19,7 +19,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.lightrumor.ApexTheme
 import com.lightrumor.HapticManager
 import com.lightrumor.HistoryManager
 import com.lightrumor.HistoryNode
@@ -43,7 +42,7 @@ fun AnalogReelHistoryBar(
     hapticManager: HapticManager?,
     modifier: Modifier = Modifier
 ) {
-    val colors = ApexTheme.colors
+    val colors = LightRumorTheme.colors
     val timeline = historyManager.getActiveLinearTimeline()
     val currentNode = historyManager.getCurrentNode()
     val branches = historyManager.getBranches()
@@ -281,7 +280,7 @@ private fun FilmFrameCell(
     isCurrent: Boolean,
     onClick: () -> Unit
 ) {
-    val colors = ApexTheme.colors
+    val colors = LightRumorTheme.colors
 
     Box(
         modifier = Modifier

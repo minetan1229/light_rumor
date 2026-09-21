@@ -8,7 +8,7 @@
 #include <dlfcn.h>
 #endif
 
-namespace apex {
+namespace lightrumor {
 
 struct VulkanCompute::Impl {
     void* vulkanLib = nullptr;
@@ -89,4 +89,4 @@ bool VulkanCompute::processTile(const std::vector<FloatRGBA>& inPaddedTile,
     return false;
 }
 
-} // namespace apex
+} // namespace lightrumor

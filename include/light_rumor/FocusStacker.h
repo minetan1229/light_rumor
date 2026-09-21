@@ -4,7 +4,7 @@
 #include <vector>
 #include <memory>
 
-namespace apex {
+namespace lightrumor {
 
 /**
  * Computational Mathematical Stacking Engine.
@@ -75,4 +75,4 @@ public:
                                    std::vector<float>& outSharpness);
 };
 
-} // namespace apex
+} // namespace lightrumor

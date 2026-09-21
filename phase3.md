@@ -94,11 +94,11 @@ Compose MultiplatformのトランジションおよびDesktop/Webレンダラー
 
 ## 4. 出力成果物（生成すべきコード）
 1. モーション & アニメーション仕様:
-   * `ApexMotionSpecs.kt`: CSS `cubic-bezier` 準拠のイージングカーブ定義、スプリングアニメーション物理パラメータ。
+   * `LightRumorMotionSpecs.kt`: CSS `cubic-bezier` 準拠のイージングカーブ定義、スプリングアニメーション物理パラメータ。
 2. 波形シェーダー & レンダラー (GLSL & C++):
    * `waveform_monitor.comp`: 入力画像から水平ピクセルごとのRGBヒストグラム（色の波）をリアルタイム積算・生成するVulkanシェーダー。
 3. Design System & Theme:
-   * `ApexTheme.kt`: マットブラック（#0A0A0C）およびArctic Minimalのカラーパレット、チタンボーダー、シャープな2px-4pxシェイプ、単位付きTypography。
+   * `LightRumorTheme.kt`: マットブラック（#0A0A0C）およびArctic Minimalのカラーパレット、チタンボーダー、シャープな2px-4pxシェイプ、単位付きTypography。
 4. 触覚フィードバック制御:
    * `HapticManager.kt`: ゼロ点スナップ、ダイヤルクリック、リミット到達時の振動制御クラス。
 5. Compose UI コンポーネント:

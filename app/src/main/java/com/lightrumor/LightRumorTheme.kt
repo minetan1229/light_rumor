@@ -11,11 +11,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * ApexColors: Color palette inspired by Sony CineAlta, Sigma fp, Canon Cinema EOS, and Minolta alpha.
+ * LightRumorColors: Color palette inspired by Sony CineAlta, Sigma fp, Canon Cinema EOS, and Minolta alpha.
  * Completely anti-AI: pure matte chassis, zero neon glows, zero glassmorphism, zero floating blobs.
  */
 @Immutable
-data class ApexColors(
+data class LightRumorColors(
     val isDark: Boolean,
     val background: Color,
     val surface: Color,
@@ -35,7 +35,7 @@ data class ApexColors(
     val graticule: Color
 )
 
-val ObsidianBlackColors = ApexColors(
+val ObsidianBlackColors = LightRumorColors(
     isDark = true,
     background = Color(0xFF0A0A0C),       // Sony/Sigma matte obsidian black
     surface = Color(0xFF121316),          // Knurled instrument panel
@@ -55,7 +55,7 @@ val ObsidianBlackColors = ApexColors(
     graticule = Color(0xFF2D2F33)
 )
 
-val TechnicalArcticColors = ApexColors(
+val TechnicalArcticColors = LightRumorColors(
     isDark = false,
     background = Color(0xFFF4F4F6),       // High-contrast outdoor snow/desert white
     surface = Color(0xFFEAEAEF),          // Technical instrument plate
@@ -79,7 +79,7 @@ val TechnicalArcticColors = ApexColors(
  * Strict 2px-4px sharp corners for industrial photographic instrument feel.
  * Pill shapes and balloon curves are strictly forbidden.
  */
-object ApexShapes {
+object LightRumorShapes {
     val SharpSquare = RoundedCornerShape(2.dp)
     val Panel = RoundedCornerShape(3.dp)
     val Button = RoundedCornerShape(4.dp)
@@ -90,7 +90,7 @@ object ApexShapes {
  * Optical Instrument Typography:
  * Monospace figures for all numeric readouts (+0.75 EV, 5600 K, 1/250s, f/2.8).
  */
-object ApexTypography {
+object LightRumorTypography {
     val Header = TextStyle(
         fontFamily = FontFamily.Monospace,
         fontWeight = FontWeight.Bold,
@@ -128,7 +128,6 @@ object ApexTypography {
 }
 
 val LocalLightRumorColors = compositionLocalOf { ObsidianBlackColors }
-val LocalApexColors = LocalLightRumorColors
 
 @Composable
 fun LightRumorTheme(
@@ -142,20 +141,10 @@ fun LightRumorTheme(
     )
 }
 
-@Composable
-fun ApexTheme(
-    isDark: Boolean = true,
-    content: @Composable () -> Unit
-) = LightRumorTheme(isDark, content)
-
 object LightRumorTheme {
-    val colors: ApexColors
+    val colors: LightRumorColors
         @Composable
         get() = LocalLightRumorColors.current
-    val shapes = ApexShapes
-    val typography = ApexTypography
+    val shapes = LightRumorShapes
+    val typography = LightRumorTypography
 }
-
-typealias ApexTheme = LightRumorTheme
-typealias LightRumorColors = ApexColors
-

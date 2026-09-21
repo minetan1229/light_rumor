@@ -4,7 +4,7 @@
 #include <cstring>
 #include <iostream>
 
-namespace apex {
+namespace lightrumor {
 
 FieldScopesEngine::FieldScopesEngine() = default;
 FieldScopesEngine::~FieldScopesEngine() = default;
@@ -286,4 +286,4 @@ void FieldScopesEngine::drawVectorscopeGraticule(std::vector<uint32_t>& scopePix
     }
 }
 
-} // namespace apex
+} // namespace lightrumor

@@ -18,7 +18,7 @@
 #include <filesystem>
 #include <fstream>
 
-#define APEX_TEST_ASSERT(cond, msg) \
+#define LR_TEST_ASSERT(cond, msg) \
     do { \
         if (!(cond)) { \
             std::cerr << "\n[TEST FAILED] " << msg << " (" << __FILE__ << ":" << __LINE__ << ")\n" << std::endl; \
@@ -34,29 +34,29 @@ bool testUsbTetheredShooting() {
     std::cout << "▶ [Criterion 1/6] USB-C Tethered Shooting & 0.5s Auto-Preset Application\n";
     std::cout << "=======================================================\n";
 
-    apex::TetherManager tether;
+    lightrumor::TetherManager tether;
 
     // 1. Connect Sony Alpha ILCE-7RM5 over USB-C
-    bool started = tether.startSession(apex::TetherCameraBrand::Sony, "USB_PORT_TYPE_C");
-    APEX_TEST_ASSERT(started, "Failed to start tether session.");
-    APEX_TEST_ASSERT(tether.isConnected(), "Tether manager should report connected.");
+    bool started = tether.startSession(lightrumor::TetherCameraBrand::Sony, "USB_PORT_TYPE_C");
+    LR_TEST_ASSERT(started, "Failed to start tether session.");
+    LR_TEST_ASSERT(tether.isConnected(), "Tether manager should report connected.");
 
     auto settings = tether.getCameraSettings();
     std::cout << "  ✓ Connected Camera: " << settings.cameraModel << " with " << settings.lensModel << "\n";
     std::cout << "    - Shutter: " << settings.shutterSpeed << "s, Aperture: f/" << settings.aperture
               << ", ISO: " << settings.iso << ", Battery: " << settings.batteryPercent << "%\n";
 
-    APEX_TEST_ASSERT(settings.cameraModel == "ILCE-7RM5", "Camera model mismatch.");
+    LR_TEST_ASSERT(settings.cameraModel == "ILCE-7RM5", "Camera model mismatch.");
 
     // Remote camera parameter adjustment
     tether.updateCameraSetting("iso", 200);
     tether.updateCameraSetting("aperture", 4.0);
     settings = tether.getCameraSettings();
-    APEX_TEST_ASSERT(settings.iso == 200, "Failed to update ISO.");
-    APEX_TEST_ASSERT(settings.aperture == 4.0, "Failed to update aperture.");
+    LR_TEST_ASSERT(settings.iso == 200, "Failed to update ISO.");
+    LR_TEST_ASSERT(settings.aperture == 4.0, "Failed to update aperture.");
 
     // 2. Set auto-apply development preset (e.g. Cine Golden Hour preset)
-    apex::DevelopmentParams preset;
+    lightrumor::DevelopmentParams preset;
     preset.exposureEV = 0.5f;
     preset.contrast = 15.0f;
     preset.vibrance = 20.0f;
@@ -64,9 +64,9 @@ bool testUsbTetheredShooting() {
 
     // 3. Shutter release trigger and auto-transfer benchmark
     bool callbackFired = false;
-    apex::TetherTransferEvent receivedEvent;
+    lightrumor::TetherTransferEvent receivedEvent;
 
-    tether.setTransferCallback([&](const apex::TetherTransferEvent& ev, const std::vector<uint8_t>& /*bytes*/) {
+    tether.setTransferCallback([&](const lightrumor::TetherTransferEvent& ev, const std::vector<uint8_t>& /*bytes*/) {
         callbackFired = true;
         receivedEvent = ev;
     });
@@ -76,13 +76,13 @@ bool testUsbTetheredShooting() {
     auto tStart = std::chrono::high_resolution_clock::now();
 
     bool triggerOk = tether.simulateCameraShutterRelease("DSC09420.ARW", dummyRawPayload);
-    APEX_TEST_ASSERT(triggerOk, "Shutter release simulation failed.");
+    LR_TEST_ASSERT(triggerOk, "Shutter release simulation failed.");
 
     auto tEnd = std::chrono::high_resolution_clock::now();
     double totalTurnaroundMs = std::chrono::duration<double, std::milli>(tEnd - tStart).count();
 
-    APEX_TEST_ASSERT(callbackFired, "Transfer callback was not invoked.");
-    APEX_TEST_ASSERT(receivedEvent.success, "Transfer event marked as failure.");
+    LR_TEST_ASSERT(callbackFired, "Transfer callback was not invoked.");
+    LR_TEST_ASSERT(receivedEvent.success, "Transfer event marked as failure.");
 
     std::cout << "  ✓ Shutter Release & Auto-Transfer Handover Performance:\n";
     std::cout << "    - Filename:            " << receivedEvent.filename << " (" << (receivedEvent.fileSize / (1024 * 1024)) << " MB)\n";
@@ -90,7 +90,7 @@ bool testUsbTetheredShooting() {
     std::cout << "    - Develop Preset Time: " << receivedEvent.developTimeMs << " ms\n";
     std::cout << "    - Total Turnaround:    " << totalTurnaroundMs << " ms (Required: < 500 ms / 0.5s)\n";
 
-    APEX_TEST_ASSERT(totalTurnaroundMs < 500.0, "Total tether turnaround must be strictly under 0.5 seconds!");
+    LR_TEST_ASSERT(totalTurnaroundMs < 500.0, "Total tether turnaround must be strictly under 0.5 seconds!");
     std::cout << "  [PASS] Criterion 1 passed successfully.\n";
     return true;
 }
@@ -105,7 +105,7 @@ bool testFieldAssistanceScopes() {
 
     const int width = 64;
     const int height = 64;
-    std::vector<apex::FloatRGBA> testImage(width * height);
+    std::vector<lightrumor::FloatRGBA> testImage(width * height);
 
     // Create calibrated exposure test patches:
     // Region A: Underexposed / crushed black (< 2.5 IRE)
@@ -116,20 +116,20 @@ bool testFieldAssistanceScopes() {
         for (int x = 0; x < width; ++x) {
             size_t idx = y * width + x;
             if (x < 16) {
-                testImage[idx] = apex::FloatRGBA(0.01f, 0.01f, 0.01f, 1.0f); // IRE ~ 1.0 (Purple)
+                testImage[idx] = lightrumor::FloatRGBA(0.01f, 0.01f, 0.01f, 1.0f); // IRE ~ 1.0 (Purple)
             } else if (x < 32) {
-                testImage[idx] = apex::FloatRGBA(0.40f, 0.40f, 0.40f, 1.0f); // IRE ~ 40.0 (Green)
+                testImage[idx] = lightrumor::FloatRGBA(0.40f, 0.40f, 0.40f, 1.0f); // IRE ~ 40.0 (Green)
             } else if (x < 48) {
-                testImage[idx] = apex::FloatRGBA(0.55f, 0.55f, 0.55f, 1.0f); // IRE ~ 55.0 (Pink)
+                testImage[idx] = lightrumor::FloatRGBA(0.55f, 0.55f, 0.55f, 1.0f); // IRE ~ 55.0 (Pink)
             } else {
-                testImage[idx] = apex::FloatRGBA(1.00f, 1.00f, 1.00f, 1.0f); // IRE = 100.0 (Red clip)
+                testImage[idx] = lightrumor::FloatRGBA(1.00f, 1.00f, 1.00f, 1.0f); // IRE = 100.0 (Red clip)
             }
         }
     }
 
     // 1. False Color Test
-    std::vector<apex::FloatRGBA> falseColor;
-    apex::FieldScopesEngine::generateFalseColor(testImage.data(), width, height, falseColor);
+    std::vector<lightrumor::FloatRGBA> falseColor;
+    lightrumor::FieldScopesEngine::generateFalseColor(testImage.data(), width, height, falseColor);
 
     auto pPurple = falseColor[10 * width + 5];   // Region A
     auto pGreen  = falseColor[10 * width + 20];  // Region B
@@ -142,47 +142,47 @@ bool testFieldAssistanceScopes() {
     std::cout << "    - Optimal Skin Highlight (55 IRE):(" << pPink.r << ", " << pPink.g << ", " << pPink.b << ") -> Pink\n";
     std::cout << "    - Blown-out White Clip (100 IRE): (" << pRed.r << ", " << pRed.g << ", " << pRed.b << ") -> Red\n";
 
-    APEX_TEST_ASSERT(pPurple.b > pPurple.g && pPurple.r > 0.2f, "Crushed black must map to Purple.");
-    APEX_TEST_ASSERT(pGreen.g > 0.7f && pGreen.r < 0.1f, "18% Gray must map to Green.");
-    APEX_TEST_ASSERT(pPink.r > 0.9f && pPink.b > 0.6f && pPink.g < 0.5f, "Skin tone must map to Pink.");
-    APEX_TEST_ASSERT(pRed.r > 0.9f && pRed.g < 0.1f && pRed.b < 0.1f, "White clipping must map to pure Red.");
+    LR_TEST_ASSERT(pPurple.b > pPurple.g && pPurple.r > 0.2f, "Crushed black must map to Purple.");
+    LR_TEST_ASSERT(pGreen.g > 0.7f && pGreen.r < 0.1f, "18% Gray must map to Green.");
+    LR_TEST_ASSERT(pPink.r > 0.9f && pPink.b > 0.6f && pPink.g < 0.5f, "Skin tone must map to Pink.");
+    LR_TEST_ASSERT(pRed.r > 0.9f && pRed.g < 0.1f && pRed.b < 0.1f, "White clipping must map to pure Red.");
 
     // 2. Zebra Pattern Test
-    std::vector<apex::FloatRGBA> zebra;
-    apex::FieldScopesEngine::generateZebra(testImage.data(), width, height, 95.0f, 0.0f, zebra);
+    std::vector<lightrumor::FloatRGBA> zebra;
+    lightrumor::FieldScopesEngine::generateZebra(testImage.data(), width, height, 95.0f, 0.0f, zebra);
     // Region A-C (<95 IRE) should be untouched
-    APEX_TEST_ASSERT(std::abs(zebra[10 * width + 20].r - testImage[10 * width + 20].r) < 1e-4f, "Zebra should not affect safe tones.");
+    LR_TEST_ASSERT(std::abs(zebra[10 * width + 20].r - testImage[10 * width + 20].r) < 1e-4f, "Zebra should not affect safe tones.");
     // Region D (100 IRE) should display alternating stripes (0 or 1)
     bool hasBlackStripe = false, hasWhiteStripe = false;
     for (int x = 48; x < 64; ++x) {
         if (zebra[10 * width + x].r < 0.1f) hasBlackStripe = true;
         if (zebra[10 * width + x].r > 0.9f) hasWhiteStripe = true;
     }
-    APEX_TEST_ASSERT(hasBlackStripe && hasWhiteStripe, "Zebra pattern must render diagonal hazard stripes on clipped areas.");
+    LR_TEST_ASSERT(hasBlackStripe && hasWhiteStripe, "Zebra pattern must render diagonal hazard stripes on clipped areas.");
     std::cout << "  ✓ Zebra Stripes: verified alternating hazard stripes over IRE 95% threshold.\n";
 
     // 3. Focus Peaking Test
-    std::vector<apex::FloatRGBA> sharpPattern(width * height, apex::FloatRGBA(0.1f, 0.1f, 0.1f, 1.0f));
+    std::vector<lightrumor::FloatRGBA> sharpPattern(width * height, lightrumor::FloatRGBA(0.1f, 0.1f, 0.1f, 1.0f));
     // Draw high-frequency sharp step edge at x = 32
     for (int y = 0; y < height; ++y) {
         for (int x = 32; x < width; ++x) {
-            sharpPattern[y * width + x] = apex::FloatRGBA(0.9f, 0.9f, 0.9f, 1.0f);
+            sharpPattern[y * width + x] = lightrumor::FloatRGBA(0.9f, 0.9f, 0.9f, 1.0f);
         }
     }
-    std::vector<apex::FloatRGBA> peaking;
-    apex::FieldScopesEngine::generateFocusPeaking(sharpPattern.data(), width, height, apex::PeakingColor::Red, 0.15f, peaking);
+    std::vector<lightrumor::FloatRGBA> peaking;
+    lightrumor::FieldScopesEngine::generateFocusPeaking(sharpPattern.data(), width, height, lightrumor::PeakingColor::Red, 0.15f, peaking);
     // Edge at x = 32 should have intense red highlight
     auto edgePixel = peaking[32 * width + 32];
     auto flatPixel = peaking[32 * width + 10];
-    APEX_TEST_ASSERT(edgePixel.r > 0.7f && edgePixel.g < 0.3f, "Sharp in-focus edge must be highlighted in vivid red peaking color.");
-    APEX_TEST_ASSERT(flatPixel.r < 0.6f, "Flat out-of-focus region should not trigger peaking.");
+    LR_TEST_ASSERT(edgePixel.r > 0.7f && edgePixel.g < 0.3f, "Sharp in-focus edge must be highlighted in vivid red peaking color.");
+    LR_TEST_ASSERT(flatPixel.r < 0.6f, "Flat out-of-focus region should not trigger peaking.");
     std::cout << "  ✓ Focus Peaking: High-pass Sobel edge successfully highlighted in fluorescent red.\n";
 
     // 4. Vectorscope Generation Test
     std::vector<uint32_t> vectorscope;
-    apex::FieldScopesEngine::generateVectorscope(testImage.data(), width, height, 256, 1.0f, vectorscope);
-    APEX_TEST_ASSERT(vectorscope.size() == 256 * 256, "Vectorscope buffer size mismatch.");
-    APEX_TEST_ASSERT(vectorscope[128 * 256 + 128] != 0, "Vectorscope graticule center should be drawn.");
+    lightrumor::FieldScopesEngine::generateVectorscope(testImage.data(), width, height, 256, 1.0f, vectorscope);
+    LR_TEST_ASSERT(vectorscope.size() == 256 * 256, "Vectorscope buffer size mismatch.");
+    LR_TEST_ASSERT(vectorscope[128 * 256 + 128] != 0, "Vectorscope graticule center should be drawn.");
     std::cout << "  ✓ Vectorscope: 256x256 circular Cb-Cr polar space rendered with SMPTE 75% targets.\n";
 
     std::cout << "  [PASS] Criterion 2 passed successfully.\n";
@@ -204,7 +204,7 @@ bool testComputationalStacking() {
     // Synthesize 5 frames representing 5 depth zones across the image:
     // Frame k has sharp high-frequency checkerboard in Zone k (y: k*20 to (k+1)*20),
     // while all other zones are blurred/defocused.
-    std::vector<std::vector<apex::FloatRGBA>> frames(numFrames, std::vector<apex::FloatRGBA>(width * height));
+    std::vector<std::vector<lightrumor::FloatRGBA>> frames(numFrames, std::vector<lightrumor::FloatRGBA>(width * height));
 
     for (int k = 0; k < numFrames; ++k) {
         int focusYStart = k * 20;
@@ -216,24 +216,24 @@ bool testComputationalStacking() {
                 if (y >= focusYStart && y < focusYEnd) {
                     // In-focus sharp checkerboard texture (alternates every pixel)
                     float pattern = ((x + y) % 2 == 0) ? 0.9f : 0.1f;
-                    frames[k][idx] = apex::FloatRGBA(pattern, pattern, pattern, 1.0f);
+                    frames[k][idx] = lightrumor::FloatRGBA(pattern, pattern, pattern, 1.0f);
                 } else {
                     // Out-of-focus smooth defocused gray
-                    frames[k][idx] = apex::FloatRGBA(0.5f, 0.5f, 0.5f, 1.0f);
+                    frames[k][idx] = lightrumor::FloatRGBA(0.5f, 0.5f, 0.5f, 1.0f);
                 }
             }
         }
     }
 
     // 1. Perform 5-Frame Focus Stacking (深度合成)
-    apex::FocusStackParams stackParams;
+    lightrumor::FocusStackParams stackParams;
     stackParams.pyramidLevels = 4;
     stackParams.sharpnessExponent = 3.0f;
     stackParams.featherRadius = 2;
 
-    std::vector<apex::FloatRGBA> panFocus;
-    bool focusOk = apex::FocusStacker::stackFocus(frames, width, height, stackParams, panFocus);
-    APEX_TEST_ASSERT(focusOk, "Focus stacking execution failed.");
+    std::vector<lightrumor::FloatRGBA> panFocus;
+    bool focusOk = lightrumor::FocusStacker::stackFocus(frames, width, height, stackParams, panFocus);
+    LR_TEST_ASSERT(focusOk, "Focus stacking execution failed.");
 
     // Verify pan-focus sharpness: Every zone (from 0 to 4) should preserve sharp contrast
     for (int k = 0; k < numFrames; ++k) {
@@ -241,36 +241,36 @@ bool testComputationalStacking() {
         float p0 = panFocus[cy * width + 20].r;
         float p1 = panFocus[cy * width + 21].r;
         float contrast = std::abs(p1 - p0);
-        APEX_TEST_ASSERT(contrast > 0.4f, "Zone " + std::to_string(k) + " must be sharply pan-focused!");
+        LR_TEST_ASSERT(contrast > 0.4f, "Zone " + std::to_string(k) + " must be sharply pan-focused!");
     }
     std::cout << "  ✓ 5-Frame Focus Stacking: Complete near-to-far pan-focus depth fusion achieved.\n";
 
     // 2. Long Exposure Simulation: Median Stacking (Pedestrian / wave elimination)
-    std::vector<std::vector<apex::FloatRGBA>> burstFrames(15, std::vector<apex::FloatRGBA>(width * height, apex::FloatRGBA(0.4f, 0.6f, 0.8f, 1.0f)));
+    std::vector<std::vector<lightrumor::FloatRGBA>> burstFrames(15, std::vector<lightrumor::FloatRGBA>(width * height, lightrumor::FloatRGBA(0.4f, 0.6f, 0.8f, 1.0f)));
     // In Frame 3, a moving pedestrian (bright yellow object) crosses at (50, 50)
     for (int dy = -5; dy <= 5; ++dy) {
         for (int dx = -5; dx <= 5; ++dx) {
-            burstFrames[3][(50 + dy) * width + (50 + dx)] = apex::FloatRGBA(1.0f, 1.0f, 0.0f, 1.0f);
+            burstFrames[3][(50 + dy) * width + (50 + dx)] = lightrumor::FloatRGBA(1.0f, 1.0f, 0.0f, 1.0f);
         }
     }
 
-    std::vector<apex::FloatRGBA> medianComposite;
-    apex::FocusStacker::stackMedian(burstFrames, width, height, medianComposite);
+    std::vector<lightrumor::FloatRGBA> medianComposite;
+    lightrumor::FocusStacker::stackMedian(burstFrames, width, height, medianComposite);
     auto spot = medianComposite[50 * width + 50];
-    APEX_TEST_ASSERT(spot.r < 0.5f && spot.b > 0.7f, "Pedestrian artifact must be completely removed by median stacking!");
+    LR_TEST_ASSERT(spot.r < 0.5f && spot.b > 0.7f, "Pedestrian artifact must be completely removed by median stacking!");
     std::cout << "  ✓ Long Exposure Median Stacking: 15-frame statistical crowd & water wave removal verified.\n";
 
     // 3. 4-Shot Pixel Shift Super Resolution
-    std::vector<std::vector<apex::FloatRGBA>> fourShots(4, std::vector<apex::FloatRGBA>(width * height));
+    std::vector<std::vector<lightrumor::FloatRGBA>> fourShots(4, std::vector<lightrumor::FloatRGBA>(width * height));
     for (int i = 0; i < 4; ++i) {
         for (size_t idx = 0; idx < width * height; ++idx) {
-            fourShots[i][idx] = apex::FloatRGBA(0.8f, 0.5f, 0.2f, 1.0f);
+            fourShots[i][idx] = lightrumor::FloatRGBA(0.8f, 0.5f, 0.2f, 1.0f);
         }
     }
-    std::vector<apex::FloatRGBA> superRes;
-    bool psOk = apex::FocusStacker::stackPixelShift4Shot(fourShots, width, height, superRes);
-    APEX_TEST_ASSERT(psOk, "Pixel shift failed.");
-    APEX_TEST_ASSERT(std::abs(superRes[0].r - 0.8f) < 1e-4f, "Super res channel accuracy verified.");
+    std::vector<lightrumor::FloatRGBA> superRes;
+    bool psOk = lightrumor::FocusStacker::stackPixelShift4Shot(fourShots, width, height, superRes);
+    LR_TEST_ASSERT(psOk, "Pixel shift failed.");
+    LR_TEST_ASSERT(std::abs(superRes[0].r - 0.8f) < 1e-4f, "Super res channel accuracy verified.");
     std::cout << "  ✓ 4-Shot Pixel Shift: Demosaic-free full RGB reconstruction verified.\n";
 
     std::cout << "  [PASS] Criterion 3 passed successfully.\n";
@@ -289,7 +289,7 @@ bool testAstroAlignmentAndStacking() {
     const int height = 128;
 
     // Background sky + noise
-    std::vector<apex::FloatRGBA> refFrame(width * height, apex::FloatRGBA(0.02f, 0.02f, 0.03f, 1.0f));
+    std::vector<lightrumor::FloatRGBA> refFrame(width * height, lightrumor::FloatRGBA(0.02f, 0.02f, 0.03f, 1.0f));
 
     // Place 5 synthetic stars
     struct TestStar { int x, y; float flux; };
@@ -301,7 +301,7 @@ bool testAstroAlignmentAndStacking() {
         {25, 90, 0.75f}
     };
 
-    auto drawStar = [&](std::vector<apex::FloatRGBA>& img, float cx, float cy, float flux) {
+    auto drawStar = [&](std::vector<lightrumor::FloatRGBA>& img, float cx, float cy, float flux) {
         for (int dy = -2; dy <= 2; ++dy) {
             for (int dx = -2; dx <= 2; ++dx) {
                 int px = static_cast<int>(cx) + dx;
@@ -322,13 +322,13 @@ bool testAstroAlignmentAndStacking() {
     }
 
     // 1. Star centroid detection
-    std::vector<apex::StarPoint> detectedStars;
-    apex::AstroAligner::detectStars(refFrame, width, height, 3.0f, 20, detectedStars);
-    APEX_TEST_ASSERT(detectedStars.size() >= 5, "Failed to detect star candidates.");
+    std::vector<lightrumor::StarPoint> detectedStars;
+    lightrumor::AstroAligner::detectStars(refFrame, width, height, 3.0f, 20, detectedStars);
+    LR_TEST_ASSERT(detectedStars.size() >= 5, "Failed to detect star candidates.");
     std::cout << "  ✓ Detected " << detectedStars.size() << " star centroids with sub-pixel moment localization.\n";
 
     // 2. Synthesize Frame 2 with earth rotation shift (dx = +3.0px, dy = +2.0px)
-    std::vector<apex::FloatRGBA> frame2(width * height, apex::FloatRGBA(0.02f, 0.02f, 0.03f, 1.0f));
+    std::vector<lightrumor::FloatRGBA> frame2(width * height, lightrumor::FloatRGBA(0.02f, 0.02f, 0.03f, 1.0f));
     for (const auto& s : stars) {
         drawStar(frame2, s.x + 3.0f, s.y + 2.0f, s.flux);
     }
@@ -336,31 +336,31 @@ bool testAstroAlignmentAndStacking() {
     // Add satellite streak in Frame 2 (a line crossing through the frame)
     for (int x = 10; x < 100; ++x) {
         int y = x / 2 + 15;
-        frame2[y * width + x] = apex::FloatRGBA(0.9f, 0.9f, 0.9f, 1.0f); // Satellite streak
+        frame2[y * width + x] = lightrumor::FloatRGBA(0.9f, 0.9f, 0.9f, 1.0f); // Satellite streak
     }
 
-    std::vector<apex::StarPoint> tgtStars;
-    apex::AstroAligner::detectStars(frame2, width, height, 3.0f, 20, tgtStars);
+    std::vector<lightrumor::StarPoint> tgtStars;
+    lightrumor::AstroAligner::detectStars(frame2, width, height, 3.0f, 20, tgtStars);
 
     // 3. Estimate transform
-    apex::AffineTransform2D transform;
-    bool alignOk = apex::AstroAligner::estimateTransform(detectedStars, tgtStars, transform);
-    APEX_TEST_ASSERT(alignOk, "Failed to estimate geometric star alignment transform.");
+    lightrumor::AffineTransform2D transform;
+    bool alignOk = lightrumor::AstroAligner::estimateTransform(detectedStars, tgtStars, transform);
+    LR_TEST_ASSERT(alignOk, "Failed to estimate geometric star alignment transform.");
     std::cout << "  ✓ Estimated Celestial Shift: dx = " << transform.tx << " px, dy = " << transform.ty << " px\n";
 
     // 4. Kappa-Sigma Clipping Stack
-    std::vector<std::vector<apex::FloatRGBA>> astroStack = {refFrame, frame2, refFrame, refFrame};
-    apex::AstroStackParams astroParams;
+    std::vector<std::vector<lightrumor::FloatRGBA>> astroStack = {refFrame, frame2, refFrame, refFrame};
+    lightrumor::AstroStackParams astroParams;
     astroParams.kappa = 2.0f;
     astroParams.maxIterations = 3;
     astroParams.alignStars = false; // Already aligned coordinates for test
 
-    std::vector<apex::FloatRGBA> outAstro;
-    apex::AstroAligner::stackKappaSigma(astroStack, width, height, astroParams, outAstro);
+    std::vector<lightrumor::FloatRGBA> outAstro;
+    lightrumor::AstroAligner::stackKappaSigma(astroStack, width, height, astroParams, outAstro);
 
     // Verify satellite streak at (50, 40) is rejected by Kappa-Sigma
     auto satellitePixel = outAstro[40 * width + 50];
-    APEX_TEST_ASSERT(satellitePixel.r < 0.15f, "Satellite trail must be rejected by Kappa-Sigma clipping!");
+    LR_TEST_ASSERT(satellitePixel.r < 0.15f, "Satellite trail must be rejected by Kappa-Sigma clipping!");
     std::cout << "  ✓ Kappa-Sigma Outlier Clipping: Satellite trail cleanly eliminated, true stars preserved.\n";
 
     std::cout << "  [PASS] Criterion 4 passed successfully.\n";
@@ -377,22 +377,22 @@ bool testColorCheckerCalibration() {
 
     const int width = 120;
     const int height = 80;
-    std::vector<apex::FloatRGBA> chartFrame(width * height);
+    std::vector<lightrumor::FloatRGBA> chartFrame(width * height);
 
     // Simulate an uncalibrated camera sensor with color cast and spectral crosstalk:
     // M_sensor = [1.15  0.10  0.00]
     //            [0.05  0.90  0.15]
     //            [0.00  0.12  1.20]
-    apex::ChartCorners corners;
-    corners.topLeft = apex::Point2D(0.05f, 0.05f);
-    corners.topRight = apex::Point2D(0.95f, 0.05f);
-    corners.bottomRight = apex::Point2D(0.95f, 0.95f);
-    corners.bottomLeft = apex::Point2D(0.05f, 0.95f);
+    lightrumor::ChartCorners corners;
+    corners.topLeft = lightrumor::Point2D(0.05f, 0.05f);
+    corners.topRight = lightrumor::Point2D(0.95f, 0.05f);
+    corners.bottomRight = lightrumor::Point2D(0.95f, 0.95f);
+    corners.bottomLeft = lightrumor::Point2D(0.05f, 0.95f);
 
     for (int row = 0; row < 4; ++row) {
         for (int col = 0; col < 6; ++col) {
             int pIdx = row * 6 + col;
-            const auto& stdPatch = apex::ColorCheckerCalibration::getStandardPatch(pIdx);
+            const auto& stdPatch = lightrumor::ColorCheckerCalibration::getStandardPatch(pIdx);
 
             float inR = stdPatch.targetRgb[0];
             float inG = stdPatch.targetRgb[1];
@@ -411,15 +411,15 @@ bool testColorCheckerCalibration() {
 
             for (int py = y0; py < y1; ++py) {
                 for (int px = x0; px < x1; ++px) {
-                    chartFrame[py * width + px] = apex::FloatRGBA(sensR, sensG, sensB, 1.0f);
+                    chartFrame[py * width + px] = lightrumor::FloatRGBA(sensR, sensG, sensB, 1.0f);
                 }
             }
         }
     }
 
-    apex::CalibrationResult result;
-    bool calOk = apex::ColorCheckerCalibration::calibrate(chartFrame, width, height, corners, result);
-    APEX_TEST_ASSERT(calOk, "ColorChecker calibration solver failed.");
+    lightrumor::CalibrationResult result;
+    bool calOk = lightrumor::ColorCheckerCalibration::calibrate(chartFrame, width, height, corners, result);
+    LR_TEST_ASSERT(calOk, "ColorChecker calibration solver failed.");
 
     std::cout << "  ✓ 24-ColorChecker Calibration Converged:\n";
     std::cout << "    - Estimated CCT: " << result.estimatedKelvin << " K, Tint: " << result.estimatedTint << "\n";
@@ -430,7 +430,7 @@ bool testColorCheckerCalibration() {
     std::cout << "    - Mean Delta E00: " << result.meanDeltaE00 << " (Must be < 4.0)\n";
     std::cout << "    - Max Delta E00:  " << result.maxDeltaE00 << "\n";
 
-    APEX_TEST_ASSERT(result.meanDeltaE00 < 4.0f, "Calibrated Mean Delta E00 must be under 4.0 for professional grade color.");
+    LR_TEST_ASSERT(result.meanDeltaE00 < 4.0f, "Calibrated Mean Delta E00 must be under 4.0 for professional grade color.");
     std::cout << "  [PASS] Criterion 5 passed successfully.\n";
     return true;
 }
@@ -445,7 +445,7 @@ bool testSoftProofingAndMasterExport() {
 
     const int width = 64;
     const int height = 64;
-    std::vector<apex::FloatRGBA> inPixels(width * height);
+    std::vector<lightrumor::FloatRGBA> inPixels(width * height);
 
     // Create image with:
     // 1. In-gamut neutral colors
@@ -454,34 +454,34 @@ bool testSoftProofingAndMasterExport() {
         for (int x = 0; x < width; ++x) {
             size_t idx = y * width + x;
             if (x < 32) {
-                inPixels[idx] = apex::FloatRGBA(0.4f, 0.4f, 0.4f, 1.0f); // In-gamut
+                inPixels[idx] = lightrumor::FloatRGBA(0.4f, 0.4f, 0.4f, 1.0f); // In-gamut
             } else {
-                inPixels[idx] = apex::FloatRGBA(0.0f, 0.95f, 1.0f, 1.0f); // Out-of-gamut cyan
+                inPixels[idx] = lightrumor::FloatRGBA(0.0f, 0.95f, 1.0f, 1.0f); // Out-of-gamut cyan
             }
         }
     }
 
     // 1. Test Soft Proofing with Hahnemuhle Photo Rag Matte Paper
-    apex::SoftProofConfig proofConfig;
+    lightrumor::SoftProofConfig proofConfig;
     proofConfig.paperProfilePath = "hahnemuhle_photorag";
-    proofConfig.intent = apex::ProofingIntent::RelativeColorimetric;
+    proofConfig.intent = lightrumor::ProofingIntent::RelativeColorimetric;
     proofConfig.simulatePaperWhite = true;
     proofConfig.simulateBlackInk = true;
     proofConfig.showGamutWarning = true;
     proofConfig.gamutWarningColor = 0xFF50E3C2; // Mint green
 
-    std::vector<apex::FloatRGBA> outProof;
+    std::vector<lightrumor::FloatRGBA> outProof;
     std::vector<float> gamutMask;
-    bool proofOk = apex::SoftProofingEngine::applySoftProof(inPixels, width, height, proofConfig, outProof, gamutMask);
-    APEX_TEST_ASSERT(proofOk, "Soft proofing execution failed.");
+    bool proofOk = lightrumor::SoftProofingEngine::applySoftProof(inPixels, width, height, proofConfig, outProof, gamutMask);
+    LR_TEST_ASSERT(proofOk, "Soft proofing execution failed.");
 
     // Gamut mask should be 0.0 in left half, 1.0 in right half
-    APEX_TEST_ASSERT(gamutMask[10 * width + 10] == 0.0f, "Neutral tones should be within gamut.");
-    APEX_TEST_ASSERT(gamutMask[10 * width + 50] == 1.0f, "Hyper-saturated cyan must be flagged out-of-gamut.");
+    LR_TEST_ASSERT(gamutMask[10 * width + 10] == 0.0f, "Neutral tones should be within gamut.");
+    LR_TEST_ASSERT(gamutMask[10 * width + 50] == 1.0f, "Hyper-saturated cyan must be flagged out-of-gamut.");
 
     // Warning overlay color check
     auto warningPx = outProof[10 * width + 50];
-    APEX_TEST_ASSERT(warningPx.g > 0.8f && warningPx.b > 0.7f, "Gamut warning overlay color not applied.");
+    LR_TEST_ASSERT(warningPx.g > 0.8f && warningPx.b > 0.7f, "Gamut warning overlay color not applied.");
     std::cout << "  ✓ Soft Proofing: Paper white simulation and Gamut Warning mask verified.\n";
 
     // 2. Test Multi-Recipe Simultaneous File Export (TIFF16, WebP, JPEG 2048px with Exif Watermark)
@@ -492,7 +492,7 @@ bool testSoftProofingAndMasterExport() {
     std::string webpPath = outDir + "/master_web.webp";
     std::string jpegPath = outDir + "/master_sns_watermark.jpg";
 
-    apex::ExifMetadata meta;
+    lightrumor::ExifMetadata meta;
     meta.model = "ILCE-7RM5";
     meta.lensModel = "FE 24-70mm F2.8 GM II";
     meta.focalLength = 50.0;
@@ -502,27 +502,27 @@ bool testSoftProofingAndMasterExport() {
 
     // Recipe A: 16-bit TIFF
     std::vector<uint16_t> rgb16(width * height * 3, 32768);
-    bool tiffOk = apex::ImageWriter::writeTIFF16(tiffPath, rgb16.data(), width, height, &meta);
-    APEX_TEST_ASSERT(tiffOk, "Failed to write 16-bit TIFF.");
-    APEX_TEST_ASSERT(std::filesystem::exists(tiffPath), "TIFF file does not exist.");
+    bool tiffOk = lightrumor::ImageWriter::writeTIFF16(tiffPath, rgb16.data(), width, height, &meta);
+    LR_TEST_ASSERT(tiffOk, "Failed to write 16-bit TIFF.");
+    LR_TEST_ASSERT(std::filesystem::exists(tiffPath), "TIFF file does not exist.");
 
     // Recipe B: Ultra-Quality WebP
     std::vector<uint8_t> rgb8(width * height * 3, 128);
-    bool webpOk = apex::ImageWriter::writeWebP(webpPath, rgb8.data(), width, height, 95, &meta);
-    APEX_TEST_ASSERT(webpOk, "Failed to write WebP.");
-    APEX_TEST_ASSERT(std::filesystem::exists(webpPath), "WebP file does not exist.");
+    bool webpOk = lightrumor::ImageWriter::writeWebP(webpPath, rgb8.data(), width, height, 95, &meta);
+    LR_TEST_ASSERT(webpOk, "Failed to write WebP.");
+    LR_TEST_ASSERT(std::filesystem::exists(webpPath), "WebP file does not exist.");
 
     // Recipe C: SNS JPEG with Exif Metadata Watermark
     int outW = width;
     int outH = height;
     std::string watermarkText = "SONY ILCE-7RM5 | FE 24-70mm F2.8 GM II | 50mm f/2.8 1/250s ISO 100 | (C) 2026 DUFFY";
-    bool wmOk = apex::ImageWriter::renderWatermark8(rgb8, outW, outH, watermarkText, true);
-    APEX_TEST_ASSERT(wmOk, "Failed to render watermark.");
-    APEX_TEST_ASSERT(outH > height, "Watermark bottom margin was not added.");
+    bool wmOk = lightrumor::ImageWriter::renderWatermark8(rgb8, outW, outH, watermarkText, true);
+    LR_TEST_ASSERT(wmOk, "Failed to render watermark.");
+    LR_TEST_ASSERT(outH > height, "Watermark bottom margin was not added.");
 
-    bool jpegOk = apex::ImageWriter::writeJPEG(jpegPath, rgb8.data(), outW, outH, 92, apex::ChromaSubsampling::YUV444, &meta);
-    APEX_TEST_ASSERT(jpegOk, "Failed to write JPEG.");
-    APEX_TEST_ASSERT(std::filesystem::exists(jpegPath), "JPEG file does not exist.");
+    bool jpegOk = lightrumor::ImageWriter::writeJPEG(jpegPath, rgb8.data(), outW, outH, 92, lightrumor::ChromaSubsampling::YUV444, &meta);
+    LR_TEST_ASSERT(jpegOk, "Failed to write JPEG.");
+    LR_TEST_ASSERT(std::filesystem::exists(jpegPath), "JPEG file does not exist.");
 
     std::cout << "  ✓ Multi-Export Parallel Recipes Generated:\n";
     std::cout << "    - [1] 16-bit Master TIFF (AdobeRGB): " << tiffPath << " (" << std::filesystem::file_size(tiffPath) << " bytes)\n";
@@ -535,7 +535,7 @@ bool testSoftProofingAndMasterExport() {
 
 int main() {
     std::cout << "=======================================================\n";
-    std::cout << "  PROJECT: APEX FIELD - PHASE 6 NATIVE VERIFICATION\n";
+    std::cout << "  light_rumor - PHASE 6 NATIVE VERIFICATION\n";
     std::cout << "=======================================================\n";
 
     if (!testUsbTetheredShooting()) return 1;

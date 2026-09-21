@@ -71,7 +71,7 @@ fun ColorMixerScreen(
     hapticManager: HapticManager? = null,
     modifier: Modifier = Modifier
 ) {
-    val colors = ApexTheme.colors
+    val colors = LightRumorTheme.colors
     var selectedBandIndex by remember { mutableIntStateOf(0) }
     var activeFilterId by remember { mutableStateOf("pan") }
 
@@ -109,7 +109,7 @@ fun ColorMixerScreen(
             ) {
                 Text(
                     text = "8-COLOR HSL MIXER",
-                    style = ApexTheme.typography.Tab,
+                    style = LightRumorTheme.typography.Tab,
                     color = if (!params.isMonochrome) colors.accentAmber else colors.textSecondary,
                     fontSize = 11.sp
                 )
@@ -136,7 +136,7 @@ fun ColorMixerScreen(
             ) {
                 Text(
                     text = "B&W MONOCHROME MIXER",
-                    style = ApexTheme.typography.Tab,
+                    style = LightRumorTheme.typography.Tab,
                     color = if (params.isMonochrome) colors.accentAmber else colors.textSecondary,
                     fontSize = 11.sp
                 )
@@ -185,7 +185,7 @@ fun ColorMixerScreen(
                         )
                         Text(
                             text = band.code,
-                            style = ApexTheme.typography.Header,
+                            style = LightRumorTheme.typography.Header,
                             color = if (isSelected) colors.textPrimary else colors.textSecondary,
                             fontSize = 10.sp
                         )
@@ -206,7 +206,7 @@ fun ColorMixerScreen(
             ) {
                 Text(
                     text = "${currentBandInfo.name} BAND ADJUSTMENT",
-                    style = ApexTheme.typography.Label,
+                    style = LightRumorTheme.typography.Label,
                     color = colors.accentAmber,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
                     fontSize = 10.sp
@@ -261,7 +261,7 @@ fun ColorMixerScreen(
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = "CAMERA PRIMARY CALIBRATION",
-                    style = ApexTheme.typography.Label,
+                    style = LightRumorTheme.typography.Label,
                     color = colors.textSecondary,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
                     fontSize = 10.sp
@@ -368,7 +368,7 @@ fun ColorMixerScreen(
                     ) {
                         Text(
                             text = filter.label,
-                            style = ApexTheme.typography.Tab,
+                            style = LightRumorTheme.typography.Tab,
                             color = if (isSelected) colors.accentAmber else colors.textSecondary,
                             fontSize = 10.sp
                         )

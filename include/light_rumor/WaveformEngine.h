@@ -5,7 +5,7 @@
 #include <memory>
 #include <cstdint>
 
-namespace apex {
+namespace lightrumor {
 
 /**
  * High-performance real-time RGB Waveform Monitor & Parade Engine.
@@ -60,4 +60,4 @@ private:
     bool m_isVulkanAccelerated = false;
 };
 
-} // namespace apex
+} // namespace lightrumor

@@ -5,7 +5,7 @@
 #include <array>
 #include <string>
 
-namespace apex {
+namespace lightrumor {
 
 struct ChartCorners {
     Point2D topLeft;
@@ -67,4 +67,4 @@ public:
     static const ColorCheckerPatchData& getStandardPatch(int32_t patchIndex);
 };
 
-} // namespace apex
+} // namespace lightrumor

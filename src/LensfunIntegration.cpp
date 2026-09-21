@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cstring>
 
-namespace apex {
+namespace lightrumor {
 
 struct LensfunIntegration::Impl {
     std::vector<LensProfile> database;
@@ -264,4 +264,4 @@ void LensfunIntegration::applyDefringe(const FloatRGBA* src, FloatRGBA* dst,
     }
 }
 
-} // namespace apex
+} // namespace lightrumor

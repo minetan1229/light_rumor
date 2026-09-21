@@ -5,7 +5,7 @@
 #include <vector>
 #include <memory>
 
-namespace apex {
+namespace lightrumor {
 
 struct LensProfile {
     std::string lensMake;
@@ -58,4 +58,4 @@ private:
     std::unique_ptr<Impl> m_impl;
 };
 
-} // namespace apex
+} // namespace lightrumor

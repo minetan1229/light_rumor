@@ -6,7 +6,7 @@
 #include <cstring>
 #include <array>
 
-namespace apex {
+namespace lightrumor {
 
 namespace {
 
@@ -343,4 +343,4 @@ bool DenoiseEngine::processTile(const std::vector<FloatRGBA>& inPaddedTile,
     return true;
 }
 
-} // namespace apex
+} // namespace lightrumor

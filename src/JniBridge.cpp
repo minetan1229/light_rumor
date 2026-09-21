@@ -15,7 +15,7 @@
 #include <vector>
 #include <algorithm>
 
-#if defined(__ANDROID__) || defined(APEX_ENABLE_JNI) || defined(LIGHT_RUMOR_ENABLE_JNI)
+#if defined(__ANDROID__) || defined(LIGHT_RUMOR_ENABLE_JNI)
 #include <jni.h>
 
 namespace {
@@ -486,93 +486,6 @@ Java_com_lightrumor_LightRumorNativeEngine_nativeApplySoftProof(
 
 JNIEXPORT jboolean JNICALL
 Java_com_lightrumor_LightRumorNativeEngine_nativeProcessRawMultiRecipe(
-    JNIEnv* env, jobject thiz, jstring jInputPath, jstring jOutputPath,
-    jint jFormat, jint jColorSpace, jint jQuality, jint jMaxDimension,
-    jboolean jApplySharpening, jfloat jSharpeningAmount,
-    jboolean jEnableWatermark, jstring jWatermarkText) {
-    return Impl_nativeProcessRawMultiRecipe(env, thiz, jInputPath, jOutputPath,
-                                           jFormat, jColorSpace, jQuality, jMaxDimension,
-                                           jApplySharpening, jSharpeningAmount,
-                                           jEnableWatermark, jWatermarkText);
-}
-
-// =========================================================================
-// Backward Compatibility / Aliases
-// =========================================================================
-
-JNIEXPORT jboolean JNICALL
-Java_com_apexfield_engine_ApexNativeEngine_nativeInit(JNIEnv* env, jobject thiz) {
-    return Impl_nativeInit(env, thiz);
-}
-
-JNIEXPORT jboolean JNICALL
-Java_com_apexfield_engine_ApexNativeEngine_nativeProcessRaw(
-    JNIEnv* env, jobject thiz,
-    jstring jInputPath, jstring jOutputPath, jint jFormat, jint jJpegQuality,
-    jint jChromaSubsampling, jfloat jKelvin, jfloat jTint, jfloat jExposureEV,
-    jfloat jContrast, jfloat jHighlights, jfloat jShadows, jfloat jWhites,
-    jfloat jBlacks, jfloat jVibrance, jfloat jSaturation, jboolean jIsMonochrome,
-    jfloat jLuminanceNR, jfloat jChromaNR, jfloat jSharpeningAmount,
-    jint jOutputColorSpace, jboolean jEnableDithering, jobject jCallback) {
-    return Impl_nativeProcessRaw(env, thiz, jInputPath, jOutputPath, jFormat, jJpegQuality,
-                                jChromaSubsampling, jKelvin, jTint, jExposureEV,
-                                jContrast, jHighlights, jShadows, jWhites,
-                                jBlacks, jVibrance, jSaturation, jIsMonochrome,
-                                jLuminanceNR, jChromaNR, jSharpeningAmount,
-                                jOutputColorSpace, jEnableDithering, jCallback);
-}
-
-JNIEXPORT jbyteArray JNICALL
-Java_com_apexfield_engine_ApexNativeEngine_nativeExtractThumbnail(
-    JNIEnv* env, jobject thiz, jstring jFilePath) {
-    return Impl_nativeExtractThumbnail(env, thiz, jFilePath);
-}
-
-JNIEXPORT jintArray JNICALL
-Java_com_apexfield_engine_ApexNativeEngine_nativeComputeWaveform(
-    JNIEnv* env, jobject thiz, jbyteArray jRgbaBytes, jint jWidth, jint jHeight,
-    jint jMode, jint jWaveW, jint jWaveH) {
-    return Impl_nativeComputeWaveform(env, thiz, jRgbaBytes, jWidth, jHeight, jMode, jWaveW, jWaveH);
-}
-
-JNIEXPORT jfloatArray JNICALL
-Java_com_apexfield_engine_ApexNativeEngine_nativeEvaluateRadialMask(
-    JNIEnv* env, jobject thiz, jint jWidth, jint jHeight,
-    jfloat jCenterX, jfloat jCenterY, jfloat jRadiusX, jfloat jRadiusY,
-    jfloat jAngleRad, jfloat jFeather, jboolean jInvert) {
-    return Impl_nativeEvaluateRadialMask(env, thiz, jWidth, jHeight, jCenterX, jCenterY,
-                                        jRadiusX, jRadiusY, jAngleRad, jFeather, jInvert);
-}
-
-JNIEXPORT jintArray JNICALL
-Java_com_apexfield_engine_ApexNativeEngine_nativeApplyPoissonHeal(
-    JNIEnv* env, jobject thiz, jintArray jPixels, jint jWidth, jint jHeight,
-    jfloat jSrcX, jfloat jSrcY, jfloat jDstX, jfloat jDstY,
-    jfloat jRadius, jfloat jFeather, jint jIterations) {
-    return Impl_nativeApplyPoissonHeal(env, thiz, jPixels, jWidth, jHeight,
-                                      jSrcX, jSrcY, jDstX, jDstY, jRadius, jFeather, jIterations);
-}
-
-JNIEXPORT jintArray JNICALL
-Java_com_apexfield_engine_ApexNativeEngine_nativeComputeFieldScope(
-    JNIEnv* env, jobject thiz, jintArray jPixels, jint jWidth, jint jHeight,
-    jint jMode, jfloat jZebraThresholdIRE, jint jPeakingColor, jfloat jPeakingThreshold) {
-    return Impl_nativeComputeFieldScope(env, thiz, jPixels, jWidth, jHeight,
-                                       jMode, jZebraThresholdIRE, jPeakingColor, jPeakingThreshold);
-}
-
-JNIEXPORT jintArray JNICALL
-Java_com_apexfield_engine_ApexNativeEngine_nativeApplySoftProof(
-    JNIEnv* env, jobject thiz, jintArray jPixels, jint jWidth, jint jHeight,
-    jstring jProfilePath, jint jIntent, jboolean jSimulatePaperWhite,
-    jboolean jSimulateBlackInk, jboolean jShowGamutWarning, jint jGamutWarningColor) {
-    return Impl_nativeApplySoftProof(env, thiz, jPixels, jWidth, jHeight,
-                                    jProfilePath, jIntent, jSimulatePaperWhite,
-                                    jSimulateBlackInk, jShowGamutWarning, jGamutWarningColor);
-}
-
-JNIEXPORT jboolean JNICALL
-Java_com_apexfield_engine_ApexNativeEngine_nativeProcessRawMultiRecipe(
     JNIEnv* env, jobject thiz, jstring jInputPath, jstring jOutputPath,
     jint jFormat, jint jColorSpace, jint jQuality, jint jMaxDimension,
     jboolean jApplySharpening, jfloat jSharpeningAmount,

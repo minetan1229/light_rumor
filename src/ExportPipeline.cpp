@@ -10,7 +10,7 @@
 #include <cstring>
 #include <chrono>
 
-namespace apex {
+namespace lightrumor {
 
 namespace {
 
@@ -490,4 +490,4 @@ bool ExportPipeline::processImage(RawDecoder& decoder,
     return writeOk;
 }
 
-} // namespace apex
+} // namespace lightrumor

@@ -4,8 +4,6 @@ interface ProgressCallback {
     fun onProgress(progressPercent: Float, statusMessage: String)
 }
 
-typealias ApexNativeEngine = LightRumorNativeEngine
-
 object LightRumorNativeEngine {
     init {
         try {

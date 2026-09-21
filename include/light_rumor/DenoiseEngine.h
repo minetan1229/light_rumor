@@ -4,7 +4,7 @@
 #include <vector>
 #include <memory>
 
-namespace apex {
+namespace lightrumor {
 
 class DenoiseEngine {
 public:
@@ -40,4 +40,4 @@ private:
     std::unique_ptr<Impl> m_impl;
 };
 
-} // namespace apex
+} // namespace lightrumor

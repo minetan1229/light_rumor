@@ -6,7 +6,7 @@
 #include <cmath>
 #include <algorithm>
 
-namespace apex {
+namespace lightrumor {
 
 namespace {
 
@@ -1274,4 +1274,4 @@ bool ImageWriter::writeWebP(const std::string& filePath,
     return true;
 }
 
-} // namespace apex
+} // namespace lightrumor
