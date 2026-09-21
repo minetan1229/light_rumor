@@ -161,6 +161,7 @@ void LensfunIntegration::applyDistortionAndTCA(const FloatRGBA* src, FloatRGBA* 
     float maxR = std::sqrt(cx * cx + cy * cy);
     float invMaxR = 1.0f / maxR;
 
+    #pragma omp parallel for schedule(static)
     for (int32_t y = 0; y < height; ++y) {
         float dy = y - cy;
         for (int32_t x = 0; x < width; ++x) {
@@ -208,6 +209,7 @@ void LensfunIntegration::applyVignettingCorrection(const FloatRGBA* src, FloatRG
     float maxR = std::sqrt(cx * cx + cy * cy);
     float invMaxR = 1.0f / maxR;
 
+    #pragma omp parallel for schedule(static)
     for (int32_t y = 0; y < height; ++y) {
         float dy = y - cy;
         for (int32_t x = 0; x < width; ++x) {
@@ -241,6 +243,7 @@ void LensfunIntegration::applyDefringe(const FloatRGBA* src, FloatRGBA* dst,
     float normPurple = purpleStrength * 0.01f;
     float normGreen = greenStrength * 0.01f;
 
+    #pragma omp parallel for schedule(static)
     for (int32_t i = 0; i < width * height; ++i) {
         FloatRGBA p = src[i];
         float lum = 0.2126f * p.r + 0.7152f * p.g + 0.0722f * p.b;

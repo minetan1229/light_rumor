@@ -27,12 +27,16 @@ class ExportService : Service() {
 
         const val EXTRA_INPUT_PATH = "extra_input_path"
         const val EXTRA_OUTPUT_PATH = "extra_output_path"
+        const val EXTRA_PARAMS_JSON = "extra_params_json"
 
-        fun startExport(context: Context, inputPath: String, outputPath: String) {
+        fun startExport(context: Context, inputPath: String, outputPath: String, params: DevelopmentParams? = null) {
             val intent = Intent(context, ExportService::class.java).apply {
                 action = ACTION_START_EXPORT
                 putExtra(EXTRA_INPUT_PATH, inputPath)
                 putExtra(EXTRA_OUTPUT_PATH, outputPath)
+                if (params != null) {
+                    putExtra(EXTRA_PARAMS_JSON, EditHistoryCatalog.paramsToJson(params))
+                }
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -57,9 +61,15 @@ class ExportService : Service() {
             ACTION_START_EXPORT -> {
                 val inputPath = intent.getStringExtra(EXTRA_INPUT_PATH) ?: ""
                 val outputPath = intent.getStringExtra(EXTRA_OUTPUT_PATH) ?: ""
+                val paramsJson = intent.getStringExtra(EXTRA_PARAMS_JSON)
+                val params = if (!paramsJson.isNullOrEmpty()) {
+                    EditHistoryCatalog.jsonToParams(paramsJson)
+                } else {
+                    DevelopmentParams()
+                }
                 if (inputPath.isNotEmpty() && outputPath.isNotEmpty()) {
                     startForegroundNotification()
-                    executeExport(inputPath, outputPath)
+                    executeExport(inputPath, outputPath, params)
                 } else {
                     stopSelf()
                 }
@@ -127,7 +137,7 @@ class ExportService : Service() {
         manager.notify(NOTIFICATION_ID, buildProgressNotification(progress, statusText))
     }
 
-    private fun executeExport(inputPath: String, outputPath: String) {
+    private fun executeExport(inputPath: String, outputPath: String, params: DevelopmentParams) {
         if (isExporting) return
         isExporting = true
 
@@ -140,7 +150,6 @@ class ExportService : Service() {
                     tileSize = 2048,
                     tilePadding = 16
                 )
-                val params = DevelopmentParams()
 
                 val success = LightRumorNativeEngine.exportPhoto(
                     inputPath = inputPath,

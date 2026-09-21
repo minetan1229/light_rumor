@@ -163,7 +163,7 @@ float evaluatePolygon(vec2 p) {
 
         // Ray casting point-in-polygon
         if (((vi.y > p.y) != (vj.y > p.y)) &&
-            (p.x < (vj.x - vi.x) * (p.y - vi.y) / ((vj.y - vi.y) + 1e-7) + vi.x)) {
+            (p.x < (vj.x - vi.x) * (p.y - vi.y) / (vj.y - vi.y) + vi.x)) {
             inside = !inside;
         }
 

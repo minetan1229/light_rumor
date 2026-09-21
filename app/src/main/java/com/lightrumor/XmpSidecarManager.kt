@@ -16,7 +16,7 @@ import java.io.File
 object XmpSidecarManager {
 
     private val scope = CoroutineScope(Dispatchers.IO)
-    private val debounceJobs = mutableMapOf<String, Job>()
+    private val debounceJobs = java.util.concurrent.ConcurrentHashMap<String, Job>()
 
     /**
      * Determines the sidecar file location for a given image path.
@@ -102,6 +102,21 @@ object XmpSidecarManager {
                 params.tint = tintMatch.groupValues[1].toFloatOrNull() ?: 0.0f
             }
 
+            val clarityMatch = Regex("crs:Clarity2012=\"([+-]?\\d+)\"").find(xml)
+            if (clarityMatch != null) {
+                params.clarity = clarityMatch.groupValues[1].toFloatOrNull() ?: 0.0f
+            }
+
+            val dehazeMatch = Regex("crs:Dehaze=\"([+-]?\\d+)\"").find(xml)
+            if (dehazeMatch != null) {
+                params.dehaze = dehazeMatch.groupValues[1].toFloatOrNull() ?: 0.0f
+            }
+
+            val profileMatch = Regex("crs:CameraProfile=\"([^\"]+)\"").find(xml)
+            if (profileMatch != null) {
+                params.colorProfile = profileMatch.groupValues[1]
+            }
+
             Pair(meta, params)
         } catch (e: Throwable) {
             null
@@ -170,6 +185,12 @@ object XmpSidecarManager {
                 if (modifiedFields.contains("cameraModel") && meta.cameraModel.isNotEmpty()) {
                     append("   tiff:Model=\"${meta.cameraModel}\"\n")
                 }
+                if (modifiedFields.contains("cameraMake") && meta.cameraMake.isNotEmpty()) {
+                    append("   tiff:Make=\"${meta.cameraMake}\"\n")
+                }
+                if (modifiedFields.contains("lensModel") && meta.lensModel.isNotEmpty()) {
+                    append("   aux:Lens=\"${meta.lensModel}\"\n")
+                }
                 if (modifiedFields.contains("fNumber") && meta.fNumber.isNotEmpty()) {
                     append("   exif:FNumber=\"${meta.fNumber.removePrefix("f/")}\"\n")
                 }
@@ -186,8 +207,8 @@ object XmpSidecarManager {
                 }
 
                 append("   crs:Temperature=\"${params.kelvin.toInt()}\"\n")
-                append("   crs:Tint=\"${"%.1f".format(params.tint)}\"\n")
-                append("   crs:Exposure2012=\"${"%+.2f".format(params.exposureEV)}\"\n")
+                append("   crs:Tint=\"${String.format(java.util.Locale.US, "%.1f", params.tint)}\"\n")
+                append("   crs:Exposure2012=\"${String.format(java.util.Locale.US, "%+.2f", params.exposureEV)}\"\n")
                 append("   crs:Contrast2012=\"${params.contrast.toInt()}\"\n")
                 append("   crs:Highlights2012=\"${params.highlights.toInt()}\"\n")
                 append("   crs:Shadows2012=\"${params.shadows.toInt()}\"\n")
@@ -195,6 +216,11 @@ object XmpSidecarManager {
                 append("   crs:Blacks2012=\"${params.blacks.toInt()}\"\n")
                 append("   crs:Vibrance=\"${params.vibrance.toInt()}\"\n")
                 append("   crs:Saturation=\"${params.saturation.toInt()}\"\n")
+                append("   crs:Clarity2012=\"${params.clarity.toInt()}\"\n")
+                append("   crs:Dehaze=\"${params.dehaze.toInt()}\"\n")
+                if (params.colorProfile.isNotEmpty()) {
+                    append("   crs:CameraProfile=\"${params.colorProfile}\"\n")
+                }
                 append("   crs:Sharpness=\"${params.sharpeningAmount.toInt()}\"\n")
                 append("   crs:LuminanceSmoothing=\"${params.luminanceNR.toInt()}\">\n")
                 append("  </rdf:Description>\n")

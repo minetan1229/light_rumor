@@ -4,6 +4,7 @@
 #include <numeric>
 #include <iostream>
 #include <vector>
+#include <omp.h>
 
 namespace lightrumor {
 
@@ -68,6 +69,9 @@ bool FocusStacker::stackFocus(const std::vector<std::vector<FloatRGBA>>& frames,
     }
 
     const size_t total = static_cast<size_t>(width) * height;
+    for (size_t i = 0; i < numFrames; ++i) {
+        if (frames[i].size() < total) return false;
+    }
     outPanFocus.assign(total, FloatRGBA(0.0f, 0.0f, 0.0f, 1.0f));
 
     // 1. Compute sharpness maps for all frames
@@ -166,7 +170,19 @@ bool FocusStacker::stackMedian(const std::vector<std::vector<FloatRGBA>>& frames
 
     const size_t midIdx = numFrames / 2;
 
-    #pragma omp parallel for
+    int numThreads = omp_get_max_threads();
+    std::vector<std::vector<float>> threadRVals(numThreads);
+    std::vector<std::vector<float>> threadGVals(numThreads);
+    std::vector<std::vector<float>> threadBVals(numThreads);
+    if (numFrames > 128) {
+        for (int i = 0; i < numThreads; ++i) {
+            threadRVals[i].resize(numFrames);
+            threadGVals[i].resize(numFrames);
+            threadBVals[i].resize(numFrames);
+        }
+    }
+
+    #pragma omp parallel for schedule(static)
     for (int64_t idx = 0; idx < static_cast<int64_t>(total); ++idx) {
         if (numFrames <= 128) {
             float rVals[128];
@@ -186,9 +202,10 @@ bool FocusStacker::stackMedian(const std::vector<std::vector<FloatRGBA>>& frames
 
             outComposite[idx] = FloatRGBA(rVals[midIdx], gVals[midIdx], bVals[midIdx], 1.0f);
         } else {
-            std::vector<float> rVals(numFrames);
-            std::vector<float> gVals(numFrames);
-            std::vector<float> bVals(numFrames);
+            int tid = omp_get_thread_num();
+            auto& rVals = threadRVals[tid];
+            auto& gVals = threadGVals[tid];
+            auto& bVals = threadBVals[tid];
 
             for (size_t i = 0; i < numFrames; ++i) {
                 const auto& p = frames[i][idx];
@@ -316,10 +333,31 @@ bool FocusStacker::stackPixelShift4Shot(const std::vector<std::vector<FloatRGBA>
             const auto& s3 = fourShots[3][idx];
 
             // Reconstruct full RGB without interpolation
-            // Green channel is sampled twice in Bayer, giving extra 3dB SNR advantage
-            float r = (s0.r + s2.r) * 0.5f;
-            float g = (s0.g + s1.g + s2.g + s3.g) * 0.25f;
-            float b = (s1.b + s3.b) * 0.5f;
+            // using exact Bayer phase alignment for each shift.
+            int bayerPhase = (y % 2) * 2 + (x % 2);
+            float r = 0.0f, g = 0.0f, b = 0.0f;
+            switch (bayerPhase) {
+                case 0: // R position
+                    r = s0.r;
+                    g = (s1.g + s3.g) * 0.5f;
+                    b = s2.b;
+                    break;
+                case 1: // Gr position
+                    r = s1.r;
+                    g = (s0.g + s2.g) * 0.5f;
+                    b = s3.b;
+                    break;
+                case 2: // Gb position
+                    r = s3.r;
+                    g = (s0.g + s2.g) * 0.5f;
+                    b = s1.b;
+                    break;
+                case 3: // B position
+                    r = s2.r;
+                    g = (s1.g + s3.g) * 0.5f;
+                    b = s0.b;
+                    break;
+            }
 
             outSuperRes[idx] = FloatRGBA(r, g, b, 1.0f);
         }

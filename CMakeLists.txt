@@ -45,66 +45,67 @@ add_library(light_rumor_engine SHARED
 )
 
 if(ANDROID)
-    target_link_libraries(light_rumor_engine log ${CMAKE_DL_LIBS} -fopenmp)
+    target_link_libraries(light_rumor_engine log ${CMAKE_DL_LIBS} -fopenmp -static-openmp)
 endif()
 
 
 
 # Desktop test runners (only when not targeting Android)
 if(NOT ANDROID)
+    find_package(Vulkan QUIET)
+    find_package(OpenMP)
+    set(DESKTOP_EXTRA_LIBS "")
+    if(WIN32)
+        list(APPEND DESKTOP_EXTRA_LIBS psapi)
+    endif()
+    if(Vulkan_FOUND)
+        list(APPEND DESKTOP_EXTRA_LIBS Vulkan::Vulkan)
+    endif()
+    if(OpenMP_FOUND)
+        list(APPEND DESKTOP_EXTRA_LIBS OpenMP::OpenMP_CXX)
+    endif()
+
     # Phase 1
     add_executable(light_rumor_phase1_test
         test/main_test.cpp
         ${LIGHT_RUMOR_CORE_SOURCES}
     )
-    if(WIN32)
-        target_link_libraries(light_rumor_phase1_test psapi)
-    endif()
+    target_link_libraries(light_rumor_phase1_test ${DESKTOP_EXTRA_LIBS})
 
     # Phase 2
     add_executable(light_rumor_phase2_test
         test/culling_test.cpp
         ${LIGHT_RUMOR_CORE_SOURCES}
     )
-    if(WIN32)
-        target_link_libraries(light_rumor_phase2_test psapi)
-    endif()
+    target_link_libraries(light_rumor_phase2_test ${DESKTOP_EXTRA_LIBS})
 
     # Phase 3
     add_executable(light_rumor_phase3_test
         test/phase3_test.cpp
         ${LIGHT_RUMOR_CORE_SOURCES}
     )
-    if(WIN32)
-        target_link_libraries(light_rumor_phase3_test psapi)
-    endif()
+    target_link_libraries(light_rumor_phase3_test ${DESKTOP_EXTRA_LIBS})
 
     # Phase 4
     add_executable(light_rumor_phase4_test
         test/phase4_test.cpp
         ${LIGHT_RUMOR_CORE_SOURCES}
     )
-    if(WIN32)
-        target_link_libraries(light_rumor_phase4_test psapi)
-    endif()
+    target_link_libraries(light_rumor_phase4_test ${DESKTOP_EXTRA_LIBS})
 
     # Phase 5
     add_executable(light_rumor_phase5_test
         test/phase5_test.cpp
         ${LIGHT_RUMOR_CORE_SOURCES}
     )
-    if(WIN32)
-        target_link_libraries(light_rumor_phase5_test psapi)
-    endif()
+    target_link_libraries(light_rumor_phase5_test ${DESKTOP_EXTRA_LIBS})
 
     # Phase 6
     add_executable(light_rumor_phase6_test
         test/phase6_test.cpp
         ${LIGHT_RUMOR_CORE_SOURCES}
     )
-    if(WIN32)
-        target_link_libraries(light_rumor_phase6_test psapi)
-    endif()
+    target_link_libraries(light_rumor_phase6_test ${DESKTOP_EXTRA_LIBS})
 
     # Compatibility aliases
     add_custom_target(apex_phase1_test DEPENDS light_rumor_phase1_test)

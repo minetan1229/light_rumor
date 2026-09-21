@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lightrumor.*
 
-val categoryTranslations = mapOf(
+val categoryEnToJa = mapOf(
     "ALL" to "すべて",
     "LANDSCAPE" to "風景",
     "PORTRAIT" to "ポートレート",
@@ -35,6 +35,56 @@ val categoryTranslations = mapOf(
     "MONOCHROME" to "モノクロ",
     "URBAN" to "アーバン"
 )
+
+val categoryJaToEn = categoryEnToJa.entries.associate { (k, v) -> v to k }
+
+val categoryTranslations = categoryEnToJa
+
+fun getCategoryDisplayName(category: String): String {
+    return categoryEnToJa[category.uppercase()] ?: category
+}
+
+fun isSameCategory(catA: String, catB: String): Boolean {
+    if (catA.equals(catB, ignoreCase = true)) return true
+    val enA = categoryJaToEn[catA] ?: catA.uppercase()
+    val enB = categoryJaToEn[catB] ?: catB.uppercase()
+    return enA.equals(enB, ignoreCase = true)
+}
+
+fun matchesCategory(presetCategory: String, targetCategory: String): Boolean {
+    val normTarget = targetCategory.trim()
+    val normPreset = presetCategory.trim()
+
+    if (normTarget.equals("すべて", ignoreCase = true) || normTarget.equals("ALL", ignoreCase = true)) {
+        return true
+    }
+
+    if (normPreset.equals(normTarget, ignoreCase = true)) {
+        return true
+    }
+
+    val enFromTarget = categoryJaToEn[normTarget]
+    if (enFromTarget != null && normPreset.equals(enFromTarget, ignoreCase = true)) {
+        return true
+    }
+
+    val jaFromTarget = categoryEnToJa[normTarget.uppercase()]
+    if (jaFromTarget != null && normPreset.equals(jaFromTarget, ignoreCase = true)) {
+        return true
+    }
+
+    val jaFromPreset = categoryEnToJa[normPreset.uppercase()]
+    if (jaFromPreset != null && jaFromPreset.equals(normTarget, ignoreCase = true)) {
+        return true
+    }
+
+    val enFromPreset = categoryJaToEn[normPreset]
+    if (enFromPreset != null && enFromPreset.equals(normTarget, ignoreCase = true)) {
+        return true
+    }
+
+    return false
+}
 
 /**
  * PresetBrowser: Lightroom XMP Preset Selector & Real-Time Hover Engine.
@@ -57,14 +107,13 @@ fun PresetBrowser(
     modifier: Modifier = Modifier
 ) {
     val colors = LightRumorTheme.colors
-    var selectedCategory by remember { mutableStateOf("ALL") }
+    var selectedCategory by remember { mutableStateOf("すべて") }
     var selectedPreset by remember { mutableStateOf<XmpPreset?>(null) }
     var presetAmount by remember { mutableStateOf(100.0f) } // 0% to 200%
     val allPresets = remember { XmpPresetParser.getBuiltinPresets() }
 
     val filteredPresets = remember(selectedCategory) {
-        if (selectedCategory == "ALL") allPresets
-        else allPresets.filter { it.category.equals(selectedCategory, ignoreCase = true) }
+        allPresets.filter { matchesCategory(it.category, selectedCategory) }
     }
 
     Column(
@@ -89,7 +138,7 @@ fun PresetBrowser(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 XmpPresetParser.CATEGORIES.forEach { cat ->
-                    val isSel = (cat == selectedCategory)
+                    val isSel = isSameCategory(cat, selectedCategory)
                     Box(
                         modifier = Modifier
                             .background(if (isSel) colors.surfacePressed else Color.Transparent, RoundedCornerShape(2.dp))
@@ -101,7 +150,7 @@ fun PresetBrowser(
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = categoryTranslations[cat] ?: cat,
+                            text = getCategoryDisplayName(cat),
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold,
                             fontSize = 9.sp,
@@ -305,7 +354,7 @@ private fun PresetCard(
                         .padding(horizontal = 3.dp, vertical = 1.dp)
                 ) {
                     Text(
-                        text = (categoryTranslations[preset.category] ?: preset.category).take(4),
+                        text = getCategoryDisplayName(preset.category).take(4),
                         fontFamily = FontFamily.Monospace,
                         fontSize = 7.sp,
                         color = colors.textSecondary

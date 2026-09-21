@@ -80,7 +80,11 @@ void main() {
     float pV = params.perspectiveV * 0.4;
     float pH = params.perspectiveH * 0.4;
     float w = 1.0 + rotated.y * pV + rotated.x * pH;
-    w = max(w, 0.05); // prevent divide by zero
+    if (w <= 0.0) {
+        int dstIdx = dstCoord.y * params.dstSize.x + dstCoord.x;
+        outPixels[dstIdx] = vec4(0.0, 0.0, 0.0, 1.0);
+        return;
+    }
     vec2 projected = rotated / w;
 
     // 5. Radial Lens Distortion Correction: r' = r * (1 + k * r^2)

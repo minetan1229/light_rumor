@@ -30,37 +30,61 @@ object XmpPresetParser {
 
     /**
      * Linearly blends development parameters between base state and preset state by amount [0.0, 2.0].
-     * Amount 0.0 (0%): exact base image parameters
-     * Amount 1.0 (100%): exact preset values
-     * Amount 0.5 (50%): subtle half-strength effect
-     * Amount 1.5 (150%): amplified intense preset effect
+     *
+     * Photographic Preserving Logic:
+     * - Exposure (exposureEV) is applied as a relative offset rather than an absolute override,
+     *   faithfully preserving the user's calibrated base exposure.
+     * - White Balance (kelvin, tint) is applied relative to the 5500K daylight neutral baseline,
+     *   preventing severe color distortion when applied across photos of different lighting (daylight, tungsten, golden hour).
+     * - Stylistic tone parameters (contrast, highlights, shadows, whites, blacks, vibrance, saturation, clarity, dehaze, texture)
+     *   are blended smoothly as relative adjustments and clamped to operational ranges.
+     * - Detail and noise reduction parameters scale proportionally with preset amount.
+     * - Monochrome mode transitions cleanly when preset amount >= 30%.
      */
     fun applyPresetWithAmount(
         base: DevelopmentParams,
         presetParams: DevelopmentParams,
         amountPercent: Float
     ): DevelopmentParams {
-        val t = amountPercent / 100.0f
+        val t = (amountPercent / 100.0f).coerceAtLeast(0.0f)
         val res = base.deepCopy()
 
-        res.exposureEV = base.exposureEV + (presetParams.exposureEV - base.exposureEV) * t
-        res.contrast = base.contrast + (presetParams.contrast - base.contrast) * t
-        res.highlights = base.highlights + (presetParams.highlights - base.highlights) * t
-        res.shadows = base.shadows + (presetParams.shadows - base.shadows) * t
-        res.whites = base.whites + (presetParams.whites - base.whites) * t
-        res.blacks = base.blacks + (presetParams.blacks - base.blacks) * t
-        res.vibrance = base.vibrance + (presetParams.vibrance - base.vibrance) * t
-        res.saturation = base.saturation + (presetParams.saturation - base.saturation) * t
-        res.clarity = base.clarity + (presetParams.clarity - base.clarity) * t
-        res.dehaze = base.dehaze + (presetParams.dehaze - base.dehaze) * t
-        res.kelvin = base.kelvin + (presetParams.kelvin - base.kelvin) * t
-        res.tint = base.tint + (presetParams.tint - base.tint) * t
-        res.sharpeningAmount = base.sharpeningAmount + (presetParams.sharpeningAmount - base.sharpeningAmount) * t
-        res.luminanceNR = base.luminanceNR + (presetParams.luminanceNR - base.luminanceNR) * t
-        res.chromaNR = base.chromaNR + (presetParams.chromaNR - base.chromaNR) * t
+        // 1. Exposure: Relative offset blend (preserving user's exposure calibration)
+        val exposureOffset = presetParams.exposureEV * t
+        res.exposureEV = (base.exposureEV + exposureOffset).coerceIn(-5.0f, 5.0f)
 
-        if (t >= 0.5f) {
-            res.isMonochrome = presetParams.isMonochrome
+        // 2. White Balance: Relative offset from daylight neutral baseline (5500K / 0 tint)
+        val kelvinOffset = (presetParams.kelvin - 5500.0f) * t
+        res.kelvin = (base.kelvin + kelvinOffset).coerceIn(2000.0f, 12000.0f)
+
+        val tintOffset = presetParams.tint * t
+        res.tint = (base.tint + tintOffset).coerceIn(-100.0f, 100.0f)
+
+        // 3. Tonal & Stylistic Parameters: Relative additive offsets clamped to [-100, +100]
+        res.contrast = (base.contrast + presetParams.contrast * t).coerceIn(-100.0f, 100.0f)
+        res.highlights = (base.highlights + presetParams.highlights * t).coerceIn(-100.0f, 100.0f)
+        res.shadows = (base.shadows + presetParams.shadows * t).coerceIn(-100.0f, 100.0f)
+        res.whites = (base.whites + presetParams.whites * t).coerceIn(-100.0f, 100.0f)
+        res.blacks = (base.blacks + presetParams.blacks * t).coerceIn(-100.0f, 100.0f)
+        res.vibrance = (base.vibrance + presetParams.vibrance * t).coerceIn(-100.0f, 100.0f)
+        res.saturation = (base.saturation + presetParams.saturation * t).coerceIn(-100.0f, 100.0f)
+        res.clarity = (base.clarity + presetParams.clarity * t).coerceIn(-100.0f, 100.0f)
+        res.dehaze = (base.dehaze + presetParams.dehaze * t).coerceIn(-100.0f, 100.0f)
+        res.texture = (base.texture + presetParams.texture * t).coerceIn(-100.0f, 100.0f)
+
+        // 4. Detail / Sharpness / Noise Reduction
+        res.sharpeningAmount = (base.sharpeningAmount + presetParams.sharpeningAmount * t).coerceIn(0.0f, 150.0f)
+        res.luminanceNR = (base.luminanceNR + presetParams.luminanceNR * t).coerceIn(0.0f, 100.0f)
+        res.chromaNR = (base.chromaNR + presetParams.chromaNR * t).coerceIn(0.0f, 100.0f)
+
+        // 5. Monochrome mode & Channel mixing
+        if (presetParams.isMonochrome) {
+            if (t >= 0.3f) {
+                res.isMonochrome = true
+                res.monochromeWeights = presetParams.monochromeWeights.clone()
+            }
+        } else if (base.isMonochrome && t >= 0.5f) {
+            res.isMonochrome = false
         }
 
         return res
@@ -165,17 +189,19 @@ object XmpPresetParser {
             id = "preset_velvia_50",
             name = "Velvia 50",
             category = "LANDSCAPE",
-            description = "High-saturation landscape classic with punchy greens and deep blues.",
+            description = "High-saturation landscape slide classic with punchy greens and deep blues.",
             params = DevelopmentParams(
+                kelvin = 5550.0f,
+                tint = -2.0f,
                 exposureEV = 0.0f,
-                contrast = 25.0f,
-                highlights = -20.0f,
-                shadows = 15.0f,
-                whites = 20.0f,
-                blacks = -15.0f,
-                vibrance = 35.0f,
-                saturation = 15.0f,
-                clarity = 15.0f,
+                contrast = 28.0f,
+                highlights = -18.0f,
+                shadows = -8.0f,
+                whites = 16.0f,
+                blacks = -18.0f,
+                vibrance = 32.0f,
+                saturation = 18.0f,
+                clarity = 14.0f,
                 dehaze = 10.0f,
                 sharpeningAmount = 45.0f
             )
@@ -188,15 +214,15 @@ object XmpPresetParser {
             params = DevelopmentParams(
                 kelvin = 5100.0f,
                 tint = -5.0f,
-                exposureEV = +0.20f,
-                contrast = -15.0f,
+                exposureEV = +0.10f,
+                contrast = -12.0f,
                 highlights = -10.0f,
-                shadows = 35.0f,
-                whites = 5.0f,
-                blacks = 10.0f,
-                vibrance = 10.0f,
-                saturation = -10.0f,
-                dehaze = -12.0f
+                shadows = 28.0f,
+                whites = 6.0f,
+                blacks = 8.0f,
+                vibrance = 12.0f,
+                saturation = -8.0f,
+                dehaze = -10.0f
             )
         ),
         XmpPreset(
@@ -205,15 +231,15 @@ object XmpPresetParser {
             category = "LANDSCAPE",
             description = "Warm Pacific sunset with rich golden tones and gentle highlights.",
             params = DevelopmentParams(
-                kelvin = 6300.0f,
-                tint = 12.0f,
+                kelvin = 6250.0f,
+                tint = 10.0f,
                 exposureEV = +0.10f,
-                contrast = 15.0f,
-                highlights = -35.0f,
-                shadows = 20.0f,
+                contrast = 16.0f,
+                highlights = -30.0f,
+                shadows = 18.0f,
                 whites = 10.0f,
-                blacks = -5.0f,
-                vibrance = 28.0f,
+                blacks = -6.0f,
+                vibrance = 26.0f,
                 saturation = 8.0f
             )
         ),
@@ -223,19 +249,20 @@ object XmpPresetParser {
             id = "preset_portra_400",
             name = "Portra 400",
             category = "PORTRAIT",
-            description = "Natural warm skin tones, gentle contrast curve, and protected saturation.",
+            description = "Natural warm skin tones, gentle contrast curve, protected highlights, and lifted matte blacks.",
             params = DevelopmentParams(
-                kelvin = 5650.0f,
+                kelvin = 5700.0f,
                 tint = 4.0f,
                 exposureEV = +0.15f,
-                contrast = -12.0f,
-                highlights = -18.0f,
-                shadows = 22.0f,
-                whites = 8.0f,
-                blacks = -4.0f,
-                vibrance = 16.0f,
-                saturation = -5.0f,
-                clarity = -8.0f
+                contrast = -8.0f,
+                highlights = -22.0f,
+                shadows = 18.0f,
+                whites = 6.0f,
+                blacks = 10.0f,
+                vibrance = 14.0f,
+                saturation = -6.0f,
+                clarity = -6.0f,
+                texture = -4.0f
             )
         ),
         XmpPreset(
@@ -244,62 +271,80 @@ object XmpPresetParser {
             category = "PORTRAIT",
             description = "Controlled studio contrast with precise skin tone separation and sharp detail.",
             params = DevelopmentParams(
-                kelvin = 5400.0f,
-                tint = 0.0f,
+                kelvin = 5450.0f,
+                tint = 1.0f,
                 exposureEV = 0.0f,
-                contrast = 18.0f,
-                highlights = -15.0f,
-                shadows = 10.0f,
-                whites = 12.0f,
-                blacks = -8.0f,
-                vibrance = 12.0f,
-                saturation = 0.0f,
-                clarity = 10.0f,
+                contrast = 14.0f,
+                highlights = -16.0f,
+                shadows = 12.0f,
+                whites = 10.0f,
+                blacks = -6.0f,
+                vibrance = 10.0f,
+                saturation = -2.0f,
+                clarity = 8.0f,
                 sharpeningAmount = 35.0f
             )
         ),
 
         // FILM
         XmpPreset(
-            id = "preset_kodachrome_64",
-            name = "Kodachrome 64",
-            category = "FILM",
-            description = "Legendary warm documentary slide film with saturated primaries and bold contrast.",
-            params = DevelopmentParams(
-                kelvin = 5800.0f,
-                tint = 6.0f,
-                exposureEV = -0.10f,
-                contrast = 30.0f,
-                highlights = -10.0f,
-                shadows = -10.0f,
-                whites = 15.0f,
-                blacks = -25.0f,
-                vibrance = 24.0f,
-                saturation = 12.0f,
-                clarity = 15.0f
-            )
-        ),
-        XmpPreset(
             id = "preset_classic_chrome",
             name = "Classic Chrome",
             category = "FILM",
             description = "Subdued color saturation, hard documentary shadow contrast, and cool cast.",
             params = DevelopmentParams(
-                kelvin = 5200.0f,
-                tint = -4.0f,
-                exposureEV = 0.0f,
-                contrast = 20.0f,
+                kelvin = 5350.0f,
+                tint = -3.0f,
+                exposureEV = -0.05f,
+                contrast = 22.0f,
                 highlights = -15.0f,
-                shadows = -15.0f,
-                whites = 5.0f,
-                blacks = -18.0f,
-                vibrance = -10.0f,
-                saturation = -22.0f,
-                clarity = 12.0f
+                shadows = -12.0f,
+                whites = 8.0f,
+                blacks = -16.0f,
+                vibrance = -12.0f,
+                saturation = -20.0f,
+                clarity = 15.0f,
+                dehaze = 6.0f
+            )
+        ),
+        XmpPreset(
+            id = "preset_kodachrome_64",
+            name = "Kodachrome 64",
+            category = "FILM",
+            description = "Legendary warm documentary slide film with saturated primaries and bold contrast.",
+            params = DevelopmentParams(
+                kelvin = 5750.0f,
+                tint = 6.0f,
+                exposureEV = -0.08f,
+                contrast = 26.0f,
+                highlights = -14.0f,
+                shadows = -8.0f,
+                whites = 14.0f,
+                blacks = -20.0f,
+                vibrance = 26.0f,
+                saturation = 10.0f,
+                clarity = 14.0f
             )
         ),
 
         // MONOCHROME
+        XmpPreset(
+            id = "preset_trix_400",
+            name = "Tri-X 400",
+            category = "MONOCHROME",
+            description = "Iconic photojournalism monochrome with punchy contrast, deep blacks, and gritty silver grain.",
+            params = DevelopmentParams(
+                isMonochrome = true,
+                contrast = 36.0f,
+                highlights = -12.0f,
+                shadows = 8.0f,
+                whites = 22.0f,
+                blacks = -28.0f,
+                clarity = 22.0f,
+                sharpeningAmount = 48.0f,
+                monochromeWeights = floatArrayOf(0.25f, 0.35f, 0.20f, 0.10f, 0.05f, 0.03f, 0.01f, 0.01f)
+            )
+        ),
         XmpPreset(
             id = "preset_ilford_hp5",
             name = "Ilford HP5 Plus",
@@ -307,13 +352,13 @@ object XmpPresetParser {
             description = "Quintessential versatile British black and white film with rich midtones.",
             params = DevelopmentParams(
                 isMonochrome = true,
-                contrast = 28.0f,
+                contrast = 18.0f,
                 highlights = -10.0f,
-                shadows = 15.0f,
-                whites = 18.0f,
-                blacks = -20.0f,
-                clarity = 20.0f,
-                sharpeningAmount = 40.0f
+                shadows = 20.0f,
+                whites = 12.0f,
+                blacks = -12.0f,
+                clarity = 12.0f,
+                sharpeningAmount = 35.0f
             )
         ),
         XmpPreset(
@@ -323,13 +368,13 @@ object XmpPresetParser {
             description = "Ultra-fine tonal gradation, crisp micro-contrast, and deep lustrous shadows.",
             params = DevelopmentParams(
                 isMonochrome = true,
-                contrast = 35.0f,
-                highlights = -20.0f,
-                shadows = 8.0f,
-                whites = 25.0f,
-                blacks = -30.0f,
-                clarity = 25.0f,
-                sharpeningAmount = 50.0f
+                contrast = 30.0f,
+                highlights = -18.0f,
+                shadows = 6.0f,
+                whites = 26.0f,
+                blacks = -22.0f,
+                clarity = 20.0f,
+                sharpeningAmount = 55.0f
             )
         ),
 
@@ -340,17 +385,17 @@ object XmpPresetParser {
             category = "URBAN",
             description = "Cinematic complementary color contrast with moody shadows and warm highlights.",
             params = DevelopmentParams(
-                kelvin = 5900.0f,
-                tint = 8.0f,
+                kelvin = 5850.0f,
+                tint = 7.0f,
                 exposureEV = 0.0f,
-                contrast = 22.0f,
-                highlights = -20.0f,
-                shadows = 18.0f,
-                whites = 10.0f,
-                blacks = -15.0f,
-                vibrance = 30.0f,
-                saturation = 5.0f,
-                clarity = 18.0f
+                contrast = 24.0f,
+                highlights = -18.0f,
+                shadows = 14.0f,
+                whites = 12.0f,
+                blacks = -16.0f,
+                vibrance = 28.0f,
+                saturation = 6.0f,
+                clarity = 16.0f
             )
         ),
         XmpPreset(
@@ -359,18 +404,18 @@ object XmpPresetParser {
             category = "URBAN",
             description = "Night street photography look with deep blacks, high clarity, and vivid lighting.",
             params = DevelopmentParams(
-                kelvin = 4900.0f,
-                tint = 15.0f,
-                exposureEV = -0.15f,
-                contrast = 30.0f,
-                highlights = -30.0f,
-                shadows = 20.0f,
-                whites = 15.0f,
-                blacks = -25.0f,
-                vibrance = 40.0f,
-                saturation = 15.0f,
-                clarity = 25.0f,
-                dehaze = 15.0f
+                kelvin = 4850.0f,
+                tint = 14.0f,
+                exposureEV = -0.10f,
+                contrast = 28.0f,
+                highlights = -25.0f,
+                shadows = 18.0f,
+                whites = 16.0f,
+                blacks = -22.0f,
+                vibrance = 35.0f,
+                saturation = 12.0f,
+                clarity = 22.0f,
+                dehaze = 12.0f
             )
         )
     )

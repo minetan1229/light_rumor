@@ -42,6 +42,13 @@ fun ColorWaveformView(
     var mode by remember { mutableIntStateOf(0) } // 0: RGB Overlay, 1: RGB Parade, 2: Histogram
     var waveformBitmap by remember { mutableStateOf<Bitmap?>(null) }
 
+    val bufferCache = remember {
+        object {
+            var pixels = IntArray(0)
+            var bytes = ByteArray(0)
+        }
+    }
+
     // Recompute waveform texture whenever previewBitmap or development params change
     LaunchedEffect(previewBitmap, params.exposureEV, params.kelvin, params.contrast, params.highlights, params.shadows, mode) {
         if (previewBitmap == null) return@LaunchedEffect
@@ -51,11 +58,19 @@ fun ColorWaveformView(
             val h = 256
             val srcW = previewBitmap.width
             val srcH = previewBitmap.height
+            val reqSize = srcW * srcH
+
+            if (bufferCache.pixels.size < reqSize) {
+                bufferCache.pixels = IntArray(reqSize)
+            }
+            if (bufferCache.bytes.size < reqSize * 4) {
+                bufferCache.bytes = ByteArray(reqSize * 4)
+            }
+            val pixels = bufferCache.pixels
+            val byteBuf = bufferCache.bytes
 
             // Extract RGBA bytes
-            val pixels = IntArray(srcW * srcH)
             previewBitmap.getPixels(pixels, 0, srcW, 0, 0, srcW, srcH)
-            val byteBuf = ByteArray(srcW * srcH * 4)
 
             // Simulate development exposure / kelvin shifts on preview buffer
             val expGain = Math.pow(2.0, params.exposureEV.toDouble()).toFloat()
@@ -85,7 +100,9 @@ fun ColorWaveformView(
 
             val outBmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
             outBmp.setPixels(wavePixels, 0, w, 0, 0, w, h)
+            val oldBmp = waveformBitmap
             waveformBitmap = outBmp
+            oldBmp?.recycle()
         }
     }
 
@@ -207,23 +224,23 @@ private fun ScopeModeButton(text: String, active: Boolean, onClick: () -> Unit) 
     Box(
         modifier = Modifier
             .background(
-                if (active) colors.accentAmber else colors.surfacePressed,
-                RoundedCornerShape(2.dp)
+                if (active) colors.accentAmber else colors.surfaceElevated,
+                RoundedCornerShape(3.dp)
             )
             .border(
                 1.dp,
                 if (active) colors.accentAmber else colors.borderSubtle,
-                RoundedCornerShape(2.dp)
+                RoundedCornerShape(3.dp)
             )
             .clickable { onClick() }
-            .padding(horizontal = 5.dp, vertical = 2.dp),
+            .padding(horizontal = 7.dp, vertical = 4.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = text,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
-            fontSize = 9.sp,
+            fontSize = 10.sp,
             color = if (active) Color.Black else colors.textPrimary
         )
     }

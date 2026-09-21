@@ -179,7 +179,8 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
 
         // 6. Shadow lift
         if (std::abs(params.shadows) > 1e-4f) {
-            float sLift = std::pow(1.0f - std::clamp(lum, 0.0f, 1.0f), 3.0f) * (params.shadows * 0.004f);
+            float lumUpdated = 0.2126f * p.r + 0.7152f * p.g + 0.0722f * p.b;
+            float sLift = std::pow(1.0f - std::clamp(lumUpdated, 0.0f, 1.0f), 3.0f) * (params.shadows * 0.004f);
             p.r = std::max(0.0f, p.r + sLift);
             p.g = std::max(0.0f, p.g + sLift);
             p.b = std::max(0.0f, p.b + sLift);

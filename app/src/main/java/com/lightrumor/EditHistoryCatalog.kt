@@ -16,7 +16,50 @@ class EditHistoryCatalog(context: Context) {
     companion object {
         private const val PREFS_NAME = "light_rumor_catalog"
         private const val KEY_HISTORY = "edit_history"
-        private const val MAX_ENTRIES = 50
+        fun paramsToJson(params: DevelopmentParams): String {
+            val obj = JSONObject()
+            obj.put("exposureEV", params.exposureEV.toDouble())
+            obj.put("kelvin", params.kelvin.toDouble())
+            obj.put("tint", params.tint.toDouble())
+            obj.put("contrast", params.contrast.toDouble())
+            obj.put("highlights", params.highlights.toDouble())
+            obj.put("shadows", params.shadows.toDouble())
+            obj.put("whites", params.whites.toDouble())
+            obj.put("blacks", params.blacks.toDouble())
+            obj.put("vibrance", params.vibrance.toDouble())
+            obj.put("saturation", params.saturation.toDouble())
+            obj.put("dehaze", params.dehaze.toDouble())
+            obj.put("clarity", params.clarity.toDouble())
+            obj.put("texture", params.texture.toDouble())
+            obj.put("colorProfile", params.colorProfile)
+            obj.put("isMonochrome", params.isMonochrome)
+            return obj.toString()
+        }
+
+        fun jsonToParams(json: String): DevelopmentParams {
+            val params = DevelopmentParams()
+            try {
+                val obj = JSONObject(json)
+                if (obj.has("exposureEV")) params.exposureEV = obj.getDouble("exposureEV").toFloat()
+                if (obj.has("kelvin")) params.kelvin = obj.getDouble("kelvin").toFloat()
+                if (obj.has("tint")) params.tint = obj.getDouble("tint").toFloat()
+                if (obj.has("contrast")) params.contrast = obj.getDouble("contrast").toFloat()
+                if (obj.has("highlights")) params.highlights = obj.getDouble("highlights").toFloat()
+                if (obj.has("shadows")) params.shadows = obj.getDouble("shadows").toFloat()
+                if (obj.has("whites")) params.whites = obj.getDouble("whites").toFloat()
+                if (obj.has("blacks")) params.blacks = obj.getDouble("blacks").toFloat()
+                if (obj.has("vibrance")) params.vibrance = obj.getDouble("vibrance").toFloat()
+                if (obj.has("saturation")) params.saturation = obj.getDouble("saturation").toFloat()
+                if (obj.has("dehaze")) params.dehaze = obj.getDouble("dehaze").toFloat()
+                if (obj.has("clarity")) params.clarity = obj.getDouble("clarity").toFloat()
+                if (obj.has("texture")) params.texture = obj.getDouble("texture").toFloat()
+                if (obj.has("colorProfile")) params.colorProfile = obj.getString("colorProfile")
+                if (obj.has("isMonochrome")) params.isMonochrome = obj.getBoolean("isMonochrome")
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            return params
+        }
     }
 
     data class CatalogEntry(
@@ -83,42 +126,5 @@ class EditHistoryCatalog(context: Context) {
     fun getParamsForUri(uri: String): DevelopmentParams? {
         val entry = getRecentEntries().find { it.uri == uri } ?: return null
         return jsonToParams(entry.devParamsJson)
-    }
-
-    private fun paramsToJson(params: DevelopmentParams): String {
-        val obj = JSONObject()
-        obj.put("exposureEV", params.exposureEV.toDouble())
-        obj.put("kelvin", params.kelvin.toDouble())
-        obj.put("tint", params.tint.toDouble())
-        obj.put("contrast", params.contrast.toDouble())
-        obj.put("highlights", params.highlights.toDouble())
-        obj.put("shadows", params.shadows.toDouble())
-        obj.put("whites", params.whites.toDouble())
-        obj.put("blacks", params.blacks.toDouble())
-        obj.put("vibrance", params.vibrance.toDouble())
-        obj.put("saturation", params.saturation.toDouble())
-        obj.put("isMonochrome", params.isMonochrome)
-        return obj.toString()
-    }
-
-    private fun jsonToParams(json: String): DevelopmentParams {
-        val params = DevelopmentParams()
-        try {
-            val obj = JSONObject(json)
-            if (obj.has("exposureEV")) params.exposureEV = obj.getDouble("exposureEV").toFloat()
-            if (obj.has("kelvin")) params.kelvin = obj.getDouble("kelvin").toFloat()
-            if (obj.has("tint")) params.tint = obj.getDouble("tint").toFloat()
-            if (obj.has("contrast")) params.contrast = obj.getDouble("contrast").toFloat()
-            if (obj.has("highlights")) params.highlights = obj.getDouble("highlights").toFloat()
-            if (obj.has("shadows")) params.shadows = obj.getDouble("shadows").toFloat()
-            if (obj.has("whites")) params.whites = obj.getDouble("whites").toFloat()
-            if (obj.has("blacks")) params.blacks = obj.getDouble("blacks").toFloat()
-            if (obj.has("vibrance")) params.vibrance = obj.getDouble("vibrance").toFloat()
-            if (obj.has("saturation")) params.saturation = obj.getDouble("saturation").toFloat()
-            if (obj.has("isMonochrome")) params.isMonochrome = obj.getBoolean("isMonochrome")
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        return params
     }
 }

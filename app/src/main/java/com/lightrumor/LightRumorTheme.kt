@@ -94,36 +94,36 @@ object LightRumorTypography {
     val Header = TextStyle(
         fontFamily = FontFamily.Monospace,
         fontWeight = FontWeight.Bold,
-        fontSize = 13.sp,
-        letterSpacing = 1.2.sp
+        fontSize = 14.sp,
+        letterSpacing = 1.0.sp
     )
 
     val Label = TextStyle(
         fontFamily = FontFamily.SansSerif,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        fontSize = 12.sp,
         letterSpacing = 0.8.sp
     )
 
     val ValueReadout = TextStyle(
         fontFamily = FontFamily.Monospace,
         fontWeight = FontWeight.Bold,
-        fontSize = 12.sp,
+        fontSize = 14.sp,
         letterSpacing = 0.5.sp
     )
 
     val MicroIndex = TextStyle(
         fontFamily = FontFamily.Monospace,
-        fontWeight = FontWeight.Normal,
-        fontSize = 9.sp,
+        fontWeight = FontWeight.Medium,
+        fontSize = 10.sp,
         letterSpacing = 0.4.sp
     )
 
     val Tab = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Bold,
-        fontSize = 11.sp,
-        letterSpacing = 1.0.sp
+        fontSize = 12.sp,
+        letterSpacing = 0.8.sp
     )
 }
 

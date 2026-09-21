@@ -70,62 +70,70 @@ TetherManager::~TetherManager() {
 }
 
 bool TetherManager::startSession(TetherCameraBrand brand, const std::string& deviceId) {
-    std::lock_guard<std::mutex> lock(m_impl->mutex);
-    m_impl->state = TetherState::Connecting;
-    m_impl->brand = brand;
-    m_impl->deviceId = deviceId;
+    SettingsCallback cb;
+    CameraExposureSettings settings;
 
-    // Brand-specific baseline profiles
-    switch (brand) {
-        case TetherCameraBrand::Sony:
-            m_impl->settings.cameraModel = "ILCE-7RM5";
-            m_impl->settings.lensModel = "FE 24-70mm F2.8 GM II";
-            m_impl->settings.shutterSpeed = 1.0 / 250.0;
-            m_impl->settings.aperture = 2.8;
-            m_impl->settings.iso = 100;
-            m_impl->settings.batteryPercent = 94;
-            break;
-        case TetherCameraBrand::Canon:
-            m_impl->settings.cameraModel = "EOS R5 Mark II";
-            m_impl->settings.lensModel = "RF 24-70mm F2.8 L IS USM";
-            m_impl->settings.shutterSpeed = 1.0 / 320.0;
-            m_impl->settings.aperture = 2.8;
-            m_impl->settings.iso = 100;
-            m_impl->settings.batteryPercent = 88;
-            break;
-        case TetherCameraBrand::Nikon:
-            m_impl->settings.cameraModel = "Z 8";
-            m_impl->settings.lensModel = "NIKKOR Z 24-70mm f/2.8 S";
-            m_impl->settings.shutterSpeed = 1.0 / 200.0;
-            m_impl->settings.aperture = 4.0;
-            m_impl->settings.iso = 64;
-            m_impl->settings.batteryPercent = 91;
-            break;
-        case TetherCameraBrand::Fujifilm:
-            m_impl->settings.cameraModel = "GFX100 II";
-            m_impl->settings.lensModel = "GF 55mm F1.7 R WR";
-            m_impl->settings.shutterSpeed = 1.0 / 160.0;
-            m_impl->settings.aperture = 1.7;
-            m_impl->settings.iso = 80;
-            m_impl->settings.batteryPercent = 85;
-            break;
-        case TetherCameraBrand::Panasonic:
-            m_impl->settings.cameraModel = "LUMIX S1R";
-            m_impl->settings.lensModel = "Lumix S PRO 24-70mm F2.8";
-            m_impl->settings.shutterSpeed = 1.0 / 250.0;
-            m_impl->settings.aperture = 2.8;
-            m_impl->settings.iso = 100;
-            m_impl->settings.batteryPercent = 79;
-            break;
-        default:
-            m_impl->settings.cameraModel = "Generic PTP Camera";
-            m_impl->settings.lensModel = "Standard Lens";
-            break;
+    {
+        std::lock_guard<std::mutex> lock(m_impl->mutex);
+        m_impl->state = TetherState::Connecting;
+        m_impl->brand = brand;
+        m_impl->deviceId = deviceId;
+
+        // Brand-specific baseline profiles
+        switch (brand) {
+            case TetherCameraBrand::Sony:
+                m_impl->settings.cameraModel = "ILCE-7RM5";
+                m_impl->settings.lensModel = "FE 24-70mm F2.8 GM II";
+                m_impl->settings.shutterSpeed = 1.0 / 250.0;
+                m_impl->settings.aperture = 2.8;
+                m_impl->settings.iso = 100;
+                m_impl->settings.batteryPercent = 94;
+                break;
+            case TetherCameraBrand::Canon:
+                m_impl->settings.cameraModel = "EOS R5 Mark II";
+                m_impl->settings.lensModel = "RF 24-70mm F2.8 L IS USM";
+                m_impl->settings.shutterSpeed = 1.0 / 320.0;
+                m_impl->settings.aperture = 2.8;
+                m_impl->settings.iso = 100;
+                m_impl->settings.batteryPercent = 88;
+                break;
+            case TetherCameraBrand::Nikon:
+                m_impl->settings.cameraModel = "Z 8";
+                m_impl->settings.lensModel = "NIKKOR Z 24-70mm f/2.8 S";
+                m_impl->settings.shutterSpeed = 1.0 / 200.0;
+                m_impl->settings.aperture = 4.0;
+                m_impl->settings.iso = 64;
+                m_impl->settings.batteryPercent = 91;
+                break;
+            case TetherCameraBrand::Fujifilm:
+                m_impl->settings.cameraModel = "GFX100 II";
+                m_impl->settings.lensModel = "GF 55mm F1.7 R WR";
+                m_impl->settings.shutterSpeed = 1.0 / 160.0;
+                m_impl->settings.aperture = 1.7;
+                m_impl->settings.iso = 80;
+                m_impl->settings.batteryPercent = 85;
+                break;
+            case TetherCameraBrand::Panasonic:
+                m_impl->settings.cameraModel = "LUMIX S1R";
+                m_impl->settings.lensModel = "Lumix S PRO 24-70mm F2.8";
+                m_impl->settings.shutterSpeed = 1.0 / 250.0;
+                m_impl->settings.aperture = 2.8;
+                m_impl->settings.iso = 100;
+                m_impl->settings.batteryPercent = 79;
+                break;
+            default:
+                m_impl->settings.cameraModel = "Generic PTP Camera";
+                m_impl->settings.lensModel = "Standard Lens";
+                break;
+        }
+
+        m_impl->state = TetherState::Connected;
+        cb = m_impl->settingsCallback;
+        settings = m_impl->settings;
     }
 
-    m_impl->state = TetherState::Connected;
-    if (m_impl->settingsCallback) {
-        m_impl->settingsCallback(m_impl->settings);
+    if (cb) {
+        cb(settings);
     }
 
     return true;
@@ -159,23 +167,31 @@ CameraExposureSettings TetherManager::getCameraSettings() const {
 }
 
 bool TetherManager::updateCameraSetting(const std::string& paramName, double value) {
-    std::lock_guard<std::mutex> lock(m_impl->mutex);
-    if (!isConnected()) return false;
+    SettingsCallback cb;
+    CameraExposureSettings settings;
 
-    if (paramName == "iso") {
-        m_impl->settings.iso = static_cast<uint32_t>(value);
-    } else if (paramName == "aperture") {
-        m_impl->settings.aperture = value;
-    } else if (paramName == "shutterSpeed") {
-        m_impl->settings.shutterSpeed = value;
-    } else if (paramName == "exposureBias") {
-        m_impl->settings.exposureBias = value;
-    } else {
-        return false;
+    {
+        std::lock_guard<std::mutex> lock(m_impl->mutex);
+        if (!isConnected()) return false;
+
+        if (paramName == "iso") {
+            m_impl->settings.iso = static_cast<uint32_t>(value);
+        } else if (paramName == "aperture") {
+            m_impl->settings.aperture = value;
+        } else if (paramName == "shutterSpeed") {
+            m_impl->settings.shutterSpeed = value;
+        } else if (paramName == "exposureBias") {
+            m_impl->settings.exposureBias = value;
+        } else {
+            return false;
+        }
+
+        cb = m_impl->settingsCallback;
+        settings = m_impl->settings;
     }
 
-    if (m_impl->settingsCallback) {
-        m_impl->settingsCallback(m_impl->settings);
+    if (cb) {
+        cb(settings);
     }
     return true;
 }
@@ -263,8 +279,14 @@ bool TetherManager::simulateCameraShutterRelease(const std::string& filename, co
 
     m_impl->state = TetherState::Ready;
 
-    if (m_impl->transferCallback) {
-        m_impl->transferCallback(event, rawPayload);
+    TransferCallback cb;
+    {
+        std::lock_guard<std::mutex> lock(m_impl->mutex);
+        cb = m_impl->transferCallback;
+    }
+
+    if (cb) {
+        cb(event, rawPayload);
     }
 
     return true;
@@ -273,20 +295,28 @@ bool TetherManager::simulateCameraShutterRelease(const std::string& filename, co
 bool TetherManager::handlePtpDataPacket(const uint8_t* packetData, size_t length) {
     if (!packetData || length < sizeof(PtpContainerHeader)) return false;
 
-    const auto* header = reinterpret_cast<const PtpContainerHeader*>(packetData);
-    if (header->length > length) return false;
+    PtpContainerHeader header;
+    std::memcpy(&header, packetData, sizeof(PtpContainerHeader));
+    if (header.length > length) return false;
 
-    if (header->type == ptp::TYPE_EVENT) {
-        if (header->code == ptp::EVENT_OBJECT_ADDED) {
+    if (header.type == ptp::TYPE_EVENT) {
+        if (header.code == ptp::EVENT_OBJECT_ADDED) {
             std::cout << "[TetherManager] Received PTP Event: ObjectAdded (0x4002)" << std::endl;
             // Trigger transfer
             std::vector<uint8_t> dummyRaw(1024 * 1024, 0x5A);
             return simulateCameraShutterRelease("DSC09420.ARW", dummyRaw);
         }
-        else if (header->code == ptp::EVENT_DEVICE_PROP_CHG) {
+        else if (header.code == ptp::EVENT_DEVICE_PROP_CHG) {
             std::cout << "[TetherManager] Received PTP Event: DevicePropChanged" << std::endl;
-            if (m_impl->settingsCallback) {
-                m_impl->settingsCallback(m_impl->settings);
+            SettingsCallback cb;
+            CameraExposureSettings settings;
+            {
+                std::lock_guard<std::mutex> lock(m_impl->mutex);
+                cb = m_impl->settingsCallback;
+                settings = m_impl->settings;
+            }
+            if (cb) {
+                cb(settings);
             }
         }
     }

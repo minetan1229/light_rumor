@@ -407,14 +407,22 @@ bool testLensfunCorrection() {
     LR_TEST_ASSERT(cornerLum > centerLum * 1.15f, "Corner luminance must be boosted by vignetting compensation");
 
     // 3. Defringe check
-    std::vector<lightrumor::FloatRGBA> fringeImage = {
-        lightrumor::FloatRGBA(0.85f, 0.20f, 0.90f, 1.0f) // Intense purple fringe
-    };
-    std::vector<lightrumor::FloatRGBA> defringed(1);
-    lightrumor::LensfunIntegration::applyDefringe(fringeImage.data(), defringed.data(), 1, 1, 80.0f, 0.0f);
+    int testW = 16, testH = 16;
+    std::vector<lightrumor::FloatRGBA> tcaPixels(testW * testH);
+    for (int y = 0; y < testH; ++y) {
+        for (int x = 0; x < testW; ++x) {
+            float edge = (x < testW / 2) ? 0.9f : 0.1f;
+            // 色収差のある高コントラストエッジ
+            tcaPixels[y * testW + x] = lightrumor::FloatRGBA(
+                edge * 1.02f, edge, edge * 0.98f, 1.0f);
+        }
+    }
+    std::vector<lightrumor::FloatRGBA> defringed(testW * testH);
+    lightrumor::LensfunIntegration::applyDefringe(tcaPixels.data(), defringed.data(), testW, testH, 80.0f, 0.0f);
 
-    float purpleDiff = std::abs(defringed[0].r - defringed[0].g);
-    float origDiff = std::abs(fringeImage[0].r - fringeImage[0].g);
+    int testIdx = (testH / 2) * testW + (testW / 2 - 1);
+    float purpleDiff = std::abs(defringed[testIdx].r - defringed[testIdx].g);
+    float origDiff = std::abs(tcaPixels[testIdx].r - tcaPixels[testIdx].g);
     std::cout << "  ✓ Defringe Suppression: |R - G| reduced from " << origDiff << " to " << purpleDiff << "\n";
 
     LR_TEST_ASSERT(purpleDiff < origDiff * 0.6f, "Defringe must attenuate purple chromatic fringing");

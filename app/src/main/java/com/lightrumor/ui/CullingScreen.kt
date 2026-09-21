@@ -9,8 +9,12 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,6 +28,63 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lightrumor.*
+
+private data class MetaFieldConfig(
+    val key: String,
+    val label: String,
+    val candidates: List<String> = emptyList()
+)
+
+private val CULLING_META_FIELDS = listOf(
+    MetaFieldConfig(
+        key = "cameraModel",
+        label = "端末/カメラ",
+        candidates = listOf(
+            "SONY ILCE-7M4", "SONY ILCE-7RM5", "SONY ILCE-1", "SONY FX3", "SONY A7C II",
+            "Canon EOS R5", "Canon EOS R6 Mark II", "Canon EOS R3",
+            "NIKON Z 8", "NIKON Z 9", "NIKON Z 6III", "NIKON Z f",
+            "FUJIFILM X-T5", "FUJIFILM X100VI", "FUJIFILM GFX100 II",
+            "Leica M11", "Leica Q3", "Leica SL2",
+            "Apple iPhone 16 Pro", "Apple iPhone 15 Pro", "Google Pixel 9 Pro"
+        )
+    ),
+    MetaFieldConfig(
+        key = "lensModel",
+        label = "レンズ",
+        candidates = listOf(
+            "FE 24-70mm F2.8 GM II", "FE 50mm F1.2 GM", "FE 35mm F1.4 GM", "FE 70-200mm F2.8 GM OSS II",
+            "RF24-70mm F2.8 L IS USM", "RF50mm F1.2 L USM",
+            "NIKKOR Z 24-70mm f/2.8 S", "NIKKOR Z 50mm f/1.2 S",
+            "XF35mmF1.4 R", "XF18-55mmF2.8-4 R LM OIS",
+            "Summilux-M 35mm f/1.4 ASPH."
+        )
+    ),
+    MetaFieldConfig(
+        key = "fNumber",
+        label = "F値",
+        candidates = listOf("f/1.2", "f/1.4", "f/1.8", "f/2.0", "f/2.8", "f/3.5", "f/4.0", "f/5.6", "f/8.0", "f/11", "f/16", "f/22")
+    ),
+    MetaFieldConfig(
+        key = "exposureTime",
+        label = "SS",
+        candidates = listOf("1/8000s", "1/4000s", "1/2000s", "1/1000s", "1/500s", "1/250s", "1/125s", "1/60s", "1/30s", "1/15s", "1/4s", "1s")
+    ),
+    MetaFieldConfig(
+        key = "isoSpeed",
+        label = "ISO",
+        candidates = listOf("ISO 100", "ISO 200", "ISO 400", "ISO 800", "ISO 1600", "ISO 3200", "ISO 6400", "ISO 12800")
+    ),
+    MetaFieldConfig(
+        key = "focalLength",
+        label = "焦点距離",
+        candidates = listOf("14mm", "20mm", "24mm", "28mm", "35mm", "50mm", "70mm", "85mm", "105mm", "135mm", "200mm")
+    ),
+    MetaFieldConfig(
+        key = "captureDate",
+        label = "日時",
+        candidates = emptyList()
+    )
+)
 
 /**
  * Zero-Delay Culling Studio Screen.
@@ -57,8 +118,10 @@ fun CullingScreen(
     }
 
     val currentItem = items[currentIndex.coerceIn(items.indices)]
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var currentBitmap by remember(currentItem.uri) {
-        mutableStateOf(cacheManager.getFromMemory(currentItem.filePath.ifEmpty { currentItem.uri.toString() }))
+        mutableStateOf(cacheManager.getFromMemory(currentItem))
     }
     var metaUpdateTrigger by remember(currentIndex) { mutableStateOf(0) }
 
@@ -126,7 +189,7 @@ fun CullingScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(panelDark.copy(alpha = 0.85f))
+                .background(panelDark.copy(alpha = 0.92f))
                 .border(1.dp, borderDark)
                 .padding(horizontal = 16.dp, vertical = 10.dp)
                 .align(Alignment.TopCenter),
@@ -135,17 +198,20 @@ fun CullingScreen(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "< 戻る",
+                    text = "< コレクション",
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 11.sp,
-                    color = textSecondary,
-                    modifier = Modifier.clickable { onBackToLauncher() }
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = accentAmber,
+                    modifier = Modifier
+                        .clickable { onBackToLauncher() }
+                        .padding(vertical = 4.dp, horizontal = 4.dp)
                 )
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(14.dp))
                 Text(
                     text = "[${currentIndex + 1}/${items.size}] ${currentItem.fileName.ifEmpty { "IMG_${currentIndex + 1}" }}",
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = textPrimary
                 )
@@ -155,12 +221,12 @@ fun CullingScreen(
                         modifier = Modifier
                             .background(Color(0xFF2C2210), RoundedCornerShape(2.dp))
                             .border(1.dp, accentAmber, RoundedCornerShape(2.dp))
-                            .padding(horizontal = 4.dp, vertical = 1.dp)
+                            .padding(horizontal = 5.dp, vertical = 2.dp)
                     ) {
                         Text(
                             text = "RAW",
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 9.sp,
+                            fontSize = 10.sp,
                             color = accentAmber,
                             fontWeight = FontWeight.Bold
                         )
@@ -172,44 +238,46 @@ fun CullingScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
                     onClick = onOpenMultiCompare,
-                    shape = RoundedCornerShape(2.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, borderDark),
-                    colors = ButtonDefaults.outlinedButtonColors(containerColor = panelDark),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                    shape = RoundedCornerShape(3.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF48484A)),
+                    colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFF1B1D22)),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = "同期ズーム (2/4)",
+                        text = "同期ズーム",
                         fontFamily = FontFamily.Monospace,
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
                         color = textPrimary
                     )
                 }
 
                 OutlinedButton(
                     onClick = onOpenBatchSync,
-                    shape = RoundedCornerShape(2.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, borderDark),
-                    colors = ButtonDefaults.outlinedButtonColors(containerColor = panelDark),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                    shape = RoundedCornerShape(3.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF48484A)),
+                    colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFF1B1D22)),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
                         text = "一括同期",
                         fontFamily = FontFamily.Monospace,
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
                         color = textPrimary
                     )
                 }
 
                 Button(
                     onClick = { onOpenDevelop(currentItem) },
-                    shape = RoundedCornerShape(2.dp),
+                    shape = RoundedCornerShape(3.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = accentAmber),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                 ) {
                     Text(
                         text = "現像",
                         fontFamily = FontFamily.Monospace,
-                        fontSize = 10.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.Black
                     )
@@ -236,37 +304,203 @@ fun CullingScreen(
             }
 
             if (editingField != null) {
+                val currentField = editingField!!
+                val currentFieldDef = CULLING_META_FIELDS.find { it.key == currentField }
+                    ?: MetaFieldConfig(currentField, currentField)
+
                 AlertDialog(
                     onDismissRequest = { editingField = null },
-                    title = { Text(text = "Edit $editingField", color = textPrimary) },
+                    title = {
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "メタデータ編集",
+                                    color = textPrimary,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                                Text(
+                                    text = currentFieldDef.label,
+                                    color = accentAmber,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                            // タブ切り替えバー (LazyRow)
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                items(CULLING_META_FIELDS) { fieldConfig ->
+                                    val isSelected = fieldConfig.key == currentField
+                                    Box(
+                                        modifier = Modifier
+                                            .background(
+                                                if (isSelected) accentAmber.copy(alpha = 0.2f) else borderDark.copy(alpha = 0.6f),
+                                                RoundedCornerShape(4.dp)
+                                            )
+                                            .border(
+                                                1.dp,
+                                                if (isSelected) accentAmber else borderDark,
+                                                RoundedCornerShape(4.dp)
+                                            )
+                                            .clickable {
+                                                editingField = fieldConfig.key
+                                                editValue = when (fieldConfig.key) {
+                                                    "captureDate" -> meta.captureDate
+                                                    "cameraModel" -> meta.cameraModel
+                                                    "lensModel" -> meta.lensModel
+                                                    "focalLength" -> meta.focalLength
+                                                    "fNumber" -> meta.fNumber
+                                                    "exposureTime" -> meta.exposureTime
+                                                    "isoSpeed" -> meta.isoSpeed
+                                                    else -> ""
+                                                }
+                                            }
+                                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(
+                                            text = fieldConfig.label,
+                                            fontSize = 11.sp,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = if (isSelected) accentAmber else textSecondary,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    },
                     text = {
-                        OutlinedTextField(
-                            value = editValue,
-                            onValueChange = { editValue = it },
-                            textStyle = LocalTextStyle.current.copy(color = textPrimary),
-                            singleLine = true
-                        )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            if (currentFieldDef.candidates.isNotEmpty()) {
+                                Text(
+                                    text = "候補一覧（タップで選択）:",
+                                    fontSize = 10.sp,
+                                    color = textSecondary,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                
+                                @OptIn(ExperimentalLayoutApi::class)
+                                FlowRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    currentFieldDef.candidates.forEach { candidate ->
+                                        val isChosen = editValue == candidate
+                                        Box(
+                                            modifier = Modifier
+                                                .background(
+                                                if (isChosen) accentAmber else panelDark,
+                                                RoundedCornerShape(4.dp)
+                                            )
+                                            .border(
+                                                1.dp,
+                                                if (isChosen) accentAmber else borderDark,
+                                                RoundedCornerShape(4.dp)
+                                            )
+                                            .clickable {
+                                                editValue = candidate
+                                            }
+                                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                                        ) {
+                                            Text(
+                                                text = candidate,
+                                                fontSize = 11.sp,
+                                                fontFamily = FontFamily.Monospace,
+                                                color = if (isChosen) Color(0xFF121212) else textPrimary,
+                                                fontWeight = if (isChosen) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(14.dp))
+                            }
+
+                            OutlinedTextField(
+                                value = editValue,
+                                onValueChange = { editValue = it },
+                                label = { Text("${currentFieldDef.label} (自由入力・微調整)", fontSize = 11.sp) },
+                                textStyle = LocalTextStyle.current.copy(
+                                    color = textPrimary,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 13.sp
+                                ),
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = accentAmber,
+                                    unfocusedBorderColor = borderDark,
+                                    focusedLabelColor = accentAmber,
+                                    unfocusedLabelColor = textSecondary,
+                                    cursorColor = accentAmber
+                                ),
+                                trailingIcon = {
+                                    if (editValue.isNotEmpty()) {
+                                        Text(
+                                            text = "✕",
+                                            color = textSecondary,
+                                            fontSize = 12.sp,
+                                            modifier = Modifier
+                                                .clickable { editValue = "" }
+                                                .padding(8.dp)
+                                        )
+                                    }
+                                }
+                            )
+                        }
                     },
                     confirmButton = {
                         TextButton(onClick = {
+                            val field = editingField ?: return@TextButton
                             val newSet = modifiedMetaFields.toMutableSet()
-                            newSet.add(editingField!!)
+                            newSet.add(field)
                             modifiedMetaFields = newSet
                             
-                            when(editingField) {
+                            when(field) {
                                 "captureDate" -> meta.captureDate = editValue
-                                "cameraModel" -> meta.cameraModel = editValue
+                                "cameraModel" -> {
+                                    meta.cameraModel = editValue
+                                    meta.cameraMake = editValue.split(" ").firstOrNull() ?: ""
+                                }
+                                "lensModel" -> meta.lensModel = editValue
                                 "focalLength" -> meta.focalLength = editValue
                                 "fNumber" -> meta.fNumber = editValue
                                 "exposureTime" -> meta.exposureTime = editValue
                                 "isoSpeed" -> meta.isoSpeed = editValue
                             }
-                            XmpSidecarManager.scheduleSaveSidecar(currentItem.filePath, meta, currentItem.developParams, modifiedFields = modifiedMetaFields)
+
+                            // 実際の画像ファイルEXIFおよびXMPサイドカーへ直接書き込み保存
+                            metaUpdateTrigger++
+                            coroutineScope.launch {
+                                val success = DirectExifWriter.writeMetadata(context, currentItem, meta)
+                                if (success) {
+                                    android.widget.Toast.makeText(context, "端末情報・EXIFをファイルに書き込み保存しました", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
+
                             editingField = null
-                        }) { Text("Save") }
+                        }) {
+                            Text("Save", color = accentAmber, fontWeight = FontWeight.Bold)
+                        }
                     },
                     dismissButton = {
-                        TextButton(onClick = { editingField = null }) { Text("Cancel") }
+                        TextButton(onClick = { editingField = null }) {
+                            Text("Cancel", color = textSecondary)
+                        }
                     },
                     containerColor = panelDark
                 )
@@ -277,26 +511,39 @@ fun CullingScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val _bottomTrigger = metaUpdateTrigger
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
                     val openEdit = { field: String, value: String -> 
                         editingField = field
                         editValue = value
                     }
                     
-                    if (meta.captureDate.isNotEmpty()) {
-                        Text(text = meta.captureDate, fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = textSecondary, modifier = Modifier.clickable { openEdit("captureDate", meta.captureDate) })
-                        Text("|", color = borderDark, fontSize = 10.sp)
+                    val presentFields = buildList {
+                        if (meta.captureDate.isNotBlank()) add("captureDate" to meta.captureDate)
+                        if (meta.cameraModel.isNotBlank()) add("cameraModel" to meta.cameraModel)
+                        if (meta.lensModel.isNotBlank()) add("lensModel" to meta.lensModel)
+                        if (meta.focalLength.isNotBlank()) add("focalLength" to meta.focalLength)
+                        if (meta.fNumber.isNotBlank()) add("fNumber" to meta.fNumber)
+                        if (meta.exposureTime.isNotBlank()) add("exposureTime" to meta.exposureTime)
+                        if (meta.isoSpeed.isNotBlank()) add("isoSpeed" to meta.isoSpeed)
                     }
-                    
-                    Text(text = meta.cameraModel.ifEmpty { "ILCE-7RM5" }, fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = textSecondary, modifier = Modifier.clickable { openEdit("cameraModel", meta.cameraModel) })
-                    Text("|", color = borderDark, fontSize = 10.sp)
-                    Text(text = meta.focalLength.ifEmpty { "50mm" }, fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = textSecondary, modifier = Modifier.clickable { openEdit("focalLength", meta.focalLength) })
-                    Text("|", color = borderDark, fontSize = 10.sp)
-                    Text(text = meta.fNumber.ifEmpty { "f/2.8" }, fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = textSecondary, modifier = Modifier.clickable { openEdit("fNumber", meta.fNumber) })
-                    Text("|", color = borderDark, fontSize = 10.sp)
-                    Text(text = meta.exposureTime.ifEmpty { "1/250s" }, fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = textSecondary, modifier = Modifier.clickable { openEdit("exposureTime", meta.exposureTime) })
-                    Text("|", color = borderDark, fontSize = 10.sp)
-                    Text(text = meta.isoSpeed.ifEmpty { "ISO 100" }, fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = textSecondary, modifier = Modifier.clickable { openEdit("isoSpeed", meta.isoSpeed) })
+
+                    presentFields.forEachIndexed { index, (field, value) ->
+                        Text(
+                            text = value,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            color = textSecondary,
+                            modifier = Modifier.clickable { openEdit(field, value) }
+                        )
+                        if (index < presentFields.lastIndex) {
+                            Text("|", color = borderDark, fontSize = 10.sp)
+                        }
+                    }
                     
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
@@ -304,7 +551,10 @@ fun CullingScreen(
                         fontFamily = FontFamily.Monospace,
                         fontSize = 9.sp,
                         color = accentAmber,
-                        modifier = Modifier.clickable { openEdit("captureDate", meta.captureDate) }.padding(horizontal = 4.dp, vertical = 2.dp).border(1.dp, borderDark).padding(horizontal = 4.dp, vertical = 2.dp)
+                        modifier = Modifier
+                            .clickable { openEdit("fNumber", meta.fNumber) }
+                            .border(1.dp, borderDark)
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
                 
@@ -327,26 +577,26 @@ fun CullingScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Pick / Reject Flags
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     // Pick Flag
                     val isPicked = meta.pickStatus == PickStatus.PICKED
                     Box(
                         modifier = Modifier
-                            .background(if (isPicked) Color(0xFF2E7D32) else Color(0xFF1E1E1E), RoundedCornerShape(2.dp))
-                            .border(1.dp, if (isPicked) Color(0xFF4CAF50) else borderDark, RoundedCornerShape(2.dp))
+                            .background(if (isPicked) Color(0xFF2E7D32) else Color(0xFF1E1E1E), RoundedCornerShape(3.dp))
+                            .border(1.dp, if (isPicked) Color(0xFF4CAF50) else Color(0xFF48484A), RoundedCornerShape(3.dp))
                             .clickable {
                                 meta.pickStatus = if (isPicked) PickStatus.NONE else PickStatus.PICKED
                                 metaUpdateTrigger++
                                 XmpSidecarManager.scheduleSaveSidecar(currentItem.filePath, meta, currentItem.developParams)
                             }
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
                     ) {
                         Text(
                             text = "採用",
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isPicked) Color.White else textSecondary
+                            color = if (isPicked) Color.White else textPrimary
                         )
                     }
 
@@ -354,43 +604,43 @@ fun CullingScreen(
                     val isRejected = meta.pickStatus == PickStatus.REJECTED
                     Box(
                         modifier = Modifier
-                            .background(if (isRejected) Color(0xFFC62828) else Color(0xFF1E1E1E), RoundedCornerShape(2.dp))
-                            .border(1.dp, if (isRejected) Color(0xFFEF5350) else borderDark, RoundedCornerShape(2.dp))
+                            .background(if (isRejected) Color(0xFFC62828) else Color(0xFF1E1E1E), RoundedCornerShape(3.dp))
+                            .border(1.dp, if (isRejected) Color(0xFFEF5350) else Color(0xFF48484A), RoundedCornerShape(3.dp))
                             .clickable {
                                 meta.pickStatus = if (isRejected) PickStatus.NONE else PickStatus.REJECTED
                                 metaUpdateTrigger++
                                 XmpSidecarManager.scheduleSaveSidecar(currentItem.filePath, meta, currentItem.developParams)
                             }
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
                     ) {
                         Text(
                             text = "不採用",
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isRejected) Color.White else textSecondary
+                            color = if (isRejected) Color.White else textPrimary
                         )
                     }
                 }
 
                 // 1-5 Star Rating Controls
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     for (star in 1..5) {
                         val isSelected = star <= meta.rating
                         Box(
                             modifier = Modifier
-                                .size(28.dp)
-                                .background(if (isSelected) Color(0xFF2A2210) else Color(0xFF1E1E1E), RoundedCornerShape(2.dp))
-                                .border(1.dp, if (isSelected) accentAmber else borderDark, RoundedCornerShape(2.dp))
-                                .clickable {
-                                    meta.rating = if (meta.rating == star) 0 else star
-                                    metaUpdateTrigger++
-                                    XmpSidecarManager.scheduleSaveSidecar(currentItem.filePath, meta, currentItem.developParams)
-                                },
+                                .size(34.dp)
+                                .background(if (isSelected) Color(0xFF332714) else Color(0xFF1B1D22), RoundedCornerShape(3.dp))
+                                .border(1.dp, if (isSelected) accentAmber else Color(0xFF48484A), RoundedCornerShape(3.dp))
+                            .clickable {
+                                meta.rating = if (meta.rating == star) 0 else star
+                                metaUpdateTrigger++
+                                XmpSidecarManager.scheduleSaveSidecar(currentItem.filePath, meta, currentItem.developParams)
+                            },
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "$star",
+                                text = "★$star",
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
@@ -413,7 +663,7 @@ fun CullingScreen(
                         val isSelected = meta.colorLabel == labelEnum
                         Box(
                             modifier = Modifier
-                                .size(18.dp)
+                                .size(22.dp)
                                 .background(clr, CircleShape)
                                 .border(
                                     if (isSelected) 2.dp else 1.dp,

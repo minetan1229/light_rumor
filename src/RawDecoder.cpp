@@ -148,6 +148,7 @@ bool RawDecoder::extractTile(int32_t tileX, int32_t tileY,
 
     int32_t paddedW = paddedX1 - paddedX0;
     int32_t paddedH = paddedY1 - paddedY0;
+    if (paddedW <= 0 || paddedH <= 0) return false;
 
     outPaddedRect.x = paddedX0;
     outPaddedRect.y = paddedY0;

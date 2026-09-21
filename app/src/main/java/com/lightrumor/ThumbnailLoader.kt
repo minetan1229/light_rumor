@@ -31,6 +31,8 @@ data class CullingItemMetadata(
     var width: Int = 0,
     var height: Int = 0,
     var cameraModel: String = "",
+    var cameraMake: String = "",
+    var lensModel: String = "",
     var exposureTime: String = "",     // e.g. "1/250s"
     var fNumber: String = "",          // e.g. "f/2.8"
     var isoSpeed: String = "",         // e.g. "ISO 100"
@@ -63,7 +65,16 @@ object ThumbnailLoader {
         targetHeight: Int = 1440
     ): Bitmap? = withContext(Dispatchers.IO) {
         try {
-            // 1. If it's a RAW file with a direct path, attempt native embedded thumbnail extraction (<10ms)
+            // 1. Android 10+ (API 29+) System Native Fast Thumbnail API (<5ms)
+            if (context != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && item.uri.scheme == "content") {
+                try {
+                    val size = android.util.Size(targetWidth.coerceAtMost(1080), targetHeight.coerceAtMost(1080))
+                    val nativeThumb = context.contentResolver.loadThumbnail(item.uri, size, null)
+                    if (nativeThumb != null) return@withContext nativeThumb
+                } catch (_: Throwable) {}
+            }
+
+            // 2. If it's a RAW file with a direct path, attempt native embedded thumbnail extraction (<10ms)
             if (item.filePath.isNotEmpty() && isRawFile(item.filePath)) {
                 val thumbBytes = LightRumorNativeEngine.extractThumbnailBytes(item.filePath)
                 if (thumbBytes != null && thumbBytes.isNotEmpty()) {
@@ -72,12 +83,11 @@ object ThumbnailLoader {
                 }
             }
 
-            // 2. Load via ContentResolver or File InputStream
+            // 3. Load via ContentResolver or File InputStream
             val inputStream = openInputStream(context, item.uri, item.filePath)
             if (inputStream != null) {
                 inputStream.use { stream ->
                     val bytes = stream.readBytes()
-                    // If RAW, fast check if bytes contain embedded thumbnail
                     val bmp = decodeSampledBitmapFromByteArray(bytes, targetWidth, targetHeight)
                     if (bmp != null) {
                         return@withContext fixOrientationIfNeeded(bytes, bmp)
@@ -85,8 +95,7 @@ object ThumbnailLoader {
                 }
             }
 
-            // 3. Fallback: generate neutral placeholder bitmap
-            Bitmap.createBitmap(targetWidth.coerceAtMost(800), targetHeight.coerceAtMost(600), Bitmap.Config.ARGB_8888)
+            null
         } catch (e: Throwable) {
             e.printStackTrace()
             null
@@ -110,7 +119,11 @@ object ThumbnailLoader {
                     if (exif != null) {
                         val make = exif.getAttribute(ExifInterface.TAG_MAKE) ?: ""
                         val model = exif.getAttribute(ExifInterface.TAG_MODEL) ?: ""
+                        meta.cameraMake = make
                         meta.cameraModel = if (model.startsWith(make, ignoreCase = true)) model else "$make $model".trim()
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                            meta.lensModel = exif.getAttribute(ExifInterface.TAG_LENS_MODEL) ?: ""
+                        }
                         
                         val expTime = exif.getAttributeDouble(ExifInterface.TAG_EXPOSURE_TIME, 0.0)
                         meta.exposureTime = if (expTime > 0) {

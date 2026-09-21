@@ -239,8 +239,10 @@ bool ColorCheckerCalibration::samplePatches(const std::vector<FloatRGBA>& frame,
             float cy = (topY * (1.0f - v) + botY * v) * height;
 
             // Sample 50% central window of patch
-            float patchW = (width / 6.0f) * 0.25f;
-            float patchH = (height / 4.0f) * 0.25f;
+            float chartW = (corners.topRight.x - corners.topLeft.x) * width;
+            float chartH = (corners.bottomLeft.y - corners.topLeft.y) * height;
+            float patchW = (chartW / 6.0f) * 0.25f;
+            float patchH = (chartH / 4.0f) * 0.25f;
             int rW = std::max(1, static_cast<int>(patchW * 0.5f));
             int rH = std::max(1, static_cast<int>(patchH * 0.5f));
 

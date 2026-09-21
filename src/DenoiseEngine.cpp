@@ -288,8 +288,11 @@ bool DenoiseEngine::processTile(const std::vector<FloatRGBA>& inPaddedTile,
                                 std::vector<FloatRGBA>& outValidTile,
                                 int32_t padLeft,
                                 int32_t padTop) {
-    outValidTile.resize(static_cast<size_t>(validW) * validH);
+    if (validW <= 0 || validH <= 0 || paddedW <= 0 || paddedH <= 0) return false;
     size_t totalPadded = static_cast<size_t>(paddedW) * paddedH;
+    if (inPaddedTile.size() < totalPadded) return false;
+
+    outValidTile.resize(static_cast<size_t>(validW) * validH);
 
     int32_t actualPadX = (padLeft >= 0) ? padLeft : ((paddedW > validW) ? padding : 0);
     int32_t actualPadY = (padTop >= 0) ? padTop : ((paddedH > validH) ? padding : 0);

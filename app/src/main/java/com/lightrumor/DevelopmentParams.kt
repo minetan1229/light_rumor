@@ -104,6 +104,7 @@ data class DevelopmentParams(
     var dehaze: Float = 0.0f,
     var clarity: Float = 0.0f,
     var texture: Float = 0.0f,
+    var colorProfile: String = "cinetone",
     var isMonochrome: Boolean = false,
     var hslBands: Array<HSLBandAdjust> = Array(8) { HSLBandAdjust() },
     var monochromeWeights: FloatArray = floatArrayOf(0.18f, 0.24f, 0.22f, 0.16f, 0.08f, 0.06f, 0.03f, 0.03f),
@@ -131,12 +132,80 @@ data class DevelopmentParams(
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
         other as DevelopmentParams
+
+        if (kelvin != other.kelvin) return false
+        if (tint != other.tint) return false
+        if (shadowTintR != other.shadowTintR) return false
+        if (shadowTintG != other.shadowTintG) return false
+        if (shadowTintB != other.shadowTintB) return false
+        if (exposureEV != other.exposureEV) return false
+        if (contrast != other.contrast) return false
+        if (highlights != other.highlights) return false
+        if (shadows != other.shadows) return false
+        if (whites != other.whites) return false
+        if (blacks != other.blacks) return false
+        if (vibrance != other.vibrance) return false
+        if (saturation != other.saturation) return false
+        if (dehaze != other.dehaze) return false
+        if (clarity != other.clarity) return false
+        if (texture != other.texture) return false
+        if (colorProfile != other.colorProfile) return false
+        if (isMonochrome != other.isMonochrome) return false
+        if (!hslBands.contentEquals(other.hslBands)) return false
         if (!monochromeWeights.contentEquals(other.monochromeWeights)) return false
+        if (luminanceNR != other.luminanceNR) return false
+        if (luminanceNRDetail != other.luminanceNRDetail) return false
+        if (luminanceNRContrast != other.luminanceNRContrast) return false
+        if (chromaNR != other.chromaNR) return false
+        if (chromaNRDetail != other.chromaNRDetail) return false
+        if (chromaNRSmoothness != other.chromaNRSmoothness) return false
+        if (sharpeningAmount != other.sharpeningAmount) return false
+        if (sharpeningRadius != other.sharpeningRadius) return false
+        if (sharpeningDetail != other.sharpeningDetail) return false
+        if (sharpeningMasking != other.sharpeningMasking) return false
+        if (sharpeningPreviewMask != other.sharpeningPreviewMask) return false
+        if (primaryRed != other.primaryRed) return false
+        if (primaryGreen != other.primaryGreen) return false
+        if (primaryBlue != other.primaryBlue) return false
+        if (splitToning != other.splitToning) return false
+        if (lensCorrection != other.lensCorrection) return false
+        if (geometry != other.geometry) return false
+        if (outputColorSpace != other.outputColorSpace) return false
+        if (enableDithering != other.enableDithering) return false
+
         return true
     }
 
     override fun hashCode(): Int {
-        return monochromeWeights.contentHashCode()
+        var result = kelvin.hashCode()
+        result = 31 * result + tint.hashCode()
+        result = 31 * result + exposureEV.hashCode()
+        result = 31 * result + contrast.hashCode()
+        result = 31 * result + highlights.hashCode()
+        result = 31 * result + shadows.hashCode()
+        result = 31 * result + whites.hashCode()
+        result = 31 * result + blacks.hashCode()
+        result = 31 * result + vibrance.hashCode()
+        result = 31 * result + saturation.hashCode()
+        result = 31 * result + dehaze.hashCode()
+        result = 31 * result + clarity.hashCode()
+        result = 31 * result + texture.hashCode()
+        result = 31 * result + colorProfile.hashCode()
+        result = 31 * result + isMonochrome.hashCode()
+        result = 31 * result + hslBands.contentHashCode()
+        result = 31 * result + monochromeWeights.contentHashCode()
+        result = 31 * result + luminanceNR.hashCode()
+        result = 31 * result + chromaNR.hashCode()
+        result = 31 * result + sharpeningAmount.hashCode()
+        result = 31 * result + primaryRed.hashCode()
+        result = 31 * result + primaryGreen.hashCode()
+        result = 31 * result + primaryBlue.hashCode()
+        result = 31 * result + splitToning.hashCode()
+        result = 31 * result + lensCorrection.hashCode()
+        result = 31 * result + geometry.hashCode()
+        result = 31 * result + outputColorSpace.hashCode()
+        result = 31 * result + enableDithering.hashCode()
+        return result
     }
 
     fun deepCopy(): DevelopmentParams = copy(
@@ -329,6 +398,7 @@ data class BatchSyncOptions(
             dst.texture = src.texture
         }
         if (syncColorMixer) {
+            dst.colorProfile = src.colorProfile
             dst.isMonochrome = src.isMonochrome
             dst.hslBands = src.hslBands.map { it.copy() }.toTypedArray()
             dst.monochromeWeights = src.monochromeWeights.clone()

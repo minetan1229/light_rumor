@@ -35,17 +35,17 @@ import com.lightrumor.*
 fun DevelopStudioScreen(
     photoItem: PhotoItem,
     cacheManager: CullingCacheManager,
-    onBack: () -> Unit
+    onBack: (DevelopmentParams) -> Unit
 ) {
     var isDarkTheme by remember { mutableStateOf(true) }
-    var devParams by remember { mutableStateOf(DevelopmentParams()) }
+    var devParams by remember(photoItem.uri) { mutableStateOf(photoItem.developParams.deepCopy()) }
     var hoverPreviewParams by remember { mutableStateOf<DevelopmentParams?>(null) }
     var compareMode by remember { mutableStateOf(CompareMode.Off) }
     var waveformSize by remember { mutableStateOf(WaveformSize.NORMAL) }
 
     // Phase 5 State
     var studioMode by remember { mutableStateOf(StudioMode.Develop) }
-    val historyManager = remember { HistoryManager(devParams) }
+    val historyManager = remember(photoItem.uri) { HistoryManager(devParams) }
     var maskLayers by remember { mutableStateOf<List<MaskLayerState>>(emptyList()) }
     var selectedMaskIndex by remember { mutableStateOf(0) }
 
@@ -88,9 +88,10 @@ fun DevelopStudioScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(38.dp)
+                        .height(44.dp)
                         .background(colors.surface)
-                        .padding(horizontal = 10.dp),
+                        .border(1.dp, colors.borderStrong)
+                        .padding(horizontal = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -100,17 +101,18 @@ fun DevelopStudioScreen(
                             text = "< 選別",
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             color = colors.accentAmber,
                             modifier = Modifier
-                                .clickable { onBack() }
-                                .padding(end = 12.dp)
+                                .clickable { onBack(devParams) }
+                                .padding(end = 12.dp, top = 4.dp, bottom = 4.dp)
                         )
 
                         Text(
                             text = photoItem.fileName,
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp,
                             color = colors.textPrimary,
                             maxLines = 1
                         )
@@ -121,12 +123,23 @@ fun DevelopStudioScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = "ISO 400  1/250s  f/2.8",
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp,
-                            color = colors.textSecondary
+                        // Camera EXIF Readout
+                        val meta = photoItem.metadata
+                        val exifParts = listOfNotNull(
+                            meta.cameraModel.takeIf { it.isNotBlank() },
+                            meta.isoSpeed.takeIf { it.isNotBlank() },
+                            meta.exposureTime.takeIf { it.isNotBlank() },
+                            meta.fNumber.takeIf { it.isNotBlank() },
+                            meta.focalLength.takeIf { it.isNotBlank() }
                         )
+                        if (exifParts.isNotEmpty()) {
+                            Text(
+                                text = exifParts.joinToString(" "),
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.sp,
+                                color = colors.textSecondary
+                            )
+                        }
 
                         // Studio Mode Selector Chips
                         Row(
@@ -137,25 +150,25 @@ fun DevelopStudioScreen(
                                 val isSel = (studioMode == mode)
                                 val modeLabel = when (mode) {
                                     StudioMode.Develop -> "現像"
-                                    StudioMode.Masks -> "マスク (${maskLayers.size})"
+                                    StudioMode.Masks -> "マスク(${maskLayers.size})"
                                     StudioMode.Presets -> "プリセット"
                                     StudioMode.Reel -> "リール"
                                 }
                                 Box(
                                     modifier = Modifier
-                                        .background(if (isSel) colors.surfacePressed else Color.Transparent, RoundedCornerShape(2.dp))
-                                        .border(1.dp, if (isSel) colors.accentAmber else colors.borderSubtle, RoundedCornerShape(2.dp))
+                                        .background(if (isSel) colors.accentAmber.copy(alpha = 0.2f) else colors.surfaceElevated, RoundedCornerShape(3.dp))
+                                        .border(1.dp, if (isSel) colors.accentAmber else colors.borderSubtle, RoundedCornerShape(3.dp))
                                         .clickable {
                                             hapticManager.performDialTick()
                                             studioMode = mode
                                         }
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
                                 ) {
                                     Text(
                                         text = modeLabel,
                                         fontFamily = FontFamily.Monospace,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 9.sp,
+                                        fontSize = 11.sp,
                                         color = if (isSel) colors.accentAmber else colors.textSecondary
                                     )
                                 }
@@ -165,20 +178,20 @@ fun DevelopStudioScreen(
                         // Theme Toggle: Obsidian / Arctic
                         Box(
                             modifier = Modifier
-                                .background(colors.surfacePressed, RoundedCornerShape(2.dp))
-                                .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
+                                .background(colors.surfaceElevated, RoundedCornerShape(3.dp))
+                                .border(1.dp, colors.borderSubtle, RoundedCornerShape(3.dp))
                                 .clickable {
                                     hapticManager.performDialTick()
                                     isDarkTheme = !isDarkTheme
                                 }
-                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = if (isDarkTheme) "OBSIDIAN" else "ARCTIC",
                                 fontFamily = FontFamily.Monospace,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 9.sp,
+                                fontSize = 10.sp,
                                 color = colors.accentAmber
                             )
                         }
@@ -197,21 +210,27 @@ fun DevelopStudioScreen(
                     // 4-Way Before/After Photographic Display
                     BeforeAfterOverlay(
                         originalBitmap = originalBitmap,
-                        developedBitmap = originalBitmap, // Reactively modified in real time
+                        developedBitmap = originalBitmap, // Reactively modified in real time via ColorFilter
                         compareMode = compareMode,
                         onCompareModeChange = { compareMode = it },
                         geometry = devParams.geometry,
+                        params = activeParams,
+                        maskLayers = maskLayers,
+                        selectedMaskIndex = selectedMaskIndex,
+                        isMaskMode = (studioMode == StudioMode.Masks),
+                        onMaskLayersChange = { maskLayers = it },
                         modifier = Modifier.fillMaxSize()
                     )
 
-                    // Real-Time RGB Waveform Monitor HUD (Top-Right or Left-Overlay)
+                    // Real-Time RGB Waveform Monitor HUD (Top-End when SideBySide to prevent covering left photo)
+                    val effectiveWaveformAlignment = if (compareMode == CompareMode.SideBySide) Alignment.TopEnd else Alignment.TopStart
                     ColorWaveformView(
                         previewBitmap = originalBitmap,
                         params = activeParams,
-                        waveformSize = waveformSize,
+                        waveformSize = if (compareMode == CompareMode.SideBySide && waveformSize == WaveformSize.EXPANDED) WaveformSize.NORMAL else waveformSize,
                         onSizeChange = { waveformSize = it },
                         modifier = Modifier
-                            .align(Alignment.TopStart)
+                            .align(effectiveWaveformAlignment)
                             .padding(10.dp)
                             .then(
                                 when (waveformSize) {
@@ -235,10 +254,11 @@ fun DevelopStudioScreen(
                         StudioMode.Develop -> {
                             ThumbZoneBottomBar(
                                 params = devParams,
-                                onParamsChange = {
-                                    devParams = it
-                                    historyManager.recordState("現像調整", it, maskLayers)
+                                onParamsChange = { devParams = it },
+                                onParamsChangeFinished = {
+                                    historyManager.recordState("現像調整", devParams, maskLayers)
                                 },
+                                previewBitmap = originalBitmap,
                                 hapticManager = hapticManager,
                                 onOpenPrecisionDial = { label, valInit, range, unit, updateCb ->
                                     dialState = DialConfig(label, valInit, range, unit, updateCb)

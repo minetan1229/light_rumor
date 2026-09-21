@@ -39,8 +39,14 @@ class CullingCacheManager(
     /**
      * Instantly returns cached Bitmap if present in memory (0ms access).
      */
-    fun getFromMemory(key: String): Bitmap? {
-        return memoryCache.get(key)
+    fun getFromMemory(keyOrRaw: String): Bitmap? {
+        val direct = memoryCache.get(keyOrRaw)
+        if (direct != null) return direct
+        return memoryCache.get(md5(keyOrRaw))
+    }
+
+    fun getFromMemory(item: PhotoItem): Bitmap? {
+        return memoryCache.get(getCacheKey(item))
     }
 
     /**
@@ -114,7 +120,7 @@ class CullingCacheManager(
     /**
      * Clears all memory and disk caches.
      */
-    fun clearCache() {
+    suspend fun clearCache() = kotlinx.coroutines.withContext(Dispatchers.IO) {
         memoryCache.evictAll()
         diskCacheDir?.listFiles()?.forEach { it.delete() }
     }

@@ -13,8 +13,8 @@ android {
         applicationId = "com.lightrumor"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 5
+        versionName = "1.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -59,12 +59,16 @@ android {
     externalNativeBuild {
         cmake {
             path = file("../CMakeLists.txt")
+            version = "3.22.1"
         }
     }
 
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        jniLibs {
+            pickFirsts += "**/libomp.so"
         }
     }
 }

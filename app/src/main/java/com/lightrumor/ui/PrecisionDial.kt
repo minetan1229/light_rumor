@@ -45,6 +45,10 @@ fun PrecisionDial(
     val colors = LightRumorTheme.colors
     var accumulatedAngle by remember { mutableFloatStateOf(0f) }
     var lastAngle by remember { mutableFloatStateOf(0f) }
+    var fractionalAngle by remember { mutableFloatStateOf(0f) }
+
+    val currentValue by rememberUpdatedState(value)
+    val currentOnValueChange by rememberUpdatedState(onValueChange)
 
     val animatedValue by animateFloatAsState(
         targetValue = value,
@@ -102,6 +106,7 @@ fun PrecisionDial(
                             onDragStart = { offset ->
                                 val center = Offset(110.dp.toPx(), 110.dp.toPx())
                                 lastAngle = atan2(offset.y - center.y, offset.x - center.x)
+                                fractionalAngle = 0f
                             },
                             onDrag = { change, _ ->
                                 change.consume()
@@ -113,15 +118,16 @@ fun PrecisionDial(
                                 lastAngle = currentAngle
 
                                 accumulatedAngle += deltaAngle
+                                fractionalAngle += deltaAngle
 
-                                // 1 degree (approx 0.017 rad) = 1 fineStep (0.01)
                                 val radPerStep = 0.035f
-                                val steps = (deltaAngle / radPerStep).toInt()
+                                val steps = (fractionalAngle / radPerStep).toInt()
                                 if (steps != 0) {
-                                    val nextVal = (value + steps * fineStep).coerceIn(range.start, range.endInclusive)
-                                    if (nextVal != value) {
-                                        hapticManager?.evaluateMovement(value, nextVal, range.start, range.endInclusive, zeroSnapTolerance = 0.01f)
-                                        onValueChange(nextVal)
+                                    fractionalAngle -= steps * radPerStep
+                                    val nextVal = (currentValue + steps * fineStep).coerceIn(range.start, range.endInclusive)
+                                    if (nextVal != currentValue) {
+                                        hapticManager?.evaluateMovement(currentValue, nextVal, range.start, range.endInclusive, zeroSnapTolerance = 0.01f)
+                                        currentOnValueChange(nextVal)
                                     }
                                 }
                             }
