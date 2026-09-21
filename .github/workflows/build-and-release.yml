@@ -29,9 +29,15 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Accept Android SDK Licenses & Set Environment
+      - name: Configure Android SDK, NDK and local.properties
         run: |
-          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          if [ -d "$ANDROID_SDK_ROOT/ndk" ]; then
+            NDK_DIR=$(ls -1d $ANDROID_SDK_ROOT/ndk/* | tail -n 1)
+            echo "ndk.dir=$NDK_DIR" >> local.properties
+            echo "Configured ndk.dir=$NDK_DIR"
+          fi
+          cat local.properties
           yes | sdkmanager --licenses || true
 
       - name: Setup Gradle
@@ -42,8 +48,24 @@ jobs:
 
       - name: Build APK with Gradle
         run: |
-          ./gradlew assembleDebug --stacktrace
-          ./gradlew assembleRelease --stacktrace || true
+          ./gradlew assembleDebug --stacktrace --no-daemon 2>&1 | tee build_log.txt
+        continue-on-error: true
+
+      - name: Verify APK and Capture Error Log if Failed
+        run: |
+          shopt -s globstar nullglob
+          apks=(**/build/outputs/apk/**/*.apk)
+          if [ ${#apks[@]} -eq 0 ]; then
+            echo "Build failed to generate APK. Uploading error log to ci-log branch..."
+            git checkout -B ci-log
+            cp build_log.txt build_error.txt
+            git config user.name "github-actions"
+            git config user.email "actions@github.com"
+            git add build_error.txt
+            git commit -m "ci: capture build error log"
+            git push -f origin ci-log
+            exit 1
+          fi
 
       - name: Locate and Stage APK
         run: |
@@ -55,16 +77,8 @@ jobs:
             cp "${apks[0]}" dist/light_rumor.apk
             ls -lh dist/light_rumor.apk
           else
-            echo "Searching all .apk files in workspace..."
-            all_apks=(**/*.apk)
-            if [ ${#all_apks[@]} -gt 0 ]; then
-              echo "Found APK: ${all_apks[0]}"
-              cp "${all_apks[0]}" dist/light_rumor.apk
-              ls -lh dist/light_rumor.apk
-            else
-              echo "Error: No APK file found!"
-              exit 1
-            fi
+            echo "Error: No APK file found!"
+            exit 1
           fi
 
       - name: Upload APK as Workflow Artifact
