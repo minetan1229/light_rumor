@@ -50,8 +50,16 @@ jboolean Impl_nativeProcessRaw(
     jboolean jEnableDithering,
     jobject jCallback) {
 
+    if (!jInputPath || !jOutputPath) return JNI_FALSE;
+
     const char* inputChars = env->GetStringUTFChars(jInputPath, nullptr);
     const char* outputChars = env->GetStringUTFChars(jOutputPath, nullptr);
+    if (!inputChars || !outputChars) {
+        if (inputChars) env->ReleaseStringUTFChars(jInputPath, inputChars);
+        if (outputChars) env->ReleaseStringUTFChars(jOutputPath, outputChars);
+        return JNI_FALSE;
+    }
+
     std::string inputPath(inputChars);
     std::string outputPath(outputChars);
     env->ReleaseStringUTFChars(jInputPath, inputChars);
@@ -103,12 +111,19 @@ jboolean Impl_nativeProcessRaw(
         progressCb = [&](float pct, const std::string& status) {
             jstring jStatus = env->NewStringUTF(status.c_str());
             env->CallVoidMethod(jCallback, onProgressMethod, pct, jStatus);
+            if (env->ExceptionCheck()) {
+                env->ExceptionClear();
+            }
             env->DeleteLocalRef(jStatus);
         };
     }
 
     light_rumor::ExportPipeline pipeline;
     bool success = pipeline.processImage(decoder, params, options, outputPath, progressCb);
+
+    if (callbackClass) {
+        env->DeleteLocalRef(callbackClass);
+    }
     return success ? JNI_TRUE : JNI_FALSE;
 }
 
@@ -148,9 +163,9 @@ jintArray Impl_nativeComputeWaveform(
     jbyte* bytes = env->GetByteArrayElements(jRgbaBytes, nullptr);
     if (!bytes) return nullptr;
 
-    static light_rumor::WaveformEngine s_engine;
+    light_rumor::WaveformEngine engine;
     light_rumor::WaveformData outData;
-    s_engine.computeFromRGBA8(
+    engine.computeFromRGBA8(
         reinterpret_cast<const uint8_t*>(bytes),
         jWidth, jHeight,
         static_cast<light_rumor::WaveformMode>(jMode),
@@ -261,6 +276,9 @@ jintArray Impl_nativeComputeFieldScope(
     jfloat jPeakingThreshold) {
     if (!jPixels || jWidth <= 0 || jHeight <= 0) return nullptr;
 
+    jsize len = env->GetArrayLength(jPixels);
+    if (len < static_cast<jsize>(jWidth) * jHeight) return nullptr;
+
     jint* pData = env->GetIntArrayElements(jPixels, nullptr);
     if (!pData) return nullptr;
 
@@ -316,6 +334,9 @@ jintArray Impl_nativeApplySoftProof(
     jboolean jShowGamutWarning,
     jint jGamutWarningColor) {
     if (!jPixels || jWidth <= 0 || jHeight <= 0) return nullptr;
+
+    jsize len = env->GetArrayLength(jPixels);
+    if (len < static_cast<jsize>(jWidth) * jHeight) return nullptr;
 
     const char* pChars = jProfilePath ? env->GetStringUTFChars(jProfilePath, nullptr) : "";
     std::string profilePath = pChars ? pChars : "";
@@ -376,17 +397,28 @@ jboolean Impl_nativeProcessRawMultiRecipe(
     jfloat jSharpeningAmount,
     jboolean jEnableWatermark,
     jstring jWatermarkText) {
+    if (!jInputPath || !jOutputPath) return JNI_FALSE;
+
     const char* inChars = env->GetStringUTFChars(jInputPath, nullptr);
+    if (!inChars) return JNI_FALSE;
+
     const char* outChars = env->GetStringUTFChars(jOutputPath, nullptr);
-    const char* wmChars = jWatermarkText ? env->GetStringUTFChars(jWatermarkText, nullptr) : "";
+    if (!outChars) {
+        env->ReleaseStringUTFChars(jInputPath, inChars);
+        return JNI_FALSE;
+    }
+
+    const char* wmChars = jWatermarkText ? env->GetStringUTFChars(jWatermarkText, nullptr) : nullptr;
 
     std::string inputPath = inChars;
     std::string outputPath = outChars;
-    std::string watermarkText = wmChars ? wmChars : "";
+    std::string watermarkText = (wmChars && jWatermarkText) ? wmChars : "";
 
     env->ReleaseStringUTFChars(jInputPath, inChars);
     env->ReleaseStringUTFChars(jOutputPath, outChars);
-    if (jWatermarkText && wmChars) env->ReleaseStringUTFChars(jWatermarkText, wmChars);
+    if (jWatermarkText && wmChars) {
+        env->ReleaseStringUTFChars(jWatermarkText, wmChars);
+    }
 
     light_rumor::RawDecoder decoder;
     if (!decoder.openFile(inputPath)) return JNI_FALSE;
@@ -400,6 +432,10 @@ jboolean Impl_nativeProcessRawMultiRecipe(
     light_rumor::ExportOptions options;
     options.format = static_cast<light_rumor::ExportFormat>(jFormat);
     options.jpegQuality = jQuality;
+    options.chromaSubsampling = light_rumor::ChromaSubsampling::YUV420;
+    options.embedExif = true;
+    options.tileSize = 2048;
+    options.tilePadding = 16;
 
     light_rumor::ExportPipeline pipeline;
     return pipeline.processImage(decoder, params, options, outputPath) ? JNI_TRUE : JNI_FALSE;

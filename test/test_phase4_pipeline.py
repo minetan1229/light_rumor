@@ -48,9 +48,17 @@ def run_native_phase4_test():
     print("▶ [Test 1/3] Running Native Phase 4 Verification Binary")
     print("=======================================================")
 
-    exe_path = os.path.join(BASE_DIR, "build", "apex_phase4_test.exe")
-    if not os.path.exists(exe_path):
-        print(f"[-] ERROR: Binary not found at {exe_path}")
+    candidates = [
+        os.path.join(BASE_DIR, "build", "light_rumor_phase4_test.exe"),
+        os.path.join(BASE_DIR, "build", "Release", "light_rumor_phase4_test.exe"),
+        os.path.join(BASE_DIR, "build", "Debug", "light_rumor_phase4_test.exe"),
+        os.path.join(BASE_DIR, "build", "apex_phase4_test.exe"),
+        os.path.join(BASE_DIR, "build", "Release", "apex_phase4_test.exe"),
+        os.path.join(BASE_DIR, "build", "Debug", "apex_phase4_test.exe"),
+    ]
+    exe_path = next((p for p in candidates if os.path.exists(p)), None)
+    if not exe_path:
+        print(f"[-] ERROR: Binary not found in candidates: {candidates}")
         return False
 
     proc = subprocess.run([exe_path], capture_output=True, text=True, encoding='utf-8', errors='replace')

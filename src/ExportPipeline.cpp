@@ -90,7 +90,9 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
                                        int32_t validW, int32_t validH,
                                        int32_t padding,
                                        const DevelopmentParams& params,
-                                       std::vector<FloatRGBA>& outValidTile) {
+                                       std::vector<FloatRGBA>& outValidTile,
+                                       int32_t padLeft,
+                                       int32_t padTop) {
     outValidTile.resize(static_cast<size_t>(validW) * validH);
 
     // 1. Calculate White Balance multipliers (2,000K to 50,000K)
@@ -297,7 +299,7 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
 
     // Pass 2: Spatial Noise Reduction & Sharpening via DenoiseEngine
     static DenoiseEngine s_denoiseEngine;
-    s_denoiseEngine.processTile(workTile, paddedW, paddedH, validW, validH, padding, params, outValidTile);
+    s_denoiseEngine.processTile(workTile, paddedW, paddedH, validW, validH, padding, params, outValidTile, padLeft, padTop);
 }
 
 void ExportPipeline::quantizeTo8Bit(const std::vector<FloatRGBA>& linearTile,
@@ -437,7 +439,9 @@ bool ExportPipeline::processImage(RawDecoder& decoder,
             }
 
             // Execute tile pipeline (OOM-free 32-bit linear processing)
-            processTileLinear(inPaddedTile, paddedRect.width, paddedRect.height, validW, validH, padding, params, outValidTile);
+            int32_t padLeft = tileX - paddedRect.x;
+            int32_t padTop = tileY - paddedRect.y;
+            processTileLinear(inPaddedTile, paddedRect.width, paddedRect.height, validW, validH, padding, params, outValidTile, padLeft, padTop);
 
             // Quantize with TPDF dithering and color space OETF
             if (is16Bit) {

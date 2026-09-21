@@ -28,12 +28,14 @@ import kotlinx.coroutines.withContext
  * Inspired by Sony Venice and DaVinci Resolve scopes.
  * Real-time 60fps tracking responding to exposure, white balance, and tone curve adjustments.
  */
+enum class WaveformSize { EXPANDED, NORMAL, MINIMIZED }
+
 @Composable
 fun ColorWaveformView(
     previewBitmap: Bitmap?,
     params: DevelopmentParams,
-    isExpanded: Boolean = false,
-    onToggleExpanded: () -> Unit = {},
+    waveformSize: WaveformSize = WaveformSize.NORMAL,
+    onSizeChange: (WaveformSize) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val colors = LightRumorTheme.colors
@@ -87,6 +89,29 @@ fun ColorWaveformView(
         }
     }
 
+    // Minimized mode: just a small icon button
+    if (waveformSize == WaveformSize.MINIMIZED) {
+        Box(
+            modifier = modifier
+                .size(28.dp)
+                .background(colors.surface.copy(alpha = 0.85f), RoundedCornerShape(4.dp))
+                .border(1.dp, colors.borderSubtle, RoundedCornerShape(4.dp))
+                .clickable { onSizeChange(WaveformSize.NORMAL) },
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "W",
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+                color = colors.accentAmber
+            )
+        }
+        return
+    }
+
+    val isExpanded = waveformSize == WaveformSize.EXPANDED
+
     Box(
         modifier = modifier
             .background(colors.surface.copy(alpha = 0.92f), RoundedCornerShape(4.dp))
@@ -121,10 +146,19 @@ fun ColorWaveformView(
                     ScopeModeButton("OVR", active = mode == 0, onClick = { mode = 0 })
                     ScopeModeButton("PRD", active = mode == 1, onClick = { mode = 1 })
                     ScopeModeButton("HST", active = mode == 2, onClick = { mode = 2 })
+                    // Expand: NORMAL -> EXPANDED
                     ScopeModeButton(
-                        text = if (isExpanded) "[-] " else "[+]",
+                        text = if (isExpanded) "[-]" else "[+]",
                         active = false,
-                        onClick = onToggleExpanded
+                        onClick = {
+                            onSizeChange(if (isExpanded) WaveformSize.NORMAL else WaveformSize.EXPANDED)
+                        }
+                    )
+                    // Minimize: -> MINIMIZED
+                    ScopeModeButton(
+                        text = "[x]",
+                        active = false,
+                        onClick = { onSizeChange(WaveformSize.MINIMIZED) }
                     )
                 }
             }
@@ -137,7 +171,9 @@ fun ColorWaveformView(
                     .fillMaxWidth()
                     .height(if (isExpanded) 180.dp else 88.dp)
                     .background(Color(0xFF0C0A0A), RoundedCornerShape(2.dp))
-                    .clickable { onToggleExpanded() }
+                    .clickable {
+                        onSizeChange(if (isExpanded) WaveformSize.NORMAL else WaveformSize.EXPANDED)
+                    }
             ) {
                 waveformBitmap?.let { bmp ->
                     Image(

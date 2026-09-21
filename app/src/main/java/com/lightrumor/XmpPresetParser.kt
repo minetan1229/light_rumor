@@ -26,7 +26,7 @@ data class XmpPreset(
  */
 object XmpPresetParser {
 
-    val CATEGORIES = listOf("ALL", "LANDSCAPE", "PORTRAIT", "FILM", "MONOCHROME", "URBAN")
+    val CATEGORIES = listOf("すべて", "風景", "ポートレート", "フィルム", "モノクロ", "アーバン")
 
     /**
      * Linearly blends development parameters between base state and preset state by amount [0.0, 2.0].

@@ -64,6 +64,29 @@ object XmpSidecarManager {
                     else -> PickStatus.NONE
                 }
             }
+            
+            // 3.5 Parse Dates
+            val dateMatch = Regex("<(xmp:CreateDate|photoshop:DateCreated|exif:DateTimeOriginal)>([^<]+)</(xmp:CreateDate|photoshop:DateCreated|exif:DateTimeOriginal)>").find(xml)
+            if (dateMatch != null) {
+                meta.captureDate = dateMatch.groupValues[2]
+            }
+
+            // Parse EXIF info if present
+            val modelMatch = Regex("<tiff:Model>([^<]+)</tiff:Model>").find(xml)
+            if (modelMatch != null) meta.cameraModel = modelMatch.groupValues[1]
+
+            val fNumMatch = Regex("<exif:FNumber>([^<]+)</exif:FNumber>").find(xml)
+            if (fNumMatch != null) meta.fNumber = fNumMatch.groupValues[1]
+
+            val expTimeMatch = Regex("<exif:ExposureTime>([^<]+)</exif:ExposureTime>").find(xml)
+            if (expTimeMatch != null) meta.exposureTime = expTimeMatch.groupValues[1]
+
+            val isoMatch = Regex("<exif:ISOSpeedRatings>([^<]+)</exif:ISOSpeedRatings>").find(xml) ?: Regex("<exif:ISOSpeedRatings>\\s*<rdf:Seq>\\s*<rdf:li>([^<]+)</rdf:li>").find(xml)
+            if (isoMatch != null) meta.isoSpeed = isoMatch.groupValues[1]
+
+            val focalMatch = Regex("<exif:FocalLength>([^<]+)</exif:FocalLength>").find(xml)
+            if (focalMatch != null) meta.focalLength = focalMatch.groupValues[1]
+
 
             // 4. Parse Develop Parameters: e.g. crs:Exposure2012="+0.50"
             val expMatch = Regex("crs:Exposure2012=\"([+-]?\\d*\\.?\\d+)\"").find(xml)
@@ -93,14 +116,15 @@ object XmpSidecarManager {
         imageFilePath: String,
         meta: CullingItemMetadata,
         params: DevelopmentParams,
-        debounceMs: Long = 300L
+        debounceMs: Long = 300L,
+        modifiedFields: Set<String> = emptySet()
     ) {
         if (imageFilePath.isEmpty()) return
 
         debounceJobs[imageFilePath]?.cancel()
         debounceJobs[imageFilePath] = scope.launch {
             delay(debounceMs)
-            writeSidecarDirect(imageFilePath, meta, params)
+            writeSidecarDirect(imageFilePath, meta, params, modifiedFields)
         }
     }
 
@@ -110,7 +134,8 @@ object XmpSidecarManager {
     suspend fun writeSidecarDirect(
         imageFilePath: String,
         meta: CullingItemMetadata,
-        params: DevelopmentParams
+        params: DevelopmentParams,
+        modifiedFields: Set<String> = emptySet()
     ) = withContext(Dispatchers.IO) {
         try {
             val sidecar = getSidecarFile(imageFilePath)
@@ -128,12 +153,38 @@ object XmpSidecarManager {
                 append("    xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\"\n")
                 append("    xmlns:photoshop=\"http://ns.adobe.com/photoshop/1.0/\"\n")
                 append("    xmlns:crs=\"http://ns.adobe.com/camera-raw-settings/1.0/\"\n")
+                append("    xmlns:exif=\"http://ns.adobe.com/exif/1.0/\"\n")
+                append("    xmlns:tiff=\"http://ns.adobe.com/tiff/1.0/\"\n")
                 append("   xmp:Rating=\"${meta.rating}\"\n")
                 if (meta.colorLabel != ColorLabel.NONE) {
                     append("   xmp:Label=\"${meta.colorLabel.labelName}\"\n")
                 }
                 append("   photoshop:Urgency=\"$pickVal\"\n")
                 append("   crs:Pick=\"$pickVal\"\n")
+                
+                if (modifiedFields.contains("captureDate") && meta.captureDate.isNotEmpty()) {
+                    append("   xmp:CreateDate=\"${meta.captureDate}\"\n")
+                    append("   photoshop:DateCreated=\"${meta.captureDate}\"\n")
+                    append("   exif:DateTimeOriginal=\"${meta.captureDate}\"\n")
+                }
+                if (modifiedFields.contains("cameraModel") && meta.cameraModel.isNotEmpty()) {
+                    append("   tiff:Model=\"${meta.cameraModel}\"\n")
+                }
+                if (modifiedFields.contains("fNumber") && meta.fNumber.isNotEmpty()) {
+                    append("   exif:FNumber=\"${meta.fNumber.removePrefix("f/")}\"\n")
+                }
+                if (modifiedFields.contains("exposureTime") && meta.exposureTime.isNotEmpty()) {
+                    append("   exif:ExposureTime=\"${meta.exposureTime.removeSuffix("s")}\"\n")
+                }
+                if (modifiedFields.contains("isoSpeed") && meta.isoSpeed.isNotEmpty()) {
+                    val isoVal = meta.isoSpeed.replace(Regex("[^0-9]"), "")
+                    append("   exif:ISOSpeedRatings=\"$isoVal\"\n")
+                }
+                if (modifiedFields.contains("focalLength") && meta.focalLength.isNotEmpty()) {
+                    val focalVal = meta.focalLength.replace(Regex("[^0-9.]"), "")
+                    append("   exif:FocalLength=\"$focalVal\"\n")
+                }
+
                 append("   crs:Temperature=\"${params.kelvin.toInt()}\"\n")
                 append("   crs:Tint=\"${"%.1f".format(params.tint)}\"\n")
                 append("   crs:Exposure2012=\"${"%+.2f".format(params.exposureEV)}\"\n")

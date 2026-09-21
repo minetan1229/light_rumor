@@ -168,22 +168,41 @@ bool FocusStacker::stackMedian(const std::vector<std::vector<FloatRGBA>>& frames
 
     #pragma omp parallel for
     for (int64_t idx = 0; idx < static_cast<int64_t>(total); ++idx) {
-        std::vector<float> rVals(numFrames);
-        std::vector<float> gVals(numFrames);
-        std::vector<float> bVals(numFrames);
+        if (numFrames <= 128) {
+            float rVals[128];
+            float gVals[128];
+            float bVals[128];
 
-        for (size_t i = 0; i < numFrames; ++i) {
-            const auto& p = frames[i][idx];
-            rVals[i] = p.r;
-            gVals[i] = p.g;
-            bVals[i] = p.b;
+            for (size_t i = 0; i < numFrames; ++i) {
+                const auto& p = frames[i][idx];
+                rVals[i] = p.r;
+                gVals[i] = p.g;
+                bVals[i] = p.b;
+            }
+
+            std::nth_element(rVals, rVals + midIdx, rVals + numFrames);
+            std::nth_element(gVals, gVals + midIdx, gVals + numFrames);
+            std::nth_element(bVals, bVals + midIdx, bVals + numFrames);
+
+            outComposite[idx] = FloatRGBA(rVals[midIdx], gVals[midIdx], bVals[midIdx], 1.0f);
+        } else {
+            std::vector<float> rVals(numFrames);
+            std::vector<float> gVals(numFrames);
+            std::vector<float> bVals(numFrames);
+
+            for (size_t i = 0; i < numFrames; ++i) {
+                const auto& p = frames[i][idx];
+                rVals[i] = p.r;
+                gVals[i] = p.g;
+                bVals[i] = p.b;
+            }
+
+            std::nth_element(rVals.begin(), rVals.begin() + midIdx, rVals.end());
+            std::nth_element(gVals.begin(), gVals.begin() + midIdx, gVals.end());
+            std::nth_element(bVals.begin(), bVals.begin() + midIdx, bVals.end());
+
+            outComposite[idx] = FloatRGBA(rVals[midIdx], gVals[midIdx], bVals[midIdx], 1.0f);
         }
-
-        std::nth_element(rVals.begin(), rVals.begin() + midIdx, rVals.end());
-        std::nth_element(gVals.begin(), gVals.begin() + midIdx, gVals.end());
-        std::nth_element(bVals.begin(), bVals.begin() + midIdx, bVals.end());
-
-        outComposite[idx] = FloatRGBA(rVals[midIdx], gVals[midIdx], bVals[midIdx], 1.0f);
     }
 
     return true;

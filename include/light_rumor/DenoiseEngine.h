@@ -19,7 +19,9 @@ public:
                      int32_t validW, int32_t validH,
                      int32_t padding,
                      const DevelopmentParams& params,
-                     std::vector<FloatRGBA>& outValidTile);
+                     std::vector<FloatRGBA>& outValidTile,
+                     int32_t padLeft = -1,
+                     int32_t padTop = -1);
 
     // Standalone algorithms for testing and granular GPU/CPU dispatch
     static void applyLuminanceNR(const FloatRGBA* src, FloatRGBA* dst,

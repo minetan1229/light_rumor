@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -39,7 +41,7 @@ fun DevelopStudioScreen(
     var devParams by remember { mutableStateOf(DevelopmentParams()) }
     var hoverPreviewParams by remember { mutableStateOf<DevelopmentParams?>(null) }
     var compareMode by remember { mutableStateOf(CompareMode.Off) }
-    var isWaveformExpanded by remember { mutableStateOf(false) }
+    var waveformSize by remember { mutableStateOf(WaveformSize.NORMAL) }
 
     // Phase 5 State
     var studioMode by remember { mutableStateOf(StudioMode.Develop) }
@@ -76,6 +78,8 @@ fun DevelopStudioScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .background(colors.background)
+                .statusBarsPadding()
+                .navigationBarsPadding()
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // -------------------------------------------------------------
@@ -93,7 +97,7 @@ fun DevelopStudioScreen(
                     // Back & Photo Metadata
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "< CULL",
+                            text = "< 選別",
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.sp,
@@ -132,10 +136,10 @@ fun DevelopStudioScreen(
                             StudioMode.values().forEach { mode ->
                                 val isSel = (studioMode == mode)
                                 val modeLabel = when (mode) {
-                                    StudioMode.Develop -> "DEVELOP"
-                                    StudioMode.Masks -> "MASKS (${maskLayers.size})"
-                                    StudioMode.Presets -> "PRESETS"
-                                    StudioMode.Reel -> "REEL"
+                                    StudioMode.Develop -> "現像"
+                                    StudioMode.Masks -> "マスク (${maskLayers.size})"
+                                    StudioMode.Presets -> "プリセット"
+                                    StudioMode.Reel -> "リール"
                                 }
                                 Box(
                                     modifier = Modifier
@@ -196,6 +200,7 @@ fun DevelopStudioScreen(
                         developedBitmap = originalBitmap, // Reactively modified in real time
                         compareMode = compareMode,
                         onCompareModeChange = { compareMode = it },
+                        geometry = devParams.geometry,
                         modifier = Modifier.fillMaxSize()
                     )
 
@@ -203,12 +208,18 @@ fun DevelopStudioScreen(
                     ColorWaveformView(
                         previewBitmap = originalBitmap,
                         params = activeParams,
-                        isExpanded = isWaveformExpanded,
-                        onToggleExpanded = { isWaveformExpanded = !isWaveformExpanded },
+                        waveformSize = waveformSize,
+                        onSizeChange = { waveformSize = it },
                         modifier = Modifier
                             .align(Alignment.TopStart)
                             .padding(10.dp)
-                            .width(if (isWaveformExpanded) 340.dp else 180.dp)
+                            .then(
+                                when (waveformSize) {
+                                    WaveformSize.EXPANDED -> Modifier.width(340.dp)
+                                    WaveformSize.NORMAL -> Modifier.width(180.dp)
+                                    WaveformSize.MINIMIZED -> Modifier
+                                }
+                            )
                     )
                 }
 
@@ -226,7 +237,7 @@ fun DevelopStudioScreen(
                                 params = devParams,
                                 onParamsChange = {
                                     devParams = it
-                                    historyManager.recordState("Develop Adjustment", it, maskLayers)
+                                    historyManager.recordState("現像調整", it, maskLayers)
                                 },
                                 hapticManager = hapticManager,
                                 onOpenPrecisionDial = { label, valInit, range, unit, updateCb ->
@@ -240,7 +251,7 @@ fun DevelopStudioScreen(
                                 maskLayers = maskLayers,
                                 onLayersChange = {
                                     maskLayers = it
-                                    historyManager.recordState("Mask Layer Edit", devParams, it)
+                                    historyManager.recordState("マスク編集", devParams, it)
                                 },
                                 selectedLayerIndex = selectedMaskIndex,
                                 onSelectLayer = { selectedMaskIndex = it },

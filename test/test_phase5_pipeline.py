@@ -47,6 +47,9 @@ def run_native_phase5_test():
     print("=======================================================")
 
     exe_candidates = [
+        os.path.join(BASE_DIR, "build", "light_rumor_phase5_test.exe"),
+        os.path.join(BASE_DIR, "build", "Release", "light_rumor_phase5_test.exe"),
+        os.path.join(BASE_DIR, "build", "Debug", "light_rumor_phase5_test.exe"),
         os.path.join(BASE_DIR, "build", "apex_phase5_test.exe"),
         os.path.join(BASE_DIR, "build", "Release", "apex_phase5_test.exe"),
         os.path.join(BASE_DIR, "build", "Debug", "apex_phase5_test.exe")

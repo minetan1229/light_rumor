@@ -285,9 +285,16 @@ bool DenoiseEngine::processTile(const std::vector<FloatRGBA>& inPaddedTile,
                                 int32_t validW, int32_t validH,
                                 int32_t padding,
                                 const DevelopmentParams& params,
-                                std::vector<FloatRGBA>& outValidTile) {
+                                std::vector<FloatRGBA>& outValidTile,
+                                int32_t padLeft,
+                                int32_t padTop) {
     outValidTile.resize(static_cast<size_t>(validW) * validH);
     size_t totalPadded = static_cast<size_t>(paddedW) * paddedH;
+
+    int32_t actualPadX = (padLeft >= 0) ? padLeft : ((paddedW > validW) ? padding : 0);
+    int32_t actualPadY = (padTop >= 0) ? padTop : ((paddedH > validH) ? padding : 0);
+    actualPadX = std::clamp(actualPadX, 0, std::max(0, paddedW - validW));
+    actualPadY = std::clamp(actualPadY, 0, std::max(0, paddedH - validH));
 
     bool needLuma = (params.luminanceNR > 0.0f);
     bool needChroma = (params.chromaNR > 0.0f);
@@ -295,8 +302,8 @@ bool DenoiseEngine::processTile(const std::vector<FloatRGBA>& inPaddedTile,
 
     if (!needLuma && !needChroma && !needSharp) {
         for (int32_t vy = 0; vy < validH; ++vy) {
-            int32_t py = vy + padding;
-            const FloatRGBA* srcRow = &inPaddedTile[static_cast<size_t>(py) * paddedW + padding];
+            int32_t py = vy + actualPadY;
+            const FloatRGBA* srcRow = &inPaddedTile[static_cast<size_t>(py) * paddedW + actualPadX];
             FloatRGBA* dstRow = &outValidTile[static_cast<size_t>(vy) * validW];
             std::memcpy(dstRow, srcRow, sizeof(FloatRGBA) * validW);
         }
@@ -334,8 +341,8 @@ bool DenoiseEngine::processTile(const std::vector<FloatRGBA>& inPaddedTile,
 
     // Extract valid inner tile (discard padding)
     for (int32_t vy = 0; vy < validH; ++vy) {
-        int32_t py = vy + padding;
-        const FloatRGBA* srcRow = &currentSrc[static_cast<size_t>(py) * paddedW + padding];
+        int32_t py = vy + actualPadY;
+        const FloatRGBA* srcRow = &currentSrc[static_cast<size_t>(py) * paddedW + actualPadX];
         FloatRGBA* dstRow = &outValidTile[static_cast<size_t>(vy) * validW];
         std::memcpy(dstRow, srcRow, sizeof(FloatRGBA) * validW);
     }

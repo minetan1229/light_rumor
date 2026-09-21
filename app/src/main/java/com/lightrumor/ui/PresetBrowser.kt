@@ -27,6 +27,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lightrumor.*
 
+val categoryTranslations = mapOf(
+    "ALL" to "すべて",
+    "LANDSCAPE" to "風景",
+    "PORTRAIT" to "ポートレート",
+    "FILM" to "フィルム",
+    "MONOCHROME" to "モノクロ",
+    "URBAN" to "アーバン"
+)
+
 /**
  * PresetBrowser: Lightroom XMP Preset Selector & Real-Time Hover Engine.
  * Features:
@@ -92,7 +101,7 @@ fun PresetBrowser(
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = cat,
+                            text = categoryTranslations[cat] ?: cat,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold,
                             fontSize = 9.sp,
@@ -104,7 +113,7 @@ fun PresetBrowser(
 
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "[IMPORT]",
+                    text = "[読込]",
                     fontFamily = FontFamily.Monospace,
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
@@ -116,7 +125,7 @@ fun PresetBrowser(
                         .padding(horizontal = 6.dp, vertical = 3.dp)
                 )
                 Text(
-                    text = "[EXPORT]",
+                    text = "[書出]",
                     fontFamily = FontFamily.Monospace,
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
@@ -141,7 +150,7 @@ fun PresetBrowser(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    text = "PRESET AMOUNT:",
+                    text = "プリセット適用量:",
                     fontFamily = FontFamily.Monospace,
                     fontSize = 9.sp,
                     color = colors.textSecondary
@@ -189,7 +198,7 @@ fun PresetBrowser(
             )
 
             Text(
-                text = "[RESET 100%]",
+                text = "[100%にリセット]",
                 fontFamily = FontFamily.Monospace,
                 fontSize = 8.sp,
                 color = colors.textSecondary,
@@ -296,7 +305,7 @@ private fun PresetCard(
                         .padding(horizontal = 3.dp, vertical = 1.dp)
                 ) {
                     Text(
-                        text = preset.category.take(4),
+                        text = (categoryTranslations[preset.category] ?: preset.category).take(4),
                         fontFamily = FontFamily.Monospace,
                         fontSize = 7.sp,
                         color = colors.textSecondary
@@ -318,13 +327,13 @@ private fun PresetCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (preset.params.isMonochrome) "MONO B&W" else "COLOR RAW",
+                    text = if (preset.params.isMonochrome) "モノクロ" else "カラー RAW",
                     fontFamily = FontFamily.Monospace,
                     fontSize = 7.sp,
                     color = colors.accentAmber
                 )
                 Text(
-                    text = if (isSelected) "[APPLIED]" else "[TAP]",
+                    text = if (isSelected) "[適用中]" else "[タップ]",
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
                     fontSize = 8.sp,

@@ -23,12 +23,12 @@ import androidx.compose.ui.unit.sp
 import com.lightrumor.*
 
 enum class ThumbTab(val title: String) {
-    Light("LIGHT"),
-    Color("COLOR"),
-    Mixer("MIXER"),
-    Detail("DETAIL"),
-    Optics("OPTICS"),
-    Geometry("GEOM")
+    Light("ライト"),
+    Color("カラー"),
+    Mixer("ミキサー"),
+    Detail("ディテール"),
+    Optics("レンズ"),
+    Geometry("変形")
 }
 
 /**
@@ -122,13 +122,12 @@ fun ThumbZoneBottomBar(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
                     .padding(top = 4.dp, bottom = 12.dp)
             ) {
                 when (tab) {
                     ThumbTab.Light -> {
                         LightroomSlider(
-                            label = "Exposure",
+                            label = "露出",
                             value = params.exposureEV,
                             onValueChange = { onParamsChange(params.copy(exposureEV = it)) },
                             range = -5.0f..5.0f,
@@ -137,14 +136,14 @@ fun ThumbZoneBottomBar(
                             step = 0.05f,
                             hapticManager = hapticManager,
                             onLongPressDial = {
-                                onOpenPrecisionDial("Exposure", params.exposureEV, -5.0f..5.0f, "EV") {
+                                onOpenPrecisionDial("露出", params.exposureEV, -5.0f..5.0f, "EV") {
                                     onParamsChange(params.copy(exposureEV = it))
                                 }
                             }
                         )
 
                         LightroomSlider(
-                            label = "Contrast",
+                            label = "コントラスト",
                             value = params.contrast,
                             onValueChange = { onParamsChange(params.copy(contrast = it)) },
                             range = -100f..100f,
@@ -154,14 +153,14 @@ fun ThumbZoneBottomBar(
                             step = 1f,
                             hapticManager = hapticManager,
                             onLongPressDial = {
-                                onOpenPrecisionDial("Contrast", params.contrast, -100f..100f, "%") {
+                                onOpenPrecisionDial("コントラスト", params.contrast, -100f..100f, "%") {
                                     onParamsChange(params.copy(contrast = it))
                                 }
                             }
                         )
 
                         LightroomSlider(
-                            label = "Highlights",
+                            label = "ハイライト",
                             value = params.highlights,
                             onValueChange = { onParamsChange(params.copy(highlights = it)) },
                             range = -100f..100f,
@@ -173,7 +172,7 @@ fun ThumbZoneBottomBar(
                         )
 
                         LightroomSlider(
-                            label = "Shadows",
+                            label = "シャドウ",
                             value = params.shadows,
                             onValueChange = { onParamsChange(params.copy(shadows = it)) },
                             range = -100f..100f,
@@ -185,7 +184,7 @@ fun ThumbZoneBottomBar(
                         )
 
                         LightroomSlider(
-                            label = "Whites",
+                            label = "白レベル",
                             value = params.whites,
                             onValueChange = { onParamsChange(params.copy(whites = it)) },
                             range = -100f..100f,
@@ -197,7 +196,7 @@ fun ThumbZoneBottomBar(
                         )
 
                         LightroomSlider(
-                            label = "Blacks",
+                            label = "黒レベル",
                             value = params.blacks,
                             onValueChange = { onParamsChange(params.copy(blacks = it)) },
                             range = -100f..100f,
@@ -212,7 +211,7 @@ fun ThumbZoneBottomBar(
                     ThumbTab.Color -> {
                         // Photographic Profile Selector Tile Strip (Zero emojis)
                         Text(
-                            text = "COLOR PROFILES",
+                            text = "カラープロファイル",
                             style = LightRumorTheme.typography.Label,
                             color = colors.textSecondary,
                             modifier = Modifier.padding(start = 12.dp, top = 4.dp)
@@ -229,7 +228,7 @@ fun ThumbZoneBottomBar(
                         Spacer(modifier = Modifier.height(6.dp))
 
                         LightroomSlider(
-                            label = "Temperature",
+                            label = "色温度",
                             value = params.kelvin,
                             onValueChange = { onParamsChange(params.copy(kelvin = it)) },
                             range = 2000f..12000f,
@@ -239,14 +238,14 @@ fun ThumbZoneBottomBar(
                             step = 50f,
                             hapticManager = hapticManager,
                             onLongPressDial = {
-                                onOpenPrecisionDial("Temperature", params.kelvin, 2000f..12000f, "K") {
+                                onOpenPrecisionDial("色温度", params.kelvin, 2000f..12000f, "K") {
                                     onParamsChange(params.copy(kelvin = it))
                                 }
                             }
                         )
 
                         LightroomSlider(
-                            label = "Tint",
+                            label = "色かぶり",
                             value = params.tint,
                             onValueChange = { onParamsChange(params.copy(tint = it)) },
                             range = -100f..100f,
@@ -258,7 +257,7 @@ fun ThumbZoneBottomBar(
                         )
 
                         LightroomSlider(
-                            label = "Vibrance",
+                            label = "自然な彩度",
                             value = params.vibrance,
                             onValueChange = { onParamsChange(params.copy(vibrance = it)) },
                             range = -100f..100f,
@@ -270,7 +269,7 @@ fun ThumbZoneBottomBar(
                         )
 
                         LightroomSlider(
-                            label = "Saturation",
+                            label = "彩度",
                             value = params.saturation,
                             onValueChange = { onParamsChange(params.copy(saturation = it)) },
                             range = -100f..100f,
@@ -300,7 +299,7 @@ fun ThumbZoneBottomBar(
 
                     ThumbTab.Optics -> {
                         Text(
-                            text = "MONOCHROME OPTICAL FILTERS",
+                            text = "モノクロ光学フィルター",
                             style = LightRumorTheme.typography.Label,
                             color = colors.textSecondary,
                             modifier = Modifier.padding(start = 12.dp, top = 4.dp)

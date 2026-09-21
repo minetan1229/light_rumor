@@ -4,6 +4,7 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.*
 import com.lightrumor.ui.BatchSyncDialog
 import com.lightrumor.ui.CullingScreen
@@ -19,27 +20,65 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var pickerLauncher: PhotoPickerLauncher
     private lateinit var cacheManager: CullingCacheManager
+    private lateinit var editHistoryCatalog: EditHistoryCatalog
 
     // Mutable state hoisted to Activity level so PhotoPickerLauncher callback can update it
     private val _photoItems = mutableStateOf<List<PhotoItem>>(emptyList())
     private val _currentIndex = mutableStateOf(0)
 
+    private fun resolvePhotoItem(uri: Uri): PhotoItem {
+        var fileName = ""
+        if (uri.scheme == "content") {
+            try {
+                contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (nameIndex >= 0) {
+                            fileName = cursor.getString(nameIndex) ?: ""
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        if (fileName.isEmpty()) {
+            val p = uri.path ?: ""
+            fileName = File(p).name.ifEmpty { "PHOTO_${System.currentTimeMillis() % 10000}.jpg" }
+        }
+
+        var resolvedPath = if (uri.scheme == "file") (uri.path ?: "") else ""
+        if (resolvedPath.isEmpty() && ThumbnailLoader.isRawFile(fileName)) {
+            try {
+                val tempDir = File(cacheDir, "raw_cache").apply { if (!exists()) mkdirs() }
+                val tempFile = File(tempDir, fileName)
+                if (!tempFile.exists() || tempFile.length() == 0L) {
+                    contentResolver.openInputStream(uri)?.use { input ->
+                        tempFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                }
+                if (tempFile.exists() && tempFile.length() > 0L) {
+                    resolvedPath = tempFile.absolutePath
+                }
+            } catch (_: Exception) {}
+        }
+
+        return PhotoItem(
+            uri = uri,
+            filePath = resolvedPath,
+            fileName = fileName,
+            isRaw = ThumbnailLoader.isRawFile(fileName)
+        )
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         cacheManager = CullingCacheManager(this)
+        editHistoryCatalog = EditHistoryCatalog(this)
 
         // Register ActivityResult launchers BEFORE setContent (must be in CREATED state)
         pickerLauncher = PhotoPickerLauncher(this) { selectedUris ->
-            val newItems = selectedUris.map { uri ->
-                val path = uri.path ?: ""
-                val name = File(path).name.ifEmpty { "PHOTO_${System.currentTimeMillis() % 10000}" }
-                PhotoItem(
-                    uri = uri,
-                    filePath = path,
-                    fileName = name,
-                    isRaw = ThumbnailLoader.isRawFile(name)
-                )
-            }
+            val newItems = selectedUris.map { resolvePhotoItem(it) }
             _photoItems.value = newItems
             _currentIndex.value = 0
         }
@@ -48,20 +87,12 @@ class MainActivity : ComponentActivity() {
         @Suppress("DEPRECATION")
         val intentUris = intent.getParcelableArrayListExtra<Uri>(IntentHandlerActivity.EXTRA_PHOTO_URIS)
         if (intentUris != null && intentUris.isNotEmpty()) {
-            val newItems = intentUris.map { uri ->
-                val path = uri.path ?: ""
-                val name = File(path).name.ifEmpty { "PHOTO_${System.currentTimeMillis() % 10000}" }
-                PhotoItem(
-                    uri = uri,
-                    filePath = path,
-                    fileName = name,
-                    isRaw = ThumbnailLoader.isRawFile(name)
-                )
-            }
+            val newItems = intentUris.map { resolvePhotoItem(it) }
             _photoItems.value = newItems
             _currentIndex.value = 0
         }
 
+        enableEdgeToEdge()
         setContent {
             LightRumorTheme(isDark = true) {
                 val photoItems by _photoItems
@@ -73,6 +104,18 @@ class MainActivity : ComponentActivity() {
                 when {
                     // 1. Landing Screen (when no photos are loaded)
                     photoItems.isEmpty() -> {
+                        val recentEntries = editHistoryCatalog.getRecentEntries()
+                        val recentItems = recentEntries.map { entry ->
+                            PhotoItem(
+                                uri = Uri.parse(entry.uri),
+                                fileName = entry.fileName,
+                                isRaw = ThumbnailLoader.isRawFile(entry.fileName),
+                                developParams = editHistoryCatalog.getParamsForUri(entry.uri) ?: DevelopmentParams()
+                            ).apply {
+                                metadata.captureDate = java.text.SimpleDateFormat("yyyy/MM/dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(entry.lastEditedAt))
+                            }
+                        }
+
                         QuickOpenScreen(
                             onOpenSinglePhoto = { pickerLauncher.openSinglePhoto() },
                             onOpenMultiplePhotos = { pickerLauncher.openMultiplePhotos() },
@@ -89,6 +132,11 @@ class MainActivity : ComponentActivity() {
                                     _photoItems.value = items
                                     _currentIndex.value = 0
                                 }
+                            },
+                            recentItems = recentItems,
+                            onSelectRecentItem = { item ->
+                                _photoItems.value = listOf(item)
+                                _currentIndex.value = 0
                             }
                         )
                     }
@@ -98,7 +146,14 @@ class MainActivity : ComponentActivity() {
                         com.lightrumor.ui.DevelopStudioScreen(
                             photoItem = activeDevelopItem!!,
                             cacheManager = cacheManager,
-                            onBack = { activeDevelopItem = null }
+                            onBack = { 
+                                editHistoryCatalog.saveEntry(
+                                    uri = activeDevelopItem!!.uri.toString(),
+                                    fileName = activeDevelopItem!!.fileName,
+                                    params = activeDevelopItem!!.developParams
+                                )
+                                activeDevelopItem = null 
+                            }
                         )
                     }
 
@@ -131,8 +186,9 @@ class MainActivity : ComponentActivity() {
 
                         // Batch sync dialog overlay
                         if (isBatchSyncOpen && photoItems.isNotEmpty()) {
-                            val currentItem = photoItems[currentIndex]
-                            val targetItems = photoItems.filterIndexed { idx, _ -> idx != currentIndex }
+                            val safeIndex = currentIndex.coerceIn(photoItems.indices)
+                            val currentItem = photoItems[safeIndex]
+                            val targetItems = photoItems.filterIndexed { idx, _ -> idx != safeIndex }
                             BatchSyncDialog(
                                 sourceItem = currentItem,
                                 targetItems = targetItems,

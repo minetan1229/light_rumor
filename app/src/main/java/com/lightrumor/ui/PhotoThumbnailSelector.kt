@@ -128,22 +128,22 @@ fun PhotoThumbnailSelector(
 object PhotoThumbnailPresets {
     fun createOpticalFilterItems(): List<PhotoThumbnailItem> {
         return listOf(
-            PhotoThumbnailItem("std", "STANDARD", "PANCHRO", generateFilterSample(0xFF888888.toInt())),
-            PhotoThumbnailItem("red25a", "RED 25A", "HIGH CONTRAST", generateFilterSample(0xFFCC3333.toInt())),
-            PhotoThumbnailItem("orange_o2", "ORANGE", "DRAMATIC SKY", generateFilterSample(0xFFDD6622.toInt())),
-            PhotoThumbnailItem("yellow_y2", "YELLOW", "LANDSCAPE", generateFilterSample(0xFFDDBB22.toInt())),
-            PhotoThumbnailItem("green_x0", "GREEN", "FOLIAGE/SKIN", generateFilterSample(0xFF33AA44.toInt())),
-            PhotoThumbnailItem("ir720", "IR 720nm", "WOOD EFFECT", generateFilterSample(0xFFEEEEEE.toInt()))
+            PhotoThumbnailItem("std", "スタンダード", "パンクロ", generateFilterSample(0xFF888888.toInt())),
+            PhotoThumbnailItem("red25a", "レッド 25A", "高コントラスト", generateFilterSample(0xFFCC3333.toInt())),
+            PhotoThumbnailItem("orange_o2", "オレンジ", "ドラマチックスカイ", generateFilterSample(0xFFDD6622.toInt())),
+            PhotoThumbnailItem("yellow_y2", "イエロー", "風景", generateFilterSample(0xFFDDBB22.toInt())),
+            PhotoThumbnailItem("green_x0", "グリーン", "葉/肌", generateFilterSample(0xFF33AA44.toInt())),
+            PhotoThumbnailItem("ir720", "IR 720nm", "ウッド効果", generateFilterSample(0xFFEEEEEE.toInt()))
         )
     }
 
     fun createColorProfileItems(): List<PhotoThumbnailItem> {
         return listOf(
-            PhotoThumbnailItem("cinetone", "S-CINETONE", "FILMIC SOFT", generateProfileSample(1.0f, 0.95f, 0.9f)),
-            PhotoThumbnailItem("std_color", "STANDARD", "NEUTRAL REC709", generateProfileSample(1.0f, 1.0f, 1.0f)),
-            PhotoThumbnailItem("landscape", "LANDSCAPE", "DEEP BLUE/GREEN", generateProfileSample(0.9f, 1.1f, 1.2f)),
-            PhotoThumbnailItem("portrait", "PORTRAIT", "SMOOTH SKIN", generateProfileSample(1.15f, 1.0f, 0.95f)),
-            PhotoThumbnailItem("monochrome", "MONO HC", "DEEP BLACK", generateProfileSample(0.7f, 0.7f, 0.7f))
+            PhotoThumbnailItem("cinetone", "S-CINETONE", "フィルムソフト", generateProfileSample(1.0f, 0.95f, 0.9f)),
+            PhotoThumbnailItem("std_color", "スタンダード", "ニュートラル REC709", generateProfileSample(1.0f, 1.0f, 1.0f)),
+            PhotoThumbnailItem("landscape", "風景", "深い青/緑", generateProfileSample(0.9f, 1.1f, 1.2f)),
+            PhotoThumbnailItem("portrait", "ポートレート", "なめらか肌", generateProfileSample(1.15f, 1.0f, 0.95f)),
+            PhotoThumbnailItem("monochrome", "モノクロ HC", "深い黒", generateProfileSample(0.7f, 0.7f, 0.7f))
         )
     }
 

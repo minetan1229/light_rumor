@@ -7,7 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Compiler warnings and optimizations
 if(ANDROID)
-    add_compile_options(-Wall -Wextra -O3 -fPIC)
+    add_compile_options(-Wall -Wextra -O3 -fPIC -fopenmp)
 elseif(MSVC)
     add_compile_options(/W4 /O2 /permissive- /Zc:preprocessor /utf-8 /openmp)
 else()
@@ -45,7 +45,7 @@ add_library(light_rumor_engine SHARED
 )
 
 if(ANDROID)
-    target_link_libraries(light_rumor_engine log ${CMAKE_DL_LIBS})
+    target_link_libraries(light_rumor_engine log ${CMAKE_DL_LIBS} -fopenmp)
 endif()
 
 
@@ -107,4 +107,10 @@ if(NOT ANDROID)
     endif()
 
     # Compatibility aliases
+    add_custom_target(apex_phase1_test DEPENDS light_rumor_phase1_test)
+    add_custom_target(apex_phase2_test DEPENDS light_rumor_phase2_test)
+    add_custom_target(apex_phase3_test DEPENDS light_rumor_phase3_test)
+    add_custom_target(apex_phase4_test DEPENDS light_rumor_phase4_test)
+    add_custom_target(apex_phase5_test DEPENDS light_rumor_phase5_test)
+    add_custom_target(apex_phase6_test DEPENDS light_rumor_phase6_test)
 endif()

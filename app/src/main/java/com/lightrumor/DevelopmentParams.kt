@@ -23,8 +23,8 @@ enum class ColorSpace(val id: Int) {
 }
 
 enum class AspectRatioMode(val id: Int, val label: String, val ratio: Float) {
-    ORIGINAL(0, "Original", 0f),
-    FREE(1, "Free", 0f),
+    ORIGINAL(0, "オリジナル", 0f),
+    FREE(1, "フリー", 0f),
     RATIO_1X1(2, "1:1", 1.0f),
     RATIO_4X5(3, "4:5", 0.8f),
     RATIO_3X2(4, "3:2", 1.5f),
@@ -35,12 +35,12 @@ enum class AspectRatioMode(val id: Int, val label: String, val ratio: Float) {
 }
 
 enum class CompositionGuide(val id: Int, val label: String) {
-    NONE(0, "None"),
-    RULE_OF_THIRDS(1, "3rds"),
-    GOLDEN_RATIO(2, "Golden"),
-    GOLDEN_SPIRAL(3, "Spiral"),
-    DIAGONALS(4, "Diagonals"),
-    GRID(5, "Grid")
+    NONE(0, "なし"),
+    RULE_OF_THIRDS(1, "三分割"),
+    GOLDEN_RATIO(2, "黄金比"),
+    GOLDEN_SPIRAL(3, "黄金螺旋"),
+    DIAGONALS(4, "対角線"),
+    GRID(5, "グリッド")
 }
 
 data class HSLBandAdjust(
@@ -156,21 +156,21 @@ data class DevelopmentParams(
 // -------------------------------------------------------------------------
 
 enum class MaskType(val id: Int, val displayName: String) {
-    LINEAR_GRADIENT(0, "LINEAR"),
-    RADIAL_GRADIENT(1, "RADIAL"),
-    POLYGON_BEZIER(2, "POLYGON"),
-    BRUSH(3, "BRUSH"),
-    LUMINANCE_RANGE(4, "LUMA"),
-    COLOR_RANGE(5, "COLOR"),
-    DEPTH_MAP(6, "DEPTH"),
-    SOBEL_EDGE(7, "EDGE")
+    LINEAR_GRADIENT(0, "線形"),
+    RADIAL_GRADIENT(1, "円形"),
+    POLYGON_BEZIER(2, "多角形"),
+    BRUSH(3, "ブラシ"),
+    LUMINANCE_RANGE(4, "輝度"),
+    COLOR_RANGE(5, "カラー"),
+    DEPTH_MAP(6, "深度"),
+    SOBEL_EDGE(7, "エッジ")
 }
 
 enum class BooleanOp(val id: Int, val displayName: String) {
-    REPLACE(0, "SET"),
-    UNION(1, "ADD"),
-    SUBTRACT(2, "SUB"),
-    INTERSECT(3, "INT")
+    REPLACE(0, "置換"),
+    UNION(1, "加算"),
+    SUBTRACT(2, "減算"),
+    INTERSECT(3, "交差")
 }
 
 data class MaskPoint(val x: Float, val y: Float)

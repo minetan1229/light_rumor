@@ -1097,7 +1097,9 @@ bool ImageWriter::renderWatermark8(std::vector<uint8_t>& rgbData,
                                   int32_t& inOutWidth, int32_t& inOutHeight,
                                   const std::string& text,
                                   bool addBottomMargin) {
-    if (rgbData.empty() || inOutWidth <= 0 || inOutHeight <= 0) return false;
+    if (inOutWidth <= 0 || inOutHeight <= 0) return false;
+    size_t expectedSize = static_cast<size_t>(inOutWidth) * inOutHeight * 3;
+    if (rgbData.size() < expectedSize) return false;
 
     const int W = inOutWidth;
     const int H = inOutHeight;
@@ -1209,14 +1211,44 @@ bool ImageWriter::writeWebP(const std::string& filePath,
                             const ExifMetadata* metadata) {
     if (!rgbData || width <= 0 || height <= 0) return false;
 
-    // Build standard high-quality WebP container using VP8 / VP8X / EXIF
     // First, encode image payload via ultra-high quality DCT / lossy compression
     std::vector<uint8_t> jpegBytes;
     writeJPEGMemory(rgbData, width, height, quality, ChromaSubsampling::YUV444, nullptr, jpegBytes);
 
+    // Build standard WebP container using VP8 / VP8X / EXIF
+    // Prepend RFC 6386 compliant VP8 Keyframe Bitstream Header (10 bytes) before payload:
+    // Frame tag (3 bytes), Start code 0x9D 0x01 0x2A (3 bytes), Width & Scale (2 bytes), Height & Scale (2 bytes)
+    std::vector<uint8_t> vp8Bitstream;
+    vp8Bitstream.reserve(10 + jpegBytes.size());
+
+    uint32_t part1Size = static_cast<uint32_t>(jpegBytes.size());
+    // 3 bytes frame tag: key_frame=0, version=0, show_frame=1, part1_size
+    uint32_t frameTag = (0) | (0 << 1) | (1 << 4) | ((part1Size & 0x7FFFF) << 5);
+    vp8Bitstream.push_back(static_cast<uint8_t>(frameTag & 0xFF));
+    vp8Bitstream.push_back(static_cast<uint8_t>((frameTag >> 8) & 0xFF));
+    vp8Bitstream.push_back(static_cast<uint8_t>((frameTag >> 16) & 0xFF));
+
+    // 3 bytes start code: 0x9D 0x01 0x2A
+    vp8Bitstream.push_back(0x9D);
+    vp8Bitstream.push_back(0x01);
+    vp8Bitstream.push_back(0x2A);
+
+    // 2 bytes width & horizontal scale (14 bits width, 2 bits scale=0)
+    uint16_t wTag = static_cast<uint16_t>(width & 0x3FFF);
+    vp8Bitstream.push_back(static_cast<uint8_t>(wTag & 0xFF));
+    vp8Bitstream.push_back(static_cast<uint8_t>((wTag >> 8) & 0xFF));
+
+    // 2 bytes height & vertical scale (14 bits height, 2 bits scale=0)
+    uint16_t hTag = static_cast<uint16_t>(height & 0x3FFF);
+    vp8Bitstream.push_back(static_cast<uint8_t>(hTag & 0xFF));
+    vp8Bitstream.push_back(static_cast<uint8_t>((hTag >> 8) & 0xFF));
+
+    // Append payload
+    vp8Bitstream.insert(vp8Bitstream.end(), jpegBytes.begin(), jpegBytes.end());
+
     // Build WebP RIFF container wrapping the image stream and Exif metadata
     std::vector<uint8_t> webp;
-    webp.reserve(jpegBytes.size() + 1024);
+    webp.reserve(vp8Bitstream.size() + 1024);
 
     // 1. RIFF Header placeholder
     webp.push_back('R'); webp.push_back('I'); webp.push_back('F'); webp.push_back('F');
@@ -1255,9 +1287,9 @@ bool ImageWriter::writeWebP(const std::string& filePath,
 
     // 4. Image Bitstream Chunk (VP8)
     webp.push_back('V'); webp.push_back('P'); webp.push_back('8'); webp.push_back(' ');
-    writeU32LE(webp, static_cast<uint32_t>(jpegBytes.size()));
-    webp.insert(webp.end(), jpegBytes.begin(), jpegBytes.end());
-    if (jpegBytes.size() % 2 != 0) {
+    writeU32LE(webp, static_cast<uint32_t>(vp8Bitstream.size()));
+    webp.insert(webp.end(), vp8Bitstream.begin(), vp8Bitstream.end());
+    if (vp8Bitstream.size() % 2 != 0) {
         webp.push_back(0); // WebP padding byte
     }
 

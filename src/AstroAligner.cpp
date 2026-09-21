@@ -324,54 +324,105 @@ bool AstroAligner::stackKappaSigma(const std::vector<std::vector<FloatRGBA>>& fr
     #pragma omp parallel for
     for (int64_t idx = 0; idx < static_cast<int64_t>(total); ++idx) {
         auto clipChannel = [&](auto channelGetter) -> float {
-            std::vector<float> vals(numFrames);
-            for (size_t i = 0; i < numFrames; ++i) {
-                vals[i] = channelGetter(alignedFrames[i][idx]);
-            }
-
-            std::vector<bool> valid(numFrames, true);
-
-            for (int iter = 0; iter < maxIter; ++iter) {
-                std::vector<float> currentValid;
-                currentValid.reserve(numFrames);
+            if (numFrames <= 128) {
+                float vals[128];
+                uint8_t valid[128];
                 for (size_t i = 0; i < numFrames; ++i) {
-                    if (valid[i]) currentValid.push_back(vals[i]);
+                    vals[i] = channelGetter(alignedFrames[i][idx]);
+                    valid[i] = 1;
                 }
 
-                if (currentValid.size() <= 2) break;
+                for (int iter = 0; iter < maxIter; ++iter) {
+                    float currentValid[128];
+                    size_t validCount = 0;
+                    for (size_t i = 0; i < numFrames; ++i) {
+                        if (valid[i]) {
+                            currentValid[validCount++] = vals[i];
+                        }
+                    }
 
-                std::sort(currentValid.begin(), currentValid.end());
-                float medianVal = currentValid[currentValid.size() / 2];
+                    if (validCount <= 2) break;
 
-                // Robust MAD (Median Absolute Deviation) estimator: sigma = 1.4826 * MAD
-                std::vector<float> absDiffs(currentValid.size());
-                for (size_t i = 0; i < currentValid.size(); ++i) {
-                    absDiffs[i] = std::abs(currentValid[i] - medianVal);
+                    std::sort(currentValid, currentValid + validCount);
+                    float medianVal = currentValid[validCount / 2];
+
+                    float absDiffs[128];
+                    for (size_t i = 0; i < validCount; ++i) {
+                        absDiffs[i] = std::abs(currentValid[i] - medianVal);
+                    }
+                    std::sort(absDiffs, absDiffs + validCount);
+                    float mad = absDiffs[validCount / 2];
+                    float sigma = std::max(1.4826f * mad, 0.005f);
+
+                    bool changed = false;
+                    for (size_t i = 0; i < numFrames; ++i) {
+                        if (valid[i] && std::abs(vals[i] - medianVal) > kappa * sigma) {
+                            valid[i] = 0;
+                            changed = true;
+                        }
+                    }
+                    if (!changed) break;
                 }
-                std::sort(absDiffs.begin(), absDiffs.end());
-                float mad = absDiffs[absDiffs.size() / 2];
-                float sigma = std::max(1.4826f * mad, 0.005f);
 
-                bool changed = false;
+                float finalSum = 0.0f;
+                int count = 0;
                 for (size_t i = 0; i < numFrames; ++i) {
-                    if (valid[i] && std::abs(vals[i] - medianVal) > kappa * sigma) {
-                        valid[i] = false;
-                        changed = true;
+                    if (valid[i]) {
+                        finalSum += vals[i];
+                        count++;
                     }
                 }
-                if (!changed) break;
-            }
-
-            // Average remaining valid samples
-            float finalSum = 0.0f;
-            int count = 0;
-            for (size_t i = 0; i < numFrames; ++i) {
-                if (valid[i]) {
-                    finalSum += vals[i];
-                    count++;
+                return count > 0 ? (finalSum / count) : vals[0];
+            } else {
+                std::vector<float> vals(numFrames);
+                for (size_t i = 0; i < numFrames; ++i) {
+                    vals[i] = channelGetter(alignedFrames[i][idx]);
                 }
+
+                std::vector<bool> valid(numFrames, true);
+
+                for (int iter = 0; iter < maxIter; ++iter) {
+                    std::vector<float> currentValid;
+                    currentValid.reserve(numFrames);
+                    for (size_t i = 0; i < numFrames; ++i) {
+                        if (valid[i]) currentValid.push_back(vals[i]);
+                    }
+
+                    if (currentValid.size() <= 2) break;
+
+                    std::sort(currentValid.begin(), currentValid.end());
+                    float medianVal = currentValid[currentValid.size() / 2];
+
+                    // Robust MAD (Median Absolute Deviation) estimator: sigma = 1.4826 * MAD
+                    std::vector<float> absDiffs(currentValid.size());
+                    for (size_t i = 0; i < currentValid.size(); ++i) {
+                        absDiffs[i] = std::abs(currentValid[i] - medianVal);
+                    }
+                    std::sort(absDiffs.begin(), absDiffs.end());
+                    float mad = absDiffs[absDiffs.size() / 2];
+                    float sigma = std::max(1.4826f * mad, 0.005f);
+
+                    bool changed = false;
+                    for (size_t i = 0; i < numFrames; ++i) {
+                        if (valid[i] && std::abs(vals[i] - medianVal) > kappa * sigma) {
+                            valid[i] = false;
+                            changed = true;
+                        }
+                    }
+                    if (!changed) break;
+                }
+
+                // Average remaining valid samples
+                float finalSum = 0.0f;
+                int count = 0;
+                for (size_t i = 0; i < numFrames; ++i) {
+                    if (valid[i]) {
+                        finalSum += vals[i];
+                        count++;
+                    }
+                }
+                return count > 0 ? (finalSum / count) : vals[0];
             }
-            return count > 0 ? (finalSum / count) : vals[0];
         };
 
         float r = clipChannel([](const FloatRGBA& p) { return p.r; });

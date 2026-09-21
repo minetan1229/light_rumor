@@ -65,7 +65,7 @@ fun MaskLayerManager(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("LAYERS (${maskLayers.size})", "ADJUST", "STYLUS BRUSH").forEachIndexed { idx, title ->
+                listOf("レイヤー (${maskLayers.size})", "調整", "スタイラスブラシ").forEachIndexed { idx, title ->
                     val isSel = (activeSubTab == idx)
                     Box(
                         modifier = Modifier
@@ -106,7 +106,7 @@ fun MaskLayerManager(
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             ) {
                 Text(
-                    text = "[+ ADD MASK]",
+                    text = "[+ マスク追加]",
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
                     fontSize = 10.sp,
@@ -126,7 +126,7 @@ fun MaskLayerManager(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "NO MASKS ACTIVE. TAP [+ ADD MASK] TO BEGIN.",
+                                text = "有効なマスクがありません。[+ マスク追加] で開始",
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 11.sp,
                                 color = colors.textSecondary
@@ -181,7 +181,7 @@ fun MaskLayerManager(
                     if (selectedLayer == null) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text(
-                                text = "SELECT A MASK LAYER TO ADJUST PARAMETERS.",
+                                text = "マスクレイヤーを選択してパラメータを調整",
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 11.sp,
                                 color = colors.textSecondary
@@ -192,8 +192,10 @@ fun MaskLayerManager(
                             layer = selectedLayer,
                             onLayerUpdated = { updatedLayer ->
                                 val updated = maskLayers.toMutableList()
-                                updated[selectedLayerIndex] = updatedLayer
-                                onLayersChange(updated)
+                                if (selectedLayerIndex in updated.indices) {
+                                    updated[selectedLayerIndex] = updatedLayer
+                                    onLayersChange(updated)
+                                }
                             },
                             hapticManager = hapticManager
                         )
@@ -213,16 +215,20 @@ fun MaskLayerManager(
                                     brushStrokes = updatedStrokes
                                 )
                                 val updatedList = maskLayers.toMutableList()
-                                updatedList[selectedLayerIndex] = updatedLayer
-                                onLayersChange(updatedList)
+                                if (selectedLayerIndex in updatedList.indices) {
+                                    updatedList[selectedLayerIndex] = updatedLayer
+                                    onLayersChange(updatedList)
+                                }
                             }
                         },
                         onClearStrokes = {
                             if (selectedLayer != null) {
                                 val updatedLayer = selectedLayer.copy(brushStrokes = emptyList())
                                 val updatedList = maskLayers.toMutableList()
-                                updatedList[selectedLayerIndex] = updatedLayer
-                                onLayersChange(updatedList)
+                                if (selectedLayerIndex in updatedList.indices) {
+                                    updatedList[selectedLayerIndex] = updatedLayer
+                                    onLayersChange(updatedList)
+                                }
                             }
                         }
                     )
@@ -286,7 +292,7 @@ private fun MaskLayerRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(
-                text = if (layer.enabled) "[ON]" else "[OFF]",
+                text = if (layer.enabled) "[有効]" else "[無効]",
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold,
                 fontSize = 9.sp,
@@ -331,7 +337,7 @@ private fun MaskLayerRow(
                     .padding(horizontal = 4.dp, vertical = 2.dp)
             ) {
                 Text(
-                    text = "INV",
+                    text = "反転",
                     fontFamily = FontFamily.Monospace,
                     fontSize = 8.sp,
                     fontWeight = FontWeight.Bold,
@@ -364,7 +370,7 @@ private fun MaskLayerRow(
             }
 
             Text(
-                text = "[DEL]",
+                text = "[削除]",
                 fontFamily = FontFamily.Monospace,
                 fontSize = 9.sp,
                 color = Color(0xFFE53935),
@@ -389,7 +395,7 @@ private fun LocalAdjustmentsPanel(
             .padding(8.dp)
     ) {
         Text(
-            text = "LOCAL ADJUSTMENTS: ${layer.name.uppercase()} (${layer.type.displayName})",
+            text = "局所調整: ${layer.name.uppercase()} (${layer.type.displayName})",
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
             fontSize = 10.sp,
@@ -402,7 +408,7 @@ private fun LocalAdjustmentsPanel(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             LocalSliderMini(
-                label = "EXP",
+                label = "露出",
                 value = adj.exposureEV,
                 range = -3.0f..3.0f,
                 unit = "EV",
@@ -414,7 +420,7 @@ private fun LocalAdjustmentsPanel(
             )
 
             LocalSliderMini(
-                label = "CONTRAST",
+                label = "コントラスト",
                 value = adj.contrast,
                 range = -100.0f..100.0f,
                 unit = "",
@@ -426,7 +432,7 @@ private fun LocalAdjustmentsPanel(
             )
 
             LocalSliderMini(
-                label = "HIGHLIGHT",
+                label = "ハイライト",
                 value = adj.highlights,
                 range = -100.0f..100.0f,
                 unit = "",
@@ -438,7 +444,7 @@ private fun LocalAdjustmentsPanel(
             )
 
             LocalSliderMini(
-                label = "SHADOW",
+                label = "シャドウ",
                 value = adj.shadows,
                 range = -100.0f..100.0f,
                 unit = "",
@@ -450,7 +456,7 @@ private fun LocalAdjustmentsPanel(
             )
 
             LocalSliderMini(
-                label = "SAT",
+                label = "彩度",
                 value = adj.saturation,
                 range = -100.0f..100.0f,
                 unit = "%",
@@ -462,7 +468,7 @@ private fun LocalAdjustmentsPanel(
             )
 
             LocalSliderMini(
-                label = "CLARITY",
+                label = "明瞭度",
                 value = adj.clarity,
                 range = -100.0f..100.0f,
                 unit = "",
@@ -557,13 +563,13 @@ private fun StylusBrushCanvas(
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "PRESSURE: ${"%.2f".format(currentPressure)}",
+                    text = "筆圧: ${"%.2f".format(currentPressure)}",
                     fontFamily = FontFamily.Monospace,
                     fontSize = 9.sp,
                     color = colors.accentAmber
                 )
                 Text(
-                    text = "RADIUS: ${currentRadius.toInt()}px",
+                    text = "半径: ${currentRadius.toInt()}px",
                     fontFamily = FontFamily.Monospace,
                     fontSize = 9.sp,
                     color = colors.textSecondary
@@ -579,7 +585,7 @@ private fun StylusBrushCanvas(
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = if (isEraserMode) "ERASER [ACTIVE]" else "ERASER [OFF]",
+                        text = if (isEraserMode) "消しゴム [有効]" else "消しゴム [無効]",
                         fontFamily = FontFamily.Monospace,
                         fontSize = 8.sp,
                         fontWeight = FontWeight.Bold,
@@ -588,7 +594,7 @@ private fun StylusBrushCanvas(
                 }
 
                 Text(
-                    text = "[CLEAR ALL]",
+                    text = "[全消去]",
                     fontFamily = FontFamily.Monospace,
                     fontSize = 9.sp,
                     color = Color(0xFFE53935),
@@ -663,7 +669,7 @@ private fun AddMaskModal(
                 .clickable(enabled = false) {}
         ) {
             Text(
-                text = "SELECT MASK TYPE (9 LOCAL MASKS)",
+                text = "マスク種別を選択 (9種類)",
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold,
                 fontSize = 11.sp,
@@ -690,7 +696,7 @@ private fun AddMaskModal(
                         color = colors.textPrimary
                     )
                     Text(
-                        text = "[SELECT]",
+                        text = "[選択]",
                         fontFamily = FontFamily.Monospace,
                         fontSize = 9.sp,
                         color = colors.accentAmber

@@ -52,7 +52,7 @@ fun CropRotateScreen(
 
     Column(
         modifier = modifier
-            .fillMaxSize()
+            .fillMaxWidth()
             .background(colors.background)
             .verticalScroll(rememberScrollState())
             .padding(vertical = 8.dp)
@@ -61,7 +61,7 @@ fun CropRotateScreen(
         // SECTION 1: ASPECT RATIO SELECTION
         // ---------------------------------------------------------------------
         Text(
-            text = "ASPECT RATIO",
+            text = "アスペクト比",
             style = LightRumorTheme.typography.Header,
             color = colors.accentAmber,
             fontSize = 11.sp,
@@ -111,7 +111,7 @@ fun CropRotateScreen(
         // SECTION 2: COMPOSITION GUIDE OVERLAYS
         // ---------------------------------------------------------------------
         Text(
-            text = "COMPOSITION GUIDE OVERLAYS",
+            text = "構図ガイド",
             style = LightRumorTheme.typography.Header,
             color = colors.accentAmber,
             fontSize = 11.sp,
@@ -161,7 +161,7 @@ fun CropRotateScreen(
         // SECTION 3: ROTATE & FLIP CONTROLS
         // ---------------------------------------------------------------------
         Text(
-            text = "DISCRETE ORIENTATION",
+            text = "回転・反転",
             style = LightRumorTheme.typography.Header,
             color = colors.accentAmber,
             fontSize = 11.sp,
@@ -189,7 +189,7 @@ fun CropRotateScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "ROTATE -90 DEG",
+                    text = "-90° 回転",
                     style = LightRumorTheme.typography.Tab,
                     color = colors.textPrimary,
                     fontSize = 10.sp
@@ -211,7 +211,7 @@ fun CropRotateScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "ROTATE +90 DEG",
+                    text = "+90° 回転",
                     style = LightRumorTheme.typography.Tab,
                     color = colors.textPrimary,
                     fontSize = 10.sp
@@ -240,7 +240,7 @@ fun CropRotateScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = if (isFlipH) "FLIP H [ON]" else "FLIP H",
+                    text = if (isFlipH) "左右反転 [有効]" else "左右反転",
                     style = LightRumorTheme.typography.Tab,
                     color = if (isFlipH) colors.accentAmber else colors.textPrimary,
                     fontSize = 10.sp
@@ -269,7 +269,7 @@ fun CropRotateScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = if (isFlipV) "FLIP V [ON]" else "FLIP V",
+                    text = if (isFlipV) "上下反転 [有効]" else "上下反転",
                     style = LightRumorTheme.typography.Tab,
                     color = if (isFlipV) colors.accentAmber else colors.textPrimary,
                     fontSize = 10.sp
@@ -290,7 +290,7 @@ fun CropRotateScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "STRAIGHTEN & AUTO-HORIZON",
+                text = "傾き補正 & 自動水平",
                 style = LightRumorTheme.typography.Header,
                 color = colors.accentAmber,
                 fontSize = 11.sp
@@ -316,7 +316,7 @@ fun CropRotateScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = if (isRulerActive) "RULER ACTIVE [DRAG HORIZON]" else "HORIZON RULER",
+                    text = if (isRulerActive) "ルーラー有効 [水平線をドラッグ]" else "水平ルーラー",
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
                     fontSize = 9.sp,
@@ -326,7 +326,7 @@ fun CropRotateScreen(
         }
 
         LightroomSlider(
-            label = "Straighten Angle",
+            label = "傾き角度",
             value = geom.rotationDegrees,
             onValueChange = { onParamsChange(params.copy(geometry = geom.copy(rotationDegrees = it))) },
             range = -45.0f..45.0f,
@@ -373,14 +373,14 @@ fun CropRotateScreen(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "DRAG A LINE ALONG THE TILTED HORIZON",
+                        text = "傾いた水平線に沿ってドラッグ",
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
                         fontSize = 10.sp,
                         color = colors.accentAmber
                     )
                     Text(
-                        text = "RELEASE TO AUTO-COUNTER-ROTATE AND LEVEL IMAGE",
+                        text = "離すと自動で水平に補正されます",
                         fontFamily = FontFamily.Monospace,
                         fontSize = 9.sp,
                         color = colors.textSecondary
@@ -395,7 +395,7 @@ fun CropRotateScreen(
         // SECTION 5: PERSPECTIVE UPRIGHT & DISTORTION
         // ---------------------------------------------------------------------
         Text(
-            text = "PERSPECTIVE UPRIGHT & DISTORTION",
+            text = "パース補正 & 歪み",
             style = LightRumorTheme.typography.Header,
             color = colors.accentAmber,
             fontSize = 11.sp,
@@ -403,7 +403,7 @@ fun CropRotateScreen(
         )
 
         LightroomSlider(
-            label = "Vertical Keystone",
+            label = "垂直台形補正",
             value = geom.perspectiveVertical,
             onValueChange = { onParamsChange(params.copy(geometry = geom.copy(perspectiveVertical = it))) },
             range = -100f..100f,
@@ -415,7 +415,7 @@ fun CropRotateScreen(
         )
 
         LightroomSlider(
-            label = "Horizontal Keystone",
+            label = "水平台形補正",
             value = geom.perspectiveHorizontal,
             onValueChange = { onParamsChange(params.copy(geometry = geom.copy(perspectiveHorizontal = it))) },
             range = -100f..100f,
@@ -427,7 +427,7 @@ fun CropRotateScreen(
         )
 
         LightroomSlider(
-            label = "Lens Distortion",
+            label = "レンズ歪み",
             value = geom.distortion,
             onValueChange = { onParamsChange(params.copy(geometry = geom.copy(distortion = it))) },
             range = -100f..100f,
@@ -455,7 +455,7 @@ fun CropRotateScreen(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "RESET CROP & GEOMETRY TO DEFAULT",
+                text = "クロップ & 変形をリセット",
                 style = LightRumorTheme.typography.Tab,
                 color = colors.textSecondary,
                 fontSize = 10.sp

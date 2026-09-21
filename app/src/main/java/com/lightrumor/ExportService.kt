@@ -88,10 +88,10 @@ class ExportService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "light_rumor RAW Export Engine",
+                "light_rumor RAW エクスポートエンジン",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Shows progress of high-resolution RAW development and photo export"
+                description = "高解像度 RAW 現像と写真エクスポートの進捗を表示"
             }
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
@@ -99,7 +99,7 @@ class ExportService : Service() {
     }
 
     private fun startForegroundNotification() {
-        val notification = buildProgressNotification(0, "Preparing RAW development pipeline...")
+        val notification = buildProgressNotification(0, "RAW 現像パイプライン準備中...")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 NOTIFICATION_ID,
@@ -113,7 +113,7 @@ class ExportService : Service() {
 
     private fun buildProgressNotification(progress: Int, statusText: String): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("light_rumor: Exporting Photo")
+            .setContentTitle("light_rumor: 写真をエクスポート中")
             .setContentText(statusText)
             .setSmallIcon(android.R.drawable.ic_menu_save)
             .setProgress(100, progress, false)
@@ -171,8 +171,8 @@ class ExportService : Service() {
     private fun showCompletionNotification(outputPath: String) {
         val fileName = File(outputPath).name
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Export Complete")
-            .setContentText("Saved to $fileName")
+            .setContentTitle("エクスポート完了")
+            .setContentText("$fileName に保存しました")
             .setSmallIcon(android.R.drawable.ic_menu_gallery)
             .setAutoCancel(true)
             .build()

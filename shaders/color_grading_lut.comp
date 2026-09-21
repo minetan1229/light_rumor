@@ -37,6 +37,10 @@ layout(std430, set = 0, binding = 2) readonly buffer Lut3DBuffer {
 };
 
 // Trilinear interpolation in 3D LUT buffer
+int getLutIndex(ivec3 p, int N, int N2) {
+    return p.z * N2 + p.y * N + p.x;
+}
+
 vec3 sample3DLut(vec3 rgb, int N) {
     if (N < 2) return rgb;
     vec3 coord = clamp(rgb, 0.0, 1.0) * float(N - 1);
@@ -45,18 +49,15 @@ vec3 sample3DLut(vec3 rgb, int N) {
     vec3 f = fract(coord);
 
     int N2 = N * N;
-    auto getIdx = [N, N2](ivec3 p) {
-        return p.z * N2 + p.y * N + p.x;
-    };
 
-    vec3 c000 = lut3DPixels[getIdx(ivec3(i0.x, i0.y, i0.z))].rgb;
-    vec3 c100 = lut3DPixels[getIdx(ivec3(i1.x, i0.y, i0.z))].rgb;
-    vec3 c010 = lut3DPixels[getIdx(ivec3(i0.x, i1.y, i0.z))].rgb;
-    vec3 c110 = lut3DPixels[getIdx(ivec3(i1.x, i1.y, i0.z))].rgb;
-    vec3 c001 = lut3DPixels[getIdx(ivec3(i0.x, i0.y, i1.z))].rgb;
-    vec3 c101 = lut3DPixels[getIdx(ivec3(i1.x, i0.y, i1.z))].rgb;
-    vec3 c011 = lut3DPixels[getIdx(ivec3(i0.x, i1.y, i1.z))].rgb;
-    vec3 c111 = lut3DPixels[getIdx(ivec3(i1.x, i1.y, i1.z))].rgb;
+    vec3 c000 = lut3DPixels[getLutIndex(ivec3(i0.x, i0.y, i0.z), N, N2)].rgb;
+    vec3 c100 = lut3DPixels[getLutIndex(ivec3(i1.x, i0.y, i0.z), N, N2)].rgb;
+    vec3 c010 = lut3DPixels[getLutIndex(ivec3(i0.x, i1.y, i0.z), N, N2)].rgb;
+    vec3 c110 = lut3DPixels[getLutIndex(ivec3(i1.x, i1.y, i0.z), N, N2)].rgb;
+    vec3 c001 = lut3DPixels[getLutIndex(ivec3(i0.x, i0.y, i1.z), N, N2)].rgb;
+    vec3 c101 = lut3DPixels[getLutIndex(ivec3(i1.x, i0.y, i1.z), N, N2)].rgb;
+    vec3 c011 = lut3DPixels[getLutIndex(ivec3(i0.x, i1.y, i1.z), N, N2)].rgb;
+    vec3 c111 = lut3DPixels[getLutIndex(ivec3(i1.x, i1.y, i1.z), N, N2)].rgb;
 
     vec3 c00 = mix(c000, c100, f.x);
     vec3 c10 = mix(c010, c110, f.x);

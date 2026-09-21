@@ -65,6 +65,11 @@ fun LightroomSlider(
 
     val isNonZero = abs(value - defaultValue) > 0.001f
 
+    val currentValue by rememberUpdatedState(value)
+    val currentOnValueChange by rememberUpdatedState(onValueChange)
+    val currentHapticManager by rememberUpdatedState(hapticManager)
+    val currentOnLongPressDial by rememberUpdatedState(onLongPressDial)
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -72,12 +77,12 @@ fun LightroomSlider(
             .pointerInput(Unit) {
                 detectTapGestures(
                     onDoubleTap = {
-                        hapticManager?.performZeroSnap()
-                        onValueChange(defaultValue)
+                        currentHapticManager?.performZeroSnap()
+                        currentOnValueChange(defaultValue)
                     },
                     onLongPress = {
-                        hapticManager?.performZeroSnap()
-                        onLongPressDial?.invoke()
+                        currentHapticManager?.performZeroSnap()
+                        currentOnLongPressDial?.invoke()
                     }
                 )
             }
@@ -158,26 +163,64 @@ fun LightroomSlider(
                     .weight(1f)
                     .height(28.dp)
                     .pointerInput(range, defaultValue) {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            if (trackWidthPx > 0f) {
-                                val totalRange = range.endInclusive - range.start
-                                val deltaVal = (dragAmount.x / trackWidthPx) * totalRange
-                                val candidate = (value + deltaVal).coerceIn(range.start, range.endInclusive)
-                                
-                                // Snap to zero if within small threshold
-                                val zeroSnapThreshold = totalRange * 0.02f
-                                val finalVal = if (abs(candidate - defaultValue) < zeroSnapThreshold) {
-                                    defaultValue
-                                } else {
-                                    candidate
+                        detectTapGestures(
+                            onTap = { offset ->
+                                if (trackWidthPx > 0f) {
+                                    val totalRange = range.endInclusive - range.start
+                                    val valNorm = offset.x / trackWidthPx
+                                    val tapValue = range.start + valNorm * totalRange
+                                    val zeroSnapThreshold = totalRange * 0.02f
+                                    val finalVal = if (abs(tapValue - defaultValue) < zeroSnapThreshold) {
+                                        defaultValue
+                                    } else {
+                                        tapValue
+                                    }
+                                    currentHapticManager?.evaluateMovement(currentValue, finalVal, range.start, range.endInclusive)
+                                    previousValue = finalVal
+                                    currentOnValueChange(finalVal)
                                 }
-
-                                hapticManager?.evaluateMovement(previousValue, finalVal, range.start, range.endInclusive)
-                                previousValue = finalVal
-                                onValueChange(finalVal)
                             }
-                        }
+                        )
+                    }
+                    .pointerInput(range, defaultValue) {
+                        var dragStartValue = 0f
+                        var cumulativeDrag = 0f
+
+                        detectDragGestures(
+                            onDragStart = {
+                                dragStartValue = currentValue
+                                cumulativeDrag = 0f
+                            },
+                            onDragEnd = {
+                                // ゼロスナップ判定はドラッグ中は無効化し、onDragEnd時のみ適用
+                                val totalRange = range.endInclusive - range.start
+                                val zeroSnapThreshold = totalRange * 0.02f
+                                if (abs(currentValue - defaultValue) < zeroSnapThreshold) {
+                                    currentHapticManager?.performZeroSnap()
+                                    currentOnValueChange(defaultValue)
+                                }
+                            },
+                            onDragCancel = {
+                                val totalRange = range.endInclusive - range.start
+                                val zeroSnapThreshold = totalRange * 0.02f
+                                if (abs(currentValue - defaultValue) < zeroSnapThreshold) {
+                                    currentOnValueChange(defaultValue)
+                                }
+                            },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                if (trackWidthPx > 0f) {
+                                    cumulativeDrag += dragAmount.x
+                                    val totalRange = range.endInclusive - range.start
+                                    val deltaVal = (cumulativeDrag / trackWidthPx) * totalRange
+                                    val candidate = (dragStartValue + deltaVal).coerceIn(range.start, range.endInclusive)
+
+                                    currentHapticManager?.evaluateMovement(previousValue, candidate, range.start, range.endInclusive)
+                                    previousValue = candidate
+                                    currentOnValueChange(candidate)
+                                }
+                            }
+                        )
                     }
             ) {
                 Canvas(modifier = Modifier.fillMaxSize()) {

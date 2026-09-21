@@ -158,8 +158,16 @@ def test_waveform_monitor_and_parade():
     import subprocess
 
     # 1. First, invoke the compiled native C++ engine benchmark for true 1080p hardware speed
-    exe_path = os.path.join("build", "apex_phase3_test.exe")
-    if os.path.exists(exe_path):
+    candidates = [
+        os.path.join("build", "light_rumor_phase3_test.exe"),
+        os.path.join("build", "Release", "light_rumor_phase3_test.exe"),
+        os.path.join("build", "Debug", "light_rumor_phase3_test.exe"),
+        os.path.join("build", "apex_phase3_test.exe"),
+        os.path.join("build", "Release", "apex_phase3_test.exe"),
+        os.path.join("build", "Debug", "apex_phase3_test.exe"),
+    ]
+    exe_path = next((p for p in candidates if os.path.exists(p)), None)
+    if exe_path:
         res = subprocess.run([exe_path], capture_output=True, encoding="utf-8", errors="replace")
         assert res.returncode == 0, f"Native Phase 3 test failed:\n{res.stdout}\n{res.stderr}"
         if res.stdout:

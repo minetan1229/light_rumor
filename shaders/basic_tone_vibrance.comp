@@ -165,6 +165,14 @@ vec3 applyCalibration(vec3 c) {
     hsl.y = clamp(hsl.y * (1.0 + dSat), 0.0, 1.0);
     return hslToRgb(hsl);
 }
+// Sample Tone Curve
+float sampleToneCurve(float val) {
+    float n = clamp(val, 0.0, 1.0) * 255.0;
+    int i0 = int(floor(n));
+    int i1 = min(i0 + 1, 255);
+    float f = fract(n);
+    return mix(toneCurveLUT[i0], toneCurveLUT[i1], f);
+}
 
 // Output transfer function
 vec3 applyOETF(vec3 linearC, int cs) {
@@ -241,16 +249,9 @@ void main() {
 
     // 9. Tone Curve 1D LUT (if valid)
     if (toneCurveLUT[255] > 0.0 || toneCurveLUT[0] >= 0.0) {
-        auto sampleCurve = [&](float val) {
-            float n = clamp(val, 0.0, 1.0) * 255.0;
-            int i0 = int(floor(n));
-            int i1 = min(i0 + 1, 255);
-            float f = fract(n);
-            return mix(toneCurveLUT[i0], toneCurveLUT[i1], f);
-        };
-        col.r = sampleCurve(col.r);
-        col.g = sampleCurve(col.g);
-        col.b = sampleCurve(col.b);
+        col.r = sampleToneCurve(col.r);
+        col.g = sampleToneCurve(col.g);
+        col.b = sampleToneCurve(col.b);
     }
 
     // 10. Output Color Space OETF

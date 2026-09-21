@@ -7,6 +7,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -46,7 +48,7 @@ fun CullingScreen(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "NO PHOTOS SELECTED",
+                text = "写真が選択されていません",
                 fontFamily = FontFamily.Monospace,
                 color = Color(0xFF666666)
             )
@@ -58,6 +60,7 @@ fun CullingScreen(
     var currentBitmap by remember(currentItem.uri) {
         mutableStateOf(cacheManager.getFromMemory(currentItem.filePath.ifEmpty { currentItem.uri.toString() }))
     }
+    var metaUpdateTrigger by remember(currentIndex) { mutableStateOf(0) }
 
     // Load and prefetch whenever index changes
     LaunchedEffect(currentIndex) {
@@ -78,6 +81,8 @@ fun CullingScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(bgDark)
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .pointerInput(currentIndex) {
                 var totalDrag = 0f
                 detectHorizontalDragGestures(
@@ -103,13 +108,13 @@ fun CullingScreen(
             if (currentBitmap != null) {
                 Image(
                     bitmap = currentBitmap!!.asImageBitmap(),
-                    contentDescription = "Culling Photo",
+                    contentDescription = "選別写真",
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit
                 )
             } else {
                 Text(
-                    text = "PREFETCHING STREAM...",
+                    text = "ストリーム先読み中...",
                     fontFamily = FontFamily.Monospace,
                     fontSize = 11.sp,
                     color = textSecondary
@@ -130,7 +135,7 @@ fun CullingScreen(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "< BACK",
+                    text = "< 戻る",
                     fontFamily = FontFamily.Monospace,
                     fontSize = 11.sp,
                     color = textSecondary,
@@ -173,7 +178,7 @@ fun CullingScreen(
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = "SYNC ZOOM (2/4)",
+                        text = "同期ズーム (2/4)",
                         fontFamily = FontFamily.Monospace,
                         fontSize = 10.sp,
                         color = textPrimary
@@ -188,7 +193,7 @@ fun CullingScreen(
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = "BATCH SYNC",
+                        text = "一括同期",
                         fontFamily = FontFamily.Monospace,
                         fontSize = 10.sp,
                         color = textPrimary
@@ -202,7 +207,7 @@ fun CullingScreen(
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = "DEVELOP",
+                        text = "現像",
                         fontFamily = FontFamily.Monospace,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
@@ -223,19 +228,88 @@ fun CullingScreen(
         ) {
             // Metadata EXIF telemetry strip
             val meta = currentItem.metadata
+            var editingField by remember { mutableStateOf<String?>(null) }
+            var editValue by remember { mutableStateOf("") }
+            
+            var modifiedMetaFields by remember(currentItem.uri) {
+                mutableStateOf(mutableSetOf<String>())
+            }
+
+            if (editingField != null) {
+                AlertDialog(
+                    onDismissRequest = { editingField = null },
+                    title = { Text(text = "Edit $editingField", color = textPrimary) },
+                    text = {
+                        OutlinedTextField(
+                            value = editValue,
+                            onValueChange = { editValue = it },
+                            textStyle = LocalTextStyle.current.copy(color = textPrimary),
+                            singleLine = true
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            val newSet = modifiedMetaFields.toMutableSet()
+                            newSet.add(editingField!!)
+                            modifiedMetaFields = newSet
+                            
+                            when(editingField) {
+                                "captureDate" -> meta.captureDate = editValue
+                                "cameraModel" -> meta.cameraModel = editValue
+                                "focalLength" -> meta.focalLength = editValue
+                                "fNumber" -> meta.fNumber = editValue
+                                "exposureTime" -> meta.exposureTime = editValue
+                                "isoSpeed" -> meta.isoSpeed = editValue
+                            }
+                            XmpSidecarManager.scheduleSaveSidecar(currentItem.filePath, meta, currentItem.developParams, modifiedFields = modifiedMetaFields)
+                            editingField = null
+                        }) { Text("Save") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { editingField = null }) { Text("Cancel") }
+                    },
+                    containerColor = panelDark
+                )
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val openEdit = { field: String, value: String -> 
+                        editingField = field
+                        editValue = value
+                    }
+                    
+                    if (meta.captureDate.isNotEmpty()) {
+                        Text(text = meta.captureDate, fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = textSecondary, modifier = Modifier.clickable { openEdit("captureDate", meta.captureDate) })
+                        Text("|", color = borderDark, fontSize = 10.sp)
+                    }
+                    
+                    Text(text = meta.cameraModel.ifEmpty { "ILCE-7RM5" }, fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = textSecondary, modifier = Modifier.clickable { openEdit("cameraModel", meta.cameraModel) })
+                    Text("|", color = borderDark, fontSize = 10.sp)
+                    Text(text = meta.focalLength.ifEmpty { "50mm" }, fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = textSecondary, modifier = Modifier.clickable { openEdit("focalLength", meta.focalLength) })
+                    Text("|", color = borderDark, fontSize = 10.sp)
+                    Text(text = meta.fNumber.ifEmpty { "f/2.8" }, fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = textSecondary, modifier = Modifier.clickable { openEdit("fNumber", meta.fNumber) })
+                    Text("|", color = borderDark, fontSize = 10.sp)
+                    Text(text = meta.exposureTime.ifEmpty { "1/250s" }, fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = textSecondary, modifier = Modifier.clickable { openEdit("exposureTime", meta.exposureTime) })
+                    Text("|", color = borderDark, fontSize = 10.sp)
+                    Text(text = meta.isoSpeed.ifEmpty { "ISO 100" }, fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = textSecondary, modifier = Modifier.clickable { openEdit("isoSpeed", meta.isoSpeed) })
+                    
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "+ ADD",
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 9.sp,
+                        color = accentAmber,
+                        modifier = Modifier.clickable { openEdit("captureDate", meta.captureDate) }.padding(horizontal = 4.dp, vertical = 2.dp).border(1.dp, borderDark).padding(horizontal = 4.dp, vertical = 2.dp)
+                    )
+                }
+                
                 Text(
-                    text = "${meta.cameraModel.ifEmpty { "ILCE-7RM5" }}  |  ${meta.focalLength.ifEmpty { "50mm" }}  |  ${meta.fNumber.ifEmpty { "f/2.8" }}  |  ${meta.exposureTime.ifEmpty { "1/250s" }}  |  ${meta.isoSpeed.ifEmpty { "ISO 100" }}",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    color = textSecondary
-                )
-                Text(
-                    text = "0ms PREFETCH ACTIVE",
+                    text = "0ms 先読み有効",
                     fontFamily = FontFamily.Monospace,
                     fontSize = 9.sp,
                     letterSpacing = 1.sp,
@@ -246,6 +320,7 @@ fun CullingScreen(
             Spacer(modifier = Modifier.height(10.dp))
 
             // Rating & Flagging control panel
+            val _trigger = metaUpdateTrigger
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -261,12 +336,13 @@ fun CullingScreen(
                             .border(1.dp, if (isPicked) Color(0xFF4CAF50) else borderDark, RoundedCornerShape(2.dp))
                             .clickable {
                                 meta.pickStatus = if (isPicked) PickStatus.NONE else PickStatus.PICKED
+                                metaUpdateTrigger++
                                 XmpSidecarManager.scheduleSaveSidecar(currentItem.filePath, meta, currentItem.developParams)
                             }
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = "FLAG",
+                            text = "採用",
                             fontFamily = FontFamily.Monospace,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
@@ -282,12 +358,13 @@ fun CullingScreen(
                             .border(1.dp, if (isRejected) Color(0xFFEF5350) else borderDark, RoundedCornerShape(2.dp))
                             .clickable {
                                 meta.pickStatus = if (isRejected) PickStatus.NONE else PickStatus.REJECTED
+                                metaUpdateTrigger++
                                 XmpSidecarManager.scheduleSaveSidecar(currentItem.filePath, meta, currentItem.developParams)
                             }
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = "REJECT",
+                            text = "不採用",
                             fontFamily = FontFamily.Monospace,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
@@ -307,6 +384,7 @@ fun CullingScreen(
                                 .border(1.dp, if (isSelected) accentAmber else borderDark, RoundedCornerShape(2.dp))
                                 .clickable {
                                     meta.rating = if (meta.rating == star) 0 else star
+                                    metaUpdateTrigger++
                                     XmpSidecarManager.scheduleSaveSidecar(currentItem.filePath, meta, currentItem.developParams)
                                 },
                             contentAlignment = Alignment.Center
@@ -344,6 +422,7 @@ fun CullingScreen(
                                 )
                                 .clickable {
                                     meta.colorLabel = if (isSelected) ColorLabel.NONE else labelEnum
+                                    metaUpdateTrigger++
                                     XmpSidecarManager.scheduleSaveSidecar(currentItem.filePath, meta, currentItem.developParams)
                                 }
                         )

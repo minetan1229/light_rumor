@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -41,6 +43,8 @@ fun QuickOpenScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(bgDark)
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .padding(24.dp)
     ) {
         Column(
@@ -65,7 +69,7 @@ fun QuickOpenScreen(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "PROFESSIONAL RAW & HYBRID WORKFLOW STUDIO",
+                    text = "プロフェッショナル RAW 現像スタジオ",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Medium,
                     letterSpacing = 2.sp,
@@ -83,7 +87,7 @@ fun QuickOpenScreen(
                             .background(accentAmber, shape = RoundedCornerShape(3.dp))
                     )
                     Text(
-                        text = "ZERO-PERMISSION PHOTO ACCESS READY",
+                        text = "権限不要・写真アクセス準備完了",
                         fontSize = 9.sp,
                         fontFamily = FontFamily.Monospace,
                         color = accentAmber,
@@ -115,7 +119,7 @@ fun QuickOpenScreen(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = "SELECT PHOTOS / BURST SEQUENCE",
+                            text = "写真を選択 / バースト連写",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             fontFamily = FontFamily.Monospace,
@@ -123,7 +127,7 @@ fun QuickOpenScreen(
                             color = textPrimary
                         )
                         Text(
-                            text = "Standard Photo Picker (1 to 100 RAW / JPEG / HEIC)",
+                            text = "標準フォトピッカー (1〜100枚 RAW / JPEG / HEIC)",
                             fontSize = 10.sp,
                             color = textSecondary
                         )
@@ -141,7 +145,7 @@ fun QuickOpenScreen(
                     colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent)
                 ) {
                     Text(
-                        text = "OPEN SINGLE PHOTO",
+                        text = "単写を開く",
                         fontSize = 12.sp,
                         fontFamily = FontFamily.Monospace,
                         letterSpacing = 1.sp,
@@ -160,7 +164,7 @@ fun QuickOpenScreen(
                     colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.Transparent)
                 ) {
                     Text(
-                        text = "OPEN FILE DIALOG / LOCAL STORAGE",
+                        text = "ファイルダイアログ / ローカル",
                         fontSize = 12.sp,
                         fontFamily = FontFamily.Monospace,
                         letterSpacing = 1.sp,
@@ -176,7 +180,7 @@ fun QuickOpenScreen(
                     horizontalAlignment = Alignment.Start
                 ) {
                     Text(
-                        text = "RECENT FILES",
+                        text = "最近のファイル",
                         fontSize = 10.sp,
                         fontFamily = FontFamily.Monospace,
                         color = textSecondary,
@@ -197,13 +201,28 @@ fun QuickOpenScreen(
                                     .padding(4.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    text = item.fileName.ifEmpty { "PHOTO" }.takeLast(8),
-                                    fontSize = 9.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = textSecondary,
-                                    textAlign = TextAlign.Center
-                                )
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Text(
+                                        text = item.fileName.ifEmpty { "写真" }.takeLast(12),
+                                        fontSize = 9.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = textSecondary,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = item.metadata.captureDate.ifEmpty { "Unknown" },
+                                        fontSize = 7.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = textSecondary,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 2
+                                    )
+                                }
                             }
                         }
                     }
@@ -219,7 +238,7 @@ fun QuickOpenScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "DRAG & DROP RAW / IMAGE FILES HERE",
+                        text = "RAW / 画像ファイルをここにドラッグ&ドロップ",
                         fontSize = 10.sp,
                         fontFamily = FontFamily.Monospace,
                         letterSpacing = 2.sp,

@@ -199,8 +199,8 @@ void main() {
         int b1 = (b0 + 1) % 8;
         float frac = fract(hNorm);
 
-        float w0 = (b0 < 4) ? params.monoWeights[b0] : params.monoWeights2[b0 - 4];
-        float w1 = (b1 < 4) ? params.monoWeights[b1] : params.monoWeights2[b1 - 4];
+        float w0 = (b0 < 4) ? monoWeights[b0] : monoWeights2[b0 - 4];
+        float w1 = (b1 < 4) ? monoWeights[b1] : monoWeights2[b1 - 4];
         float bandWeight = mix(w0, w1, frac);
 
         float gray = dot(col, vec3(0.2126, 0.7152, 0.0722)) * (1.0 + (bandWeight - 0.125) * 2.0);

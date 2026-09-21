@@ -57,7 +57,7 @@ fun BatchSyncDialog(
             ) {
                 // Header
                 Text(
-                    text = "BATCH PARAMETER SYNCHRONIZE",
+                    text = "一括パラメータ同期",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace,
@@ -66,7 +66,7 @@ fun BatchSyncDialog(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Source: ${sourceItem.fileName.ifEmpty { "Current Photo" }} -> ${targetItems.size} Target Photos",
+                    text = "同期元: ${sourceItem.fileName.ifEmpty { "Current Photo" }} → ${targetItems.size}枚の対象写真",
                     fontSize = 10.sp,
                     fontFamily = FontFamily.Monospace,
                     color = accentAmber
@@ -79,7 +79,7 @@ fun BatchSyncDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    PresetButton("ALL BASIC", onClick = {
+                    PresetButton("基本全部", onClick = {
                         options = BatchSyncOptions(
                             syncWhiteBalance = true,
                             syncBasicTone = true,
@@ -89,7 +89,7 @@ fun BatchSyncDialog(
                             syncRatingAndLabel = false
                         )
                     })
-                    PresetButton("WB ONLY", onClick = {
+                    PresetButton("WBのみ", onClick = {
                         options = BatchSyncOptions(
                             syncWhiteBalance = true,
                             syncBasicTone = false,
@@ -99,7 +99,7 @@ fun BatchSyncDialog(
                             syncRatingAndLabel = false
                         )
                     })
-                    PresetButton("SELECT ALL", onClick = {
+                    PresetButton("全選択", onClick = {
                         options = BatchSyncOptions(
                             syncWhiteBalance = true,
                             syncBasicTone = true,
@@ -115,42 +115,42 @@ fun BatchSyncDialog(
 
                 // Category Checkboxes
                 SyncCheckboxRow(
-                    title = "WHITE BALANCE & TINT",
+                    title = "ホワイトバランス & 色かぶり",
                     description = "Temperature (${sourceItem.developParams.kelvin.toInt()}K), Tint (${"%.1f".format(sourceItem.developParams.tint)})",
                     checked = options.syncWhiteBalance,
                     onCheckedChange = { options = options.copy(syncWhiteBalance = it) }
                 )
 
                 SyncCheckboxRow(
-                    title = "BASIC TONE & CONTRAST",
+                    title = "基本トーン & コントラスト",
                     description = "Exposure (${"%+.2f".format(sourceItem.developParams.exposureEV)} EV), Highlights, Shadows, Whites, Blacks",
                     checked = options.syncBasicTone,
                     onCheckedChange = { options = options.copy(syncBasicTone = it) }
                 )
 
                 SyncCheckboxRow(
-                    title = "COLOR & VIBRANCE",
+                    title = "カラー & 彩度",
                     description = "Vibrance, Global Saturation, Monochrome state",
                     checked = options.syncColorMixer,
                     onCheckedChange = { options = options.copy(syncColorMixer = it) }
                 )
 
                 SyncCheckboxRow(
-                    title = "DETAIL & NOISE REDUCTION",
+                    title = "ディテール & ノイズ低減",
                     description = "Luminance NR, Chroma NR, Edge Sharpening",
                     checked = options.syncDetailNR,
                     onCheckedChange = { options = options.copy(syncDetailNR = it) }
                 )
 
                 SyncCheckboxRow(
-                    title = "TONE CURVE",
-                    description = "1D Spline parametric tone curve",
+                    title = "トーンカーブ",
+                    description = "1D スプラインパラメトリックトーンカーブ",
                     checked = options.syncToneCurve,
                     onCheckedChange = { options = options.copy(syncToneCurve = it) }
                 )
 
                 SyncCheckboxRow(
-                    title = "RATING & CULLING FLAGS",
+                    title = "レーティング & 選別フラグ",
                     description = "Rating (${sourceItem.metadata.rating}/5), Flag (${sourceItem.metadata.pickStatus}), Label (${sourceItem.metadata.colorLabel.labelName})",
                     checked = options.syncRatingAndLabel,
                     onCheckedChange = { options = options.copy(syncRatingAndLabel = it) }
@@ -166,7 +166,7 @@ fun BatchSyncDialog(
                 ) {
                     TextButton(onClick = onDismiss) {
                         Text(
-                            text = "CANCEL",
+                            text = "キャンセル",
                             fontFamily = FontFamily.Monospace,
                             fontSize = 11.sp,
                             color = textSecondary
@@ -194,7 +194,7 @@ fun BatchSyncDialog(
                         shape = RoundedCornerShape(2.dp)
                     ) {
                         Text(
-                            text = "APPLY SYNC",
+                            text = "同期実行",
                             fontFamily = FontFamily.Monospace,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,

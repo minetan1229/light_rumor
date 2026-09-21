@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
@@ -53,6 +54,7 @@ fun BeforeAfterOverlay(
     developedBitmap: Bitmap?,
     compareMode: CompareMode,
     onCompareModeChange: (CompareMode) -> Unit,
+    geometry: CropTransformParams = CropTransformParams(),
     modifier: Modifier = Modifier
 ) {
     val colors = LightRumorTheme.colors
@@ -80,11 +82,31 @@ fun BeforeAfterOverlay(
             CompareMode.Off -> {
                 // Standard single view with hold-to-compare support
                 activeBitmap?.let { bmp ->
+                    // Compute total rotation: 90-degree steps + fine straighten angle
+                    val totalRotation = (geometry.rotationSteps * 90f) + geometry.rotationDegrees
+                    val scaleX = if (geometry.flipHorizontal) -1f else 1f
+                    val scaleY = if (geometry.flipVertical) -1f else 1f
+
                     Image(
                         bitmap = bmp.asImageBitmap(),
-                        contentDescription = "Photo Preview",
+                        contentDescription = "写真プレビュー",
                         contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .then(
+                                if (!isHoldBefore) {
+                                    Modifier.graphicsLayer {
+                                        rotationZ = totalRotation
+                                        this.scaleX = scaleX
+                                        this.scaleY = scaleY
+                                        // Perspective keystone (subtle 3D rotation)
+                                        rotationX = geometry.perspectiveVertical * 0.3f
+                                        rotationY = geometry.perspectiveHorizontal * 0.3f
+                                    }
+                                } else {
+                                    Modifier // No transform for Before/Original view
+                                }
+                            )
                     )
                 }
             }
@@ -96,7 +118,7 @@ fun BeforeAfterOverlay(
                     developedBitmap?.let { bmp ->
                         Image(
                             bitmap = bmp.asImageBitmap(),
-                            contentDescription = "After",
+                            contentDescription = "補正後",
                             contentScale = ContentScale.Fit,
                             modifier = Modifier.fillMaxSize()
                         )
@@ -111,7 +133,7 @@ fun BeforeAfterOverlay(
                         ) {
                             Image(
                                 bitmap = bmp.asImageBitmap(),
-                                contentDescription = "Before",
+                                contentDescription = "補正前",
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier.fillMaxSize()
                             )
@@ -159,8 +181,8 @@ fun BeforeAfterOverlay(
                             .padding(12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("BEFORE (ORIGINAL)", fontFamily = FontFamily.Monospace, fontSize = 9.sp, color = colors.textSecondary)
-                        Text("AFTER (DEVELOPED)", fontFamily = FontFamily.Monospace, fontSize = 9.sp, color = colors.accentAmber)
+                        Text("補正前（オリジナル）", fontFamily = FontFamily.Monospace, fontSize = 9.sp, color = colors.textSecondary)
+                        Text("補正後（現像済み）", fontFamily = FontFamily.Monospace, fontSize = 9.sp, color = colors.accentAmber)
                     }
                 }
             }
@@ -171,7 +193,7 @@ fun BeforeAfterOverlay(
                     developedBitmap?.let { bmp ->
                         Image(
                             bitmap = bmp.asImageBitmap(),
-                            contentDescription = "After",
+                            contentDescription = "補正後",
                             contentScale = ContentScale.Fit,
                             modifier = Modifier.fillMaxSize()
                         )
@@ -185,7 +207,7 @@ fun BeforeAfterOverlay(
                         ) {
                             Image(
                                 bitmap = bmp.asImageBitmap(),
-                                contentDescription = "Before",
+                                contentDescription = "補正前",
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier.fillMaxSize()
                             )
@@ -220,10 +242,10 @@ fun BeforeAfterOverlay(
                         contentAlignment = Alignment.Center
                     ) {
                         originalBitmap?.let { bmp ->
-                            Image(bitmap = bmp.asImageBitmap(), contentDescription = "Before", contentScale = ContentScale.Fit)
+                            Image(bitmap = bmp.asImageBitmap(), contentDescription = "補正前", contentScale = ContentScale.Fit)
                         }
                         Text(
-                            text = "BEFORE",
+                            text = "補正前",
                             fontFamily = FontFamily.Monospace,
                             fontSize = 10.sp,
                             color = colors.textSecondary,
@@ -239,10 +261,10 @@ fun BeforeAfterOverlay(
                         contentAlignment = Alignment.Center
                     ) {
                         developedBitmap?.let { bmp ->
-                            Image(bitmap = bmp.asImageBitmap(), contentDescription = "After", contentScale = ContentScale.Fit)
+                            Image(bitmap = bmp.asImageBitmap(), contentDescription = "補正後", contentScale = ContentScale.Fit)
                         }
                         Text(
-                            text = "AFTER",
+                            text = "補正後",
                             fontFamily = FontFamily.Monospace,
                             fontSize = 10.sp,
                             color = colors.accentAmber,
@@ -264,7 +286,7 @@ fun BeforeAfterOverlay(
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             ) {
                 Text(
-                    text = "ORIGINAL RAW (HOLDING)",
+                    text = "原画 RAW（長押し中）",
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
                     fontSize = 11.sp,
@@ -283,13 +305,13 @@ fun BeforeAfterOverlay(
                 .padding(3.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            CompareTabButton("OFF", active = compareMode == CompareMode.Off) {
+            CompareTabButton("オフ", active = compareMode == CompareMode.Off) {
                 onCompareModeChange(CompareMode.Off)
             }
-            CompareTabButton("SPLIT", active = compareMode == CompareMode.SplitVertical) {
+            CompareTabButton("分割", active = compareMode == CompareMode.SplitVertical) {
                 onCompareModeChange(CompareMode.SplitVertical)
             }
-            CompareTabButton("2-UP", active = compareMode == CompareMode.SideBySide) {
+            CompareTabButton("並列", active = compareMode == CompareMode.SideBySide) {
                 onCompareModeChange(CompareMode.SideBySide)
             }
         }

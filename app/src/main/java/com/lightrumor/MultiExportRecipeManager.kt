@@ -114,55 +114,51 @@ class MultiExportRecipeManager(
             val outDirectory = File(outputDir)
             if (!outDirectory.exists()) outDirectory.mkdirs()
 
-            // Run recipes in parallel using async
-            val exportJobs = recipes.map { recipe ->
-                async {
-                    val ext = when (recipe.format) {
-                        ExportFormat.TIFF16, ExportFormat.TIFF8 -> "tif"
-                        ExportFormat.WebP -> "webp"
-                        ExportFormat.JPEG -> "jpg"
-                        ExportFormat.LinearDNG -> "dng"
-                    }
-                    val outName = "${baseFilename}_${recipe.id}.${ext}"
-                    val outFile = File(outDirectory, outName).absolutePath
-
-                    progressListener(
-                        MultiExportProgress(
-                            recipeId = recipe.id,
-                            recipeName = recipe.name,
-                            progressPercent = 0.0f,
-                            statusMessage = "Starting ${recipe.name}..."
-                        )
-                    )
-
-                    // Execute export
-                    val success = LightRumorNativeEngine.nativeProcessRawMultiRecipe(
-                        inputPath = inputRawPath,
-                        outputPath = outFile,
-                        format = recipe.format.id,
-                        colorSpace = recipe.colorSpace.id,
-                        quality = recipe.quality,
-                        maxDimension = recipe.maxDimension,
-                        applySharpening = recipe.applyEdgeSharpening,
-                        sharpeningAmount = recipe.sharpeningAmount,
-                        enableWatermark = recipe.enableWatermark,
-                        watermarkText = if (recipe.enableWatermark) watermark.formatExposureLine() else ""
-                    )
-
-                    progressListener(
-                        MultiExportProgress(
-                            recipeId = recipe.id,
-                            recipeName = recipe.name,
-                            progressPercent = 100.0f,
-                            statusMessage = if (success) "Completed" else "Export Failed",
-                            isFinished = true,
-                            outputFilePath = if (success) outFile else null
-                        )
-                    )
+            // Run recipes sequentially to prevent LMK (Low Memory Killer) kill on mobile
+            for (recipe in recipes) {
+                val ext = when (recipe.format) {
+                    ExportFormat.TIFF16, ExportFormat.TIFF8 -> "tif"
+                    ExportFormat.WebP -> "webp"
+                    ExportFormat.JPEG -> "jpg"
+                    ExportFormat.LinearDNG -> "dng"
                 }
-            }
+                val outName = "${baseFilename}_${recipe.id}.${ext}"
+                val outFile = File(outDirectory, outName).absolutePath
 
-            exportJobs.awaitAll()
+                progressListener(
+                    MultiExportProgress(
+                        recipeId = recipe.id,
+                        recipeName = recipe.name,
+                        progressPercent = 0.0f,
+                        statusMessage = "Starting ${recipe.name}..."
+                    )
+                )
+
+                // Execute export
+                val success = LightRumorNativeEngine.nativeProcessRawMultiRecipe(
+                    inputPath = inputRawPath,
+                    outputPath = outFile,
+                    format = recipe.format.id,
+                    colorSpace = recipe.colorSpace.id,
+                    quality = recipe.quality,
+                    maxDimension = recipe.maxDimension,
+                    applySharpening = recipe.applyEdgeSharpening,
+                    sharpeningAmount = recipe.sharpeningAmount,
+                    enableWatermark = recipe.enableWatermark,
+                    watermarkText = if (recipe.enableWatermark) watermark.formatExposureLine() else ""
+                )
+
+                progressListener(
+                    MultiExportProgress(
+                        recipeId = recipe.id,
+                        recipeName = recipe.name,
+                        progressPercent = 100.0f,
+                        statusMessage = if (success) "Completed" else "Export Failed",
+                        isFinished = true,
+                        outputFilePath = if (success) outFile else null
+                    )
+                )
+            }
         }
     }
 }

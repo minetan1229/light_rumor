@@ -55,7 +55,7 @@ fun DetailDenoiseScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "SHARPENING & EDGE MASKING",
+                text = "シャープネス & エッジマスク",
                 style = LightRumorTheme.typography.Header,
                 color = colors.accentAmber,
                 fontSize = 11.sp
@@ -82,7 +82,7 @@ fun DetailDenoiseScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = if (isMaskPreview) "MASK PREVIEW [ON]" else "VISUALIZE MASK",
+                    text = if (isMaskPreview) "マスクプレビュー [有効]" else "マスク表示",
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
                     fontSize = 9.sp,
@@ -92,7 +92,7 @@ fun DetailDenoiseScreen(
         }
 
         LightroomSlider(
-            label = "Sharpen Amount",
+            label = "シャープ適用量",
             value = params.sharpeningAmount,
             onValueChange = { onParamsChange(params.copy(sharpeningAmount = it)) },
             range = 0f..150f,
@@ -104,7 +104,7 @@ fun DetailDenoiseScreen(
         )
 
         LightroomSlider(
-            label = "Sharpen Radius",
+            label = "シャープ半径",
             value = params.sharpeningRadius,
             onValueChange = { onParamsChange(params.copy(sharpeningRadius = it)) },
             range = 0.5f..3.0f,
@@ -116,7 +116,7 @@ fun DetailDenoiseScreen(
         )
 
         LightroomSlider(
-            label = "Sharpen Detail",
+            label = "シャープディテール",
             value = params.sharpeningDetail,
             onValueChange = { onParamsChange(params.copy(sharpeningDetail = it)) },
             range = 0f..100f,
@@ -128,7 +128,7 @@ fun DetailDenoiseScreen(
         )
 
         LightroomSlider(
-            label = "Edge Masking",
+            label = "エッジマスク",
             value = params.sharpeningMasking,
             onValueChange = { onParamsChange(params.copy(sharpeningMasking = it)) },
             range = 0f..100f,
@@ -145,7 +145,7 @@ fun DetailDenoiseScreen(
         // SECTION 2: NOISE REDUCTION (LUMINANCE)
         // ---------------------------------------------------------------------
         Text(
-            text = "LUMINANCE NOISE REDUCTION",
+            text = "輝度ノイズ低減",
             style = LightRumorTheme.typography.Header,
             color = colors.accentAmber,
             fontSize = 11.sp,
@@ -153,7 +153,7 @@ fun DetailDenoiseScreen(
         )
 
         LightroomSlider(
-            label = "Luminance NR",
+            label = "輝度 NR",
             value = params.luminanceNR,
             onValueChange = { onParamsChange(params.copy(luminanceNR = it)) },
             range = 0f..100f,
@@ -165,7 +165,7 @@ fun DetailDenoiseScreen(
         )
 
         LightroomSlider(
-            label = "Luma Detail",
+            label = "輝度ディテール",
             value = params.luminanceNRDetail,
             onValueChange = { onParamsChange(params.copy(luminanceNRDetail = it)) },
             range = 0f..100f,
@@ -177,7 +177,7 @@ fun DetailDenoiseScreen(
         )
 
         LightroomSlider(
-            label = "Luma Contrast",
+            label = "輝度コントラスト",
             value = params.luminanceNRContrast,
             onValueChange = { onParamsChange(params.copy(luminanceNRContrast = it)) },
             range = 0f..100f,
@@ -194,7 +194,7 @@ fun DetailDenoiseScreen(
         // SECTION 3: COLOR NOISE REDUCTION (CHROMA SPECKLE)
         // ---------------------------------------------------------------------
         Text(
-            text = "COLOR NOISE REDUCTION (CHROMA)",
+            text = "カラーノイズ低減",
             style = LightRumorTheme.typography.Header,
             color = colors.accentAmber,
             fontSize = 11.sp,
@@ -202,7 +202,7 @@ fun DetailDenoiseScreen(
         )
 
         LightroomSlider(
-            label = "Color NR",
+            label = "カラー NR",
             value = params.chromaNR,
             onValueChange = { onParamsChange(params.copy(chromaNR = it)) },
             range = 0f..100f,
@@ -214,7 +214,7 @@ fun DetailDenoiseScreen(
         )
 
         LightroomSlider(
-            label = "Color Detail",
+            label = "カラーディテール",
             value = params.chromaNRDetail,
             onValueChange = { onParamsChange(params.copy(chromaNRDetail = it)) },
             range = 0f..100f,
@@ -226,7 +226,7 @@ fun DetailDenoiseScreen(
         )
 
         LightroomSlider(
-            label = "Color Smoothness",
+            label = "カラースムーズ",
             value = params.chromaNRSmoothness,
             onValueChange = { onParamsChange(params.copy(chromaNRSmoothness = it)) },
             range = 0f..100f,
@@ -243,7 +243,7 @@ fun DetailDenoiseScreen(
         // SECTION 4: OPTICS & CHROMATIC ABERRATION DEFRINGE
         // ---------------------------------------------------------------------
         Text(
-            text = "OPTICS & DEFRINGE",
+            text = "光学補正 & フリンジ除去",
             style = LightRumorTheme.typography.Header,
             color = colors.accentAmber,
             fontSize = 11.sp,
@@ -251,7 +251,7 @@ fun DetailDenoiseScreen(
         )
 
         LightroomSlider(
-            label = "Defringe Purple",
+            label = "パープルフリンジ",
             value = params.lensCorrection.defringePurple,
             onValueChange = { onParamsChange(params.copy(lensCorrection = params.lensCorrection.copy(defringePurple = it))) },
             range = 0f..100f,
@@ -263,7 +263,7 @@ fun DetailDenoiseScreen(
         )
 
         LightroomSlider(
-            label = "Defringe Green",
+            label = "グリーンフリンジ",
             value = params.lensCorrection.defringeGreen,
             onValueChange = { onParamsChange(params.copy(lensCorrection = params.lensCorrection.copy(defringeGreen = it))) },
             range = 0f..100f,
@@ -275,7 +275,7 @@ fun DetailDenoiseScreen(
         )
 
         LightroomSlider(
-            label = "Vignette Falloff",
+            label = "周辺減光補正",
             value = params.lensCorrection.vignettingCorrection,
             onValueChange = { onParamsChange(params.copy(lensCorrection = params.lensCorrection.copy(vignettingCorrection = it))) },
             range = 0f..200f,

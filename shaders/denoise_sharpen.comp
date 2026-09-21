@@ -45,6 +45,7 @@ void main() {
     }
 
     int paddedW = params.tileSize.x + 2 * params.padding;
+    int paddedH = params.tileSize.y + 2 * params.padding;
     int padX = localId.x + params.padding;
     int padY = localId.y + params.padding;
     int centerIdx = padY * paddedW + padX;
@@ -52,11 +53,16 @@ void main() {
     vec4 centerP = inPixels[centerIdx];
     float centerLum = dot(centerP.rgb, vec3(0.2126, 0.7152, 0.0722));
 
-    // Sample orthogonal neighbors for gradient / Laplacian calculation
-    float lumLeft   = dot(inPixels[centerIdx - 1].rgb, vec3(0.2126, 0.7152, 0.0722));
-    float lumRight  = dot(inPixels[centerIdx + 1].rgb, vec3(0.2126, 0.7152, 0.0722));
-    float lumTop    = dot(inPixels[centerIdx - paddedW].rgb, vec3(0.2126, 0.7152, 0.0722));
-    float lumBottom = dot(inPixels[centerIdx + paddedW].rgb, vec3(0.2126, 0.7152, 0.0722));
+    // Sample orthogonal neighbors with bounds clamping
+    int idxLeft   = padY * paddedW + clamp(padX - 1, 0, paddedW - 1);
+    int idxRight  = padY * paddedW + clamp(padX + 1, 0, paddedW - 1);
+    int idxTop    = clamp(padY - 1, 0, paddedH - 1) * paddedW + padX;
+    int idxBottom = clamp(padY + 1, 0, paddedH - 1) * paddedW + padX;
+
+    float lumLeft   = dot(inPixels[idxLeft].rgb, vec3(0.2126, 0.7152, 0.0722));
+    float lumRight  = dot(inPixels[idxRight].rgb, vec3(0.2126, 0.7152, 0.0722));
+    float lumTop    = dot(inPixels[idxTop].rgb, vec3(0.2126, 0.7152, 0.0722));
+    float lumBottom = dot(inPixels[idxBottom].rgb, vec3(0.2126, 0.7152, 0.0722));
 
     // Gradient magnitude: Sobel-like edge strength
     float gradMag = abs(lumRight - lumLeft) + abs(lumBottom - lumTop);
@@ -88,7 +94,9 @@ void main() {
 
     for (int dy = -2; dy <= 2; ++dy) {
         for (int dx = -2; dx <= 2; ++dx) {
-            int nIdx = (padY + dy) * paddedW + (padX + dx);
+            int cx = clamp(padX + dx, 0, paddedW - 1);
+            int cy = clamp(padY + dy, 0, paddedH - 1);
+            int nIdx = cy * paddedW + cx;
             vec4 np = inPixels[nIdx];
             float nLum = dot(np.rgb, vec3(0.2126, 0.7152, 0.0722));
 
