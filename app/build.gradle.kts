@@ -63,18 +63,9 @@ android {
         compose = true
     }
 
-    val ndkDirExists = project.file("${android.sdkDirectory}/ndk").exists() && 
-                       (project.file("${android.sdkDirectory}/ndk").listFiles()?.isNotEmpty() == true)
-    val isCiOrNdkAvailable = ndkDirExists || 
-                             System.getenv("ANDROID_NDK_HOME") != null || 
-                             System.getenv("ANDROID_NDK_ROOT") != null || 
-                             System.getenv("CI") != null
-
-    if (isCiOrNdkAvailable) {
-        externalNativeBuild {
-            cmake {
-                path = file("../CMakeLists.txt")
-            }
+    externalNativeBuild {
+        cmake {
+            path = file("../CMakeLists.txt")
         }
     }
 
