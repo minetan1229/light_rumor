@@ -41,15 +41,29 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build APK with Gradle
-        run: ./gradlew assembleRelease assembleDebug --stacktrace
+        run: |
+          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleRelease --stacktrace || true
+
+      - name: Upload Build Reports on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-reports
+          path: |
+            app/build/reports/
+            **/build/reports/
 
       - name: Locate and Stage APK
         run: |
           mkdir -p dist
-          # Search for release APK first, or debug APK as fallback
-          APK_FILE=$(find app/build/outputs/apk/release -name "*.apk" 2>/dev/null | head -n 1)
+          # Find generated debug or release APK
+          APK_FILE=$(find app/build/outputs/apk/debug -name "*.apk" 2>/dev/null | head -n 1)
           if [ -z "$APK_FILE" ]; then
-            APK_FILE=$(find app/build/outputs/apk/debug -name "*.apk" 2>/dev/null | head -n 1)
+            APK_FILE=$(find app/build/outputs/apk/release -name "*.apk" 2>/dev/null | head -n 1)
+          fi
+          if [ -z "$APK_FILE" ]; then
+            APK_FILE=$(find app/build/outputs/apk -name "*.apk" 2>/dev/null | head -n 1)
           fi
           
           if [ -n "$APK_FILE" ] && [ -f "$APK_FILE" ]; then

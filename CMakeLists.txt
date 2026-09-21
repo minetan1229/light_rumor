@@ -17,6 +17,8 @@ endif()
 # Include directories
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/light_rumor
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/apex
 )
 
 # Core sources
@@ -44,7 +46,7 @@ add_library(light_rumor_engine SHARED
 )
 
 if(ANDROID)
-    target_link_libraries(light_rumor_engine log)
+    target_link_libraries(light_rumor_engine log ${CMAKE_DL_LIBS})
 endif()
 
 # Also build apex_engine shared library for binary compatibility
@@ -53,7 +55,7 @@ add_library(apex_engine SHARED
     src/JniBridge.cpp
 )
 if(ANDROID)
-    target_link_libraries(apex_engine log)
+    target_link_libraries(apex_engine log ${CMAKE_DL_LIBS})
 endif()
 
 # Desktop test runners (only when not targeting Android)
