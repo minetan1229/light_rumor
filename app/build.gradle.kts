@@ -19,8 +19,8 @@ android {
 
         externalNativeBuild {
             cmake {
-                cppFlags = "-std=c++20"
-                arguments += listOf("-DANDROID_STL=c++_shared")
+                cppFlags.add("-std=c++20")
+                arguments.add("-DANDROID_STL=c++_shared")
             }
         }
         ndk {
