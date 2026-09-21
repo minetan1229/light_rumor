@@ -1,7 +1,7 @@
-#include "apex/Common.h"
-#include "apex/DenoiseEngine.h"
-#include "apex/LensfunIntegration.h"
-#include "apex/ExportPipeline.h"
+#include "light_rumor/Common.h"
+#include "light_rumor/DenoiseEngine.h"
+#include "light_rumor/LensfunIntegration.h"
+#include "light_rumor/ExportPipeline.h"
 
 #include <iostream>
 #include <vector>

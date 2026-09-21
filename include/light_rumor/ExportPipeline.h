@@ -1,9 +1,9 @@
 #pragma once
 
-#include "Common.h"
-#include "RawDecoder.h"
-#include "VulkanCompute.h"
-#include "Dither.h"
+#include "light_rumor/Common.h"
+#include "light_rumor/RawDecoder.h"
+#include "light_rumor/VulkanCompute.h"
+#include "light_rumor/Dither.h"
 #include <string>
 #include <vector>
 #include <memory>

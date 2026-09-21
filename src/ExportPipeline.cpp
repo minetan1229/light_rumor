@@ -1,8 +1,8 @@
-#include "apex/ExportPipeline.h"
-#include "apex/ImageWriter.h"
-#include "apex/DenoiseEngine.h"
-#include "apex/LensfunIntegration.h"
-#include "apex/MaskEngine.h"
+#include "light_rumor/ExportPipeline.h"
+#include "light_rumor/ImageWriter.h"
+#include "light_rumor/DenoiseEngine.h"
+#include "light_rumor/LensfunIntegration.h"
+#include "light_rumor/MaskEngine.h"
 #include <iostream>
 #include <vector>
 #include <cmath>

@@ -1,8 +1,8 @@
-#include "apex/Common.h"
-#include "apex/RawDecoder.h"
-#include "apex/ExportPipeline.h"
-#include "apex/ImageWriter.h"
-#include "apex/Dither.h"
+#include "light_rumor/Common.h"
+#include "light_rumor/RawDecoder.h"
+#include "light_rumor/ExportPipeline.h"
+#include "light_rumor/ImageWriter.h"
+#include "light_rumor/Dither.h"
 
 #include <iostream>
 #include <iomanip>

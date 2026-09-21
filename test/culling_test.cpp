@@ -1,6 +1,6 @@
-#include "apex/Common.h"
-#include "apex/RawDecoder.h"
-#include "apex/ImageWriter.h"
+#include "light_rumor/Common.h"
+#include "light_rumor/RawDecoder.h"
+#include "light_rumor/ImageWriter.h"
 
 #include <iostream>
 #include <vector>

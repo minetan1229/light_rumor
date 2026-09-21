@@ -1,4 +1,6 @@
 #pragma once
+#ifndef LIGHT_RUMOR_COMMON_H
+#define LIGHT_RUMOR_COMMON_H
 
 #include <cstdint>
 #include <string>
@@ -692,3 +694,5 @@ namespace light_rumor {
 }
 
 
+
+#endif // LIGHT_RUMOR_COMMON_H

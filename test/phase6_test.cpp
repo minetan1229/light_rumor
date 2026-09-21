@@ -1,12 +1,12 @@
-#include "apex/Common.h"
-#include "apex/TetherManager.h"
-#include "apex/FieldScopesEngine.h"
-#include "apex/FocusStacker.h"
-#include "apex/AstroAligner.h"
-#include "apex/ColorCheckerCalibration.h"
-#include "apex/SoftProofingEngine.h"
-#include "apex/ExportPipeline.h"
-#include "apex/ImageWriter.h"
+#include "light_rumor/Common.h"
+#include "light_rumor/TetherManager.h"
+#include "light_rumor/FieldScopesEngine.h"
+#include "light_rumor/FocusStacker.h"
+#include "light_rumor/AstroAligner.h"
+#include "light_rumor/ColorCheckerCalibration.h"
+#include "light_rumor/SoftProofingEngine.h"
+#include "light_rumor/ExportPipeline.h"
+#include "light_rumor/ImageWriter.h"
 
 #include <iostream>
 #include <vector>
