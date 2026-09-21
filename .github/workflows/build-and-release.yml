@@ -21,6 +21,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
 
       - name: Set up JDK 21
@@ -71,11 +72,20 @@ jobs:
           if [ ${#apks[@]} -gt 0 ]; then
             echo "Found APK: ${apks[0]}"
             cp "${apks[0]}" dist/light_rumor.apk
-            ls -lh dist/light_rumor.apk
+            cp "${apks[0]}" dist/light_rumor-v1.0.0.apk
+            ls -lh dist/
           else
             echo "Error: No APK file found!"
             exit 1
           fi
+
+      - name: Commit APK to Repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add dist/
+          git commit -m "chore(release): update dist/light_rumor APK [skip ci]" || echo "No changes to commit"
+          git push origin ${{ github.ref_name }}
 
       - name: Upload APK as Workflow Artifact
         uses: actions/upload-artifact@v4
@@ -95,28 +105,14 @@ jobs:
 
           echo "Publishing release for tag: $TAG"
 
-          cat << 'EOF' > release_notes.md
-## 📱 light_rumor Android APK
-
-スマートフォンから直接ダウンロードしてインストールできます：
-
-👉 **[light_rumor APKをダウンロードしてインストール](https://github.com/minetan1229/light_rumor/releases/latest/download/light_rumor.apk)**
-
-### 主な特徴
-- Adobe Lightroom Classic / Capture One / DaVinci Resolve の強みを凝縮
-- 完全手動・32bitリニアRAW現像エンジン（Vulkan / C++20）
-- シネマ級RGB波形モニター（色の波）、フォルスカラー、ゼブラ、フォーカスピーキング
-- 9種の手動マスク、コピースタンプ、XMPプリセット、アナログリール履歴
-- テザー撮影、フォーカススタッキング、星景追尾スタック、ICCソフトプルーフ
-- 完全オフライン（インターネット通信権限なし）
-EOF
+          printf "## 📱 light_rumor Android APK\n\nスマートフォンから直接ダウンロードしてインストールできます：\n\n👉 **[light_rumor APKをダウンロードしてインストール](https://github.com/minetan1229/light_rumor/raw/master/dist/light_rumor-v1.0.0.apk)**\n\n### 主な特徴\n- Adobe Lightroom Classic / Capture One / DaVinci Resolve の強みを凝縮\n- 完全手動・32bitリニアRAW現像エンジン（Vulkan / C++20）\n- シネマ級RGB波形モニター（色の波）、フォルスカラー、ゼブラ、フォーカスピーキング\n- 9種の手動マスク、コピースタンプ、XMPプリセット、アナログリール履歴\n- テザー撮影、フォーカススタッキング、星景追尾スタック、ICCソフトプルーフ\n- 完全オフライン（インターネット通信権限なし）\n" > release_notes.md
 
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists, uploading APK..."
-            gh release upload "$TAG" dist/light_rumor.apk --clobber
+            gh release upload "$TAG" dist/light_rumor.apk dist/light_rumor-v1.0.0.apk --clobber
           else
             echo "Creating release $TAG with APK..."
-            gh release create "$TAG" dist/light_rumor.apk \
+            gh release create "$TAG" dist/light_rumor.apk dist/light_rumor-v1.0.0.apk \
               --title "light_rumor Release $TAG" \
               --notes-file release_notes.md \
               --latest
