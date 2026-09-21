@@ -96,8 +96,8 @@ double WaveformEngine::computeFromRGBA8(const uint8_t* rgbaPixels,
                     uint8_t r = hasR ? 220 : 0;
                     uint8_t g = hasG ? 220 : 0;
                     uint8_t b = hasB ? 220 : 0;
-                    // Format: 0xAABBGGRR
-                    outWaveform.rgbaPixels[y * waveW + x] = 0xEE000000 | (b << 16) | (g << 8) | r;
+                    // Format: 0xAARRGGBB (ARGB_8888 compatible)
+                    outWaveform.rgbaPixels[y * waveW + x] = 0xEE000000 | (r << 16) | (g << 8) | b;
                 }
             }
         }
@@ -209,9 +209,9 @@ double WaveformEngine::computeFromRGBA8(const uint8_t* rgbaPixels,
                 }
             }
 
-            // Alpha is high where there is data, format 0xAABBGGRR
+            // Alpha is high where there is data, format 0xAARRGGBB (ARGB_8888 compatible)
             uint8_t alpha = static_cast<uint8_t>(std::clamp(std::max(valR, std::max(valG, valB)) + 60, 0, 255));
-            outWaveform.rgbaPixels[idx] = (alpha << 24) | (valB << 16) | (valG << 8) | valR;
+            outWaveform.rgbaPixels[idx] = (alpha << 24) | (valR << 16) | (valG << 8) | valB;
         }
     }
 

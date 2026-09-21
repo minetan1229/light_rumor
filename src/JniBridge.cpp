@@ -130,6 +130,7 @@ jboolean Impl_nativeProcessRaw(
 jbyteArray Impl_nativeExtractThumbnail(JNIEnv* env, jobject /*thiz*/, jstring jFilePath) {
     if (!jFilePath) return nullptr;
     const char* pathChars = env->GetStringUTFChars(jFilePath, nullptr);
+    if (!pathChars) return nullptr;
     std::string filePath(pathChars);
     env->ReleaseStringUTFChars(jFilePath, pathChars);
 
@@ -158,7 +159,8 @@ jintArray Impl_nativeComputeWaveform(
     }
 
     jsize len = env->GetArrayLength(jRgbaBytes);
-    if (len < jWidth * jHeight * 4) return nullptr;
+    int64_t requiredBytes = static_cast<int64_t>(jWidth) * static_cast<int64_t>(jHeight) * 4;
+    if (static_cast<int64_t>(len) < requiredBytes) return nullptr;
 
     jbyte* bytes = env->GetByteArrayElements(jRgbaBytes, nullptr);
     if (!bytes) return nullptr;
@@ -203,9 +205,9 @@ jfloatArray Impl_nativeEvaluateRadialMask(
     layer.radialFeather = jFeather;
     layer.inverted = (jInvert == JNI_TRUE);
 
-    std::vector<light_rumor::FloatRGBA> dummyPixels(static_cast<size_t>(jWidth) * jHeight);
+    std::vector<light_rumor::FloatRGBA> emptyPixels;
     std::vector<float> outMask;
-    light_rumor::MaskEngine::evaluateSingleMask(layer, dummyPixels, jWidth, jHeight, {}, outMask);
+    light_rumor::MaskEngine::evaluateSingleMask(layer, emptyPixels, jWidth, jHeight, {}, outMask);
 
     jfloatArray result = env->NewFloatArray(static_cast<jsize>(outMask.size()));
     if (!result) return nullptr;
@@ -224,7 +226,8 @@ jintArray Impl_nativeApplyPoissonHeal(
     if (!jPixels || jWidth <= 0 || jHeight <= 0) return nullptr;
 
     jsize len = env->GetArrayLength(jPixels);
-    if (len < jWidth * jHeight) return nullptr;
+    int64_t requiredPixels = static_cast<int64_t>(jWidth) * static_cast<int64_t>(jHeight);
+    if (static_cast<int64_t>(len) < requiredPixels) return nullptr;
 
     jint* pData = env->GetIntArrayElements(jPixels, nullptr);
     if (!pData) return nullptr;
@@ -248,6 +251,7 @@ jintArray Impl_nativeApplyPoissonHeal(
     op.feather = jFeather;
     op.opacity = 1.0f;
 
+    jIterations = std::clamp(jIterations, 1, 100);
     light_rumor::MaskEngine::applyPoissonHeal(fPixels, jWidth, jHeight, op, jIterations);
 
     std::vector<jint> outInts(fPixels.size());
@@ -277,7 +281,8 @@ jintArray Impl_nativeComputeFieldScope(
     if (!jPixels || jWidth <= 0 || jHeight <= 0) return nullptr;
 
     jsize len = env->GetArrayLength(jPixels);
-    if (len < static_cast<jsize>(jWidth) * jHeight) return nullptr;
+    int64_t requiredPixels = static_cast<int64_t>(jWidth) * static_cast<int64_t>(jHeight);
+    if (static_cast<int64_t>(len) < requiredPixels) return nullptr;
 
     jint* pData = env->GetIntArrayElements(jPixels, nullptr);
     if (!pData) return nullptr;
@@ -336,11 +341,17 @@ jintArray Impl_nativeApplySoftProof(
     if (!jPixels || jWidth <= 0 || jHeight <= 0) return nullptr;
 
     jsize len = env->GetArrayLength(jPixels);
-    if (len < static_cast<jsize>(jWidth) * jHeight) return nullptr;
+    int64_t requiredPixels = static_cast<int64_t>(jWidth) * static_cast<int64_t>(jHeight);
+    if (static_cast<int64_t>(len) < requiredPixels) return nullptr;
 
-    const char* pChars = jProfilePath ? env->GetStringUTFChars(jProfilePath, nullptr) : "";
-    std::string profilePath = pChars ? pChars : "";
-    if (jProfilePath && pChars) env->ReleaseStringUTFChars(jProfilePath, pChars);
+    std::string profilePath;
+    if (jProfilePath) {
+        const char* pChars = env->GetStringUTFChars(jProfilePath, nullptr);
+        if (pChars) {
+            profilePath = pChars;
+            env->ReleaseStringUTFChars(jProfilePath, pChars);
+        }
+    }
 
     jint* pData = env->GetIntArrayElements(jPixels, nullptr);
     if (!pData) return nullptr;

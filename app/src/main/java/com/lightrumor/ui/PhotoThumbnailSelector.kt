@@ -170,7 +170,7 @@ object PhotoThumbnailPresets {
         return bmp
     }
 
-    private fun generateProfileSample(rScale: Float, gScale: Float, bScale: Float): Bitmap {
+    fun generateProfileSample(rScale: Float, gScale: Float, bScale: Float): Bitmap {
         val w = 80
         val h = 60
         val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)

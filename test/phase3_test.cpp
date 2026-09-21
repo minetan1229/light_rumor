@@ -100,7 +100,7 @@ bool testWaveformOverlayAndColorMixing() {
     int targetY = -1;
     for (int y = 10; y <= 20; ++y) {
         uint32_t px = waveData.rgbaPixels[y * waveW + 50];
-        if ((px & 0xFF) > 100) {
+        if (((px >> 16) & 0xFF) > 100) {
             targetY = y;
             break;
         }
@@ -109,23 +109,23 @@ bool testWaveformOverlayAndColorMixing() {
 
     // Left side (x = 50): pure red
     uint32_t pxLeft = waveData.rgbaPixels[targetY * waveW + 50];
-    uint8_t rLeft = pxLeft & 0xFF;
+    uint8_t rLeft = (pxLeft >> 16) & 0xFF;
     uint8_t gLeft = (pxLeft >> 8) & 0xFF;
-    uint8_t bLeft = (pxLeft >> 16) & 0xFF;
+    uint8_t bLeft = pxLeft & 0xFF;
     LR_TEST_ASSERT(rLeft > 100 && gLeft < 50 && bLeft < 50, "Left side must be pure red trace");
 
     // Middle side (x = 256): yellow (R + G)
     uint32_t pxMid = waveData.rgbaPixels[targetY * waveW + 256];
-    uint8_t rMid = pxMid & 0xFF;
+    uint8_t rMid = (pxMid >> 16) & 0xFF;
     uint8_t gMid = (pxMid >> 8) & 0xFF;
-    uint8_t bMid = (pxMid >> 16) & 0xFF;
+    uint8_t bMid = pxMid & 0xFF;
     LR_TEST_ASSERT(rMid > 100 && gMid > 100 && bMid < 50, "Middle side must be yellow (R+G additive mixing)");
 
     // Right side (x = 450): white (R + G + B)
     uint32_t pxRight = waveData.rgbaPixels[targetY * waveW + 450];
-    uint8_t rRight = pxRight & 0xFF;
+    uint8_t rRight = (pxRight >> 16) & 0xFF;
     uint8_t gRight = (pxRight >> 8) & 0xFF;
-    uint8_t bRight = (pxRight >> 16) & 0xFF;
+    uint8_t bRight = pxRight & 0xFF;
     LR_TEST_ASSERT(rRight > 100 && gRight > 100 && bRight > 100, "Right side must be white (R+G+B neutral white)");
 
     std::cout << "  ✓ Waveform computed in: " << elapsed << " ms\n";
@@ -164,22 +164,22 @@ bool testWaveformParadePartition() {
 
     // Column 1 (Red parade) at x = subW / 2
     uint32_t pxCol1 = paradeData.rgbaPixels[75 * waveW + (subW / 2)];
-    uint8_t r1 = pxCol1 & 0xFF;
+    uint8_t r1 = (pxCol1 >> 16) & 0xFF;
     uint8_t g1 = (pxCol1 >> 8) & 0xFF;
-    uint8_t b1 = (pxCol1 >> 16) & 0xFF;
+    uint8_t b1 = pxCol1 & 0xFF;
     LR_TEST_ASSERT(r1 > 50 && g1 == 0 && b1 == 0, "Col 1 must be pure red parade channel");
 
     // Column 2 (Green parade) at x = subW + subW / 2
     uint32_t pxCol2 = paradeData.rgbaPixels[75 * waveW + (subW + subW / 2)];
-    uint8_t r2 = pxCol2 & 0xFF;
+    uint8_t r2 = (pxCol2 >> 16) & 0xFF;
     uint8_t g2 = (pxCol2 >> 8) & 0xFF;
-    uint8_t b2 = (pxCol2 >> 16) & 0xFF;
+    uint8_t b2 = pxCol2 & 0xFF;
     LR_TEST_ASSERT(r2 == 0 && g2 > 50 && b2 == 0, "Col 2 must be pure green parade channel");
 
     // Column 3 (Blue parade) at x = 2*subW + subW / 2
     uint32_t pxCol3 = paradeData.rgbaPixels[75 * waveW + (2 * subW + subW / 2)];
-    uint8_t r3 = pxCol3 & 0xFF;
-    uint8_t b3 = (pxCol3 >> 16) & 0xFF;
+    uint8_t r3 = (pxCol3 >> 16) & 0xFF;
+    uint8_t b3 = pxCol3 & 0xFF;
     LR_TEST_ASSERT(r3 == 0 && b3 > 50, "Col 3 must be pure blue parade channel");
 
     std::cout << "  ✓ 3-Column RGB Parade partition and titanium dividers verified:\n";

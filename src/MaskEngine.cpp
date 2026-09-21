@@ -639,47 +639,63 @@ void PoissonSolver::solve(const std::vector<FloatRGBA>& destImage,
                           int32_t minX, int32_t minY, int32_t maxX, int32_t maxY,
                           int32_t iterations,
                           std::vector<FloatRGBA>& outHealedImage) {
-    size_t total = static_cast<size_t>(width) * height;
+    if (width <= 0 || height <= 0 || destImage.empty()) return;
     outHealedImage = destImage;
 
-    // Difference field membrane d = f - g
-    // At boundary / unmasked pixels, d = f* - g
-    std::vector<FloatRGBA> diffPing(total);
-    std::vector<FloatRGBA> diffPong(total);
+    minX = std::clamp(minX, 0, width - 1);
+    maxX = std::clamp(maxX, 0, width - 1);
+    minY = std::clamp(minY, 0, height - 1);
+    maxY = std::clamp(maxY, 0, height - 1);
+
+    int32_t roiW = maxX - minX + 1;
+    int32_t roiH = maxY - minY + 1;
+    if (roiW <= 0 || roiH <= 0) return;
+
+    size_t roiTotal = static_cast<size_t>(roiW) * roiH;
+
+    // Difference field membrane d = f - g inside ROI only (prevents full-frame ~1.5GB OOM on mobile)
+    std::vector<FloatRGBA> diffPing(roiTotal);
+    std::vector<FloatRGBA> diffPong(roiTotal);
 
     for (int32_t y = minY; y <= maxY; ++y) {
+        int32_t ly = y - minY;
         for (int32_t x = minX; x <= maxX; ++x) {
+            int32_t lx = x - minX;
+            size_t locIdx = static_cast<size_t>(ly) * roiW + lx;
             size_t idx = static_cast<size_t>(y) * width + x;
             int32_t sx = std::clamp(x + srcOffsetX, 0, width - 1);
             int32_t sy = std::clamp(y + srcOffsetY, 0, height - 1);
             const FloatRGBA& dst = destImage[idx];
-            const FloatRGBA& src = destImage[sy * width + sx];
+            const FloatRGBA& src = destImage[static_cast<size_t>(sy) * width + sx];
             if (maskWeights[idx] < 0.01f) {
-                diffPing[idx] = FloatRGBA(dst.r - src.r, dst.g - src.g, dst.b - src.b, 1.0f);
+                diffPing[locIdx] = FloatRGBA(dst.r - src.r, dst.g - src.g, dst.b - src.b, 1.0f);
             } else {
-                diffPing[idx] = FloatRGBA(0.0f, 0.0f, 0.0f, 1.0f);
+                diffPing[locIdx] = FloatRGBA(0.0f, 0.0f, 0.0f, 1.0f);
             }
-            diffPong[idx] = diffPing[idx];
+            diffPong[locIdx] = diffPing[locIdx];
         }
     }
 
     // Jacobi relaxation for Delta d = 0 inside Omega
     for (int iter = 0; iter < iterations; ++iter) {
-        for (int32_t y = minY + 1; y < maxY; ++y) {
-            for (int32_t x = minX + 1; x < maxX; ++x) {
+        for (int32_t ly = 1; ly < roiH - 1; ++ly) {
+            int32_t y = minY + ly;
+            for (int32_t lx = 1; lx < roiW - 1; ++lx) {
+                int32_t x = minX + lx;
+                size_t locIdx = static_cast<size_t>(ly) * roiW + lx;
                 size_t idx = static_cast<size_t>(y) * width + x;
                 float m = maskWeights[idx];
                 if (m > 0.01f) {
-                    size_t left  = idx - 1;
-                    size_t right = idx + 1;
-                    size_t up    = idx - width;
-                    size_t down  = idx + width;
+                    size_t left  = locIdx - 1;
+                    size_t right = locIdx + 1;
+                    size_t up    = locIdx - roiW;
+                    size_t down  = locIdx + roiW;
 
-                    diffPong[idx].r = 0.25f * (diffPing[left].r + diffPing[right].r + diffPing[up].r + diffPing[down].r);
-                    diffPong[idx].g = 0.25f * (diffPing[left].g + diffPing[right].g + diffPing[up].g + diffPing[down].g);
-                    diffPong[idx].b = 0.25f * (diffPing[left].b + diffPing[right].b + diffPing[up].b + diffPing[down].b);
+                    diffPong[locIdx].r = 0.25f * (diffPing[left].r + diffPing[right].r + diffPing[up].r + diffPing[down].r);
+                    diffPong[locIdx].g = 0.25f * (diffPing[left].g + diffPing[right].g + diffPing[up].g + diffPing[down].g);
+                    diffPong[locIdx].b = 0.25f * (diffPing[left].b + diffPing[right].b + diffPing[up].b + diffPing[down].b);
                 } else {
-                    diffPong[idx] = diffPing[idx];
+                    diffPong[locIdx] = diffPing[locIdx];
                 }
             }
         }
@@ -688,14 +704,17 @@ void PoissonSolver::solve(const std::vector<FloatRGBA>& destImage,
 
     // Final seamless composite: f = g + d
     for (int32_t y = minY; y <= maxY; ++y) {
+        int32_t ly = y - minY;
         for (int32_t x = minX; x <= maxX; ++x) {
+            int32_t lx = x - minX;
+            size_t locIdx = static_cast<size_t>(ly) * roiW + lx;
             size_t idx = static_cast<size_t>(y) * width + x;
             float m = maskWeights[idx];
             if (m > 0.0f) {
                 int32_t sx = std::clamp(x + srcOffsetX, 0, width - 1);
                 int32_t sy = std::clamp(y + srcOffsetY, 0, height - 1);
-                const FloatRGBA& src = destImage[sy * width + sx];
-                const FloatRGBA& d = diffPing[idx];
+                const FloatRGBA& src = destImage[static_cast<size_t>(sy) * width + sx];
+                const FloatRGBA& d = diffPing[locIdx];
 
                 float healedR = std::max(0.0f, src.r + d.r);
                 float healedG = std::max(0.0f, src.g + d.g);

@@ -82,9 +82,8 @@ fun buildPhotoDevelopColorMatrix(params: DevelopmentParams): ColorMatrix {
     }
 
     val isMono = params.isMonochrome || params.colorProfile == "monochrome"
-    val matrix = ColorMatrix()
 
-    if (isMono) {
+    return if (isMono) {
         val wR = params.monochromeWeights.getOrElse(0) { 0.2126f }
         val wG = params.monochromeWeights.getOrElse(3) { 0.7152f }
         val wB = params.monochromeWeights.getOrElse(5) { 0.0722f }
@@ -93,7 +92,7 @@ fun buildPhotoDevelopColorMatrix(params: DevelopmentParams): ColorMatrix {
         val nG = (wG / sum) * effectiveScale
         val nB = (wB / sum) * effectiveScale
 
-        matrix.set(
+        ColorMatrix(
             floatArrayOf(
                 nR, nG, nB, 0f, totalLumaOffset,
                 nR, nG, nB, 0f, totalLumaOffset,
@@ -113,7 +112,7 @@ fun buildPhotoDevelopColorMatrix(params: DevelopmentParams): ColorMatrix {
         val offG = (invSat * lumG) * effectiveScale
         val offB = (invSat * lumB) * effectiveScale
 
-        matrix.set(
+        ColorMatrix(
             floatArrayOf(
                 mR, offG, offB, 0f, totalLumaOffset,
                 offR, mG, offB, 0f, totalLumaOffset,
@@ -122,8 +121,6 @@ fun buildPhotoDevelopColorMatrix(params: DevelopmentParams): ColorMatrix {
             )
         )
     }
-
-    return matrix
 }
 
 /**

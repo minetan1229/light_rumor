@@ -500,14 +500,14 @@ fun ThumbZoneBottomBar(
                         )
                         LightroomSlider(
                             label = "歪曲収差補正",
-                            value = params.optics.distortion,
+                            value = params.lensCorrection.distortionCorrection,
                             onValueChange = { 
-                                val updated = params.copy(optics = params.optics.copy(distortion = it))
+                                val updated = params.copy(lensCorrection = params.lensCorrection.copy(distortionCorrection = it))
                                 onParamsChange(updated)
                             },
                             onValueChangeFinished = onParamsChangeFinished,
-                            range = -50f..50f,
-                            defaultValue = 0f,
+                            range = 0f..200f,
+                            defaultValue = 100f,
                             unit = "%",
                             displayDecimals = 0,
                             step = 1f,
@@ -515,14 +515,14 @@ fun ThumbZoneBottomBar(
                         )
                         LightroomSlider(
                             label = "周辺光量補正",
-                            value = params.optics.vignette,
+                            value = params.lensCorrection.vignettingCorrection,
                             onValueChange = {
-                                val updated = params.copy(optics = params.optics.copy(vignette = it))
+                                val updated = params.copy(lensCorrection = params.lensCorrection.copy(vignettingCorrection = it))
                                 onParamsChange(updated)
                             },
                             onValueChangeFinished = onParamsChangeFinished,
-                            range = -100f..100f,
-                            defaultValue = 0f,
+                            range = 0f..200f,
+                            defaultValue = 100f,
                             unit = "%",
                             displayDecimals = 0,
                             step = 1f,
@@ -608,7 +608,7 @@ private fun applyFilterToBitmap(src: Bitmap, weights: List<Float>): Bitmap {
         val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
         val canvas = android.graphics.Canvas(out)
         val paint = Paint()
-        val dummyParams = DevelopmentParams(isMonochrome = true, monochromeWeights = weights)
+        val dummyParams = DevelopmentParams(isMonochrome = true, monochromeWeights = weights.toFloatArray())
         val cm = buildPhotoDevelopColorMatrix(dummyParams)
         paint.colorFilter = android.graphics.ColorMatrixColorFilter(cm.values)
         canvas.drawBitmap(src, 0f, 0f, paint)

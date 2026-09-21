@@ -16,6 +16,7 @@ class EditHistoryCatalog(context: Context) {
     companion object {
         private const val PREFS_NAME = "light_rumor_catalog"
         private const val KEY_HISTORY = "edit_history"
+        private const val MAX_ENTRIES = 50
         fun paramsToJson(params: DevelopmentParams): String {
             val obj = JSONObject()
             obj.put("exposureEV", params.exposureEV.toDouble())

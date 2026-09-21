@@ -1,7 +1,7 @@
 package com.lightrumor
 
 import android.content.Context
-import android.media.ExifInterface
+import androidx.exifinterface.media.ExifInterface
 import android.net.Uri
 import android.os.Build
 import kotlinx.coroutines.Dispatchers

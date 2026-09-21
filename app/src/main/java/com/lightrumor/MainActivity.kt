@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import com.lightrumor.ui.BatchSyncDialog
@@ -86,7 +87,7 @@ class MainActivity : ComponentActivity() {
 
         // Register ActivityResult launchers BEFORE setContent (must be in CREATED state)
         pickerLauncher = PhotoPickerLauncher(this) { selectedUris ->
-            androidx.lifecycle.lifecycleScope.launch {
+            lifecycleScope.launch {
                 val newItems = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                     selectedUris.map { resolvePhotoItem(it) }
                 }
@@ -99,7 +100,7 @@ class MainActivity : ComponentActivity() {
         @Suppress("DEPRECATION")
         val intentUris = intent.getParcelableArrayListExtra<Uri>(IntentHandlerActivity.EXTRA_PHOTO_URIS)
         if (intentUris != null && intentUris.isNotEmpty()) {
-            androidx.lifecycle.lifecycleScope.launch {
+            lifecycleScope.launch {
                 val newItems = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                     intentUris.map { resolvePhotoItem(it) }
                 }
