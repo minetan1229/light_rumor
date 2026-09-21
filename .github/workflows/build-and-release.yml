@@ -29,16 +29,12 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Configure Android SDK, NDK and local.properties
+      - name: Configure Android SDK and NDK 27.0.12077973
         run: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
-          if [ -d "$ANDROID_SDK_ROOT/ndk" ]; then
-            NDK_DIR=$(ls -1d $ANDROID_SDK_ROOT/ndk/* | tail -n 1)
-            echo "ndk.dir=$NDK_DIR" >> local.properties
-            echo "Configured ndk.dir=$NDK_DIR"
-          fi
           cat local.properties
           yes | sdkmanager --licenses || true
+          sdkmanager "ndk;27.0.12077973" "cmake;3.22.1" || true
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
