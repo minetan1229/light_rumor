@@ -69,10 +69,14 @@ jobs:
           mkdir -p dist
           shopt -s globstar nullglob
           apks=(**/build/outputs/apk/**/*.apk)
+          TAG="v1.1.1"
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            TAG="${{ github.ref_name }}"
+          fi
           if [ ${#apks[@]} -gt 0 ]; then
             echo "Found APK: ${apks[0]}"
             cp "${apks[0]}" dist/light_rumor.apk
-            cp "${apks[0]}" dist/light_rumor-v1.0.2.apk
+            cp "${apks[0]}" "dist/light_rumor-${TAG}.apk"
             ls -lh dist/
           else
             echo "Error: No APK file found!"
@@ -98,21 +102,21 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="v1.0.2"
+          TAG="v1.1.1"
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             TAG="${{ github.ref_name }}"
           fi
 
           echo "Publishing release for tag: $TAG"
 
-          printf "## 📱 light_rumor Android APK ($TAG)\n\nスマートフォンから直接ダウンロードしてインストールできます：\n\n👉 **[light_rumor $TAG APKをダウンロードしてインストール](https://github.com/minetan1229/light_rumor/raw/master/dist/light_rumor-$TAG.apk)**\n\n### $TAG 更新内容\n- UIの日本語化＆操作性向上（カリング画面・現像スタジオのラベル整理）\n- 最近編集した写真のカタログ・履歴管理（自動パラメータ復元対応）\n- EXIF・メタデータ編集＆XMPサイドカー同期の強化\n- 星景追尾スタック・画像処理パイプラインの高速化\n- 全画面Edge-to-Edge表示対応\n\n### 主な特徴\n- Adobe Lightroom Classic / Capture One / DaVinci Resolve の強みを凝縮\n- 完全手動・32bitリニアRAW現像エンジン（Vulkan / C++20）\n- シネマ級RGB波形モニター（色の波）、フォルスカラー、ゼブラ、フォーカスピーキング\n- 9種の手動マスク、コピースタンプ、XMPプリセット、アナログリール履歴\n- テザー撮影、フォーカススタッキング、星景追尾スタック、ICCソフトプルーフ\n- 完全オフライン（インターネット通信権限なし）\n" > release_notes.md
+          printf "## 📱 light_rumor Android APK ($TAG)\n\nスマートフォンから直接ダウンロードしてインストールできます：\n\n👉 **[light_rumor $TAG APKをダウンロードしてインストール](https://github.com/minetan1229/light_rumor/raw/master/dist/light_rumor-$TAG.apk)**\n\n### $TAG 更新内容\n- 致命的バグ・安定性の抜本改善（全監査エラー修正：Poisson修復局所メモリ化、現像値永続化、ARGB波形色反転修復、ロケール耐性強化、JNI境界安全性）\n- 端末情報・カメラ機種・レンズ・EXIFの自由変更＆実ファイル直接書き込み保存\n- スライダー操作性の完全修復（ThumbZone水平ドラッグ専用基盤）\n- 写真上での直観的マスク操作＆「欠けたところ」色分け表示\n- カラープロファイル実写サムネイル＆モノクロ統合\n- 端末写真「コレクション」タブ＆まとめて一括選択\n\n### 主な特徴\n- Adobe Lightroom Classic / Capture One / DaVinci Resolve の強みを凝縮\n- 完全手動・32bitリニアRAW現像エンジン（Vulkan / C++20）\n- シネマ級RGB波形モニター（色の波）、フォルスカラー、ゼブラ、フォーカスピーキング\n- 9種の手動マスク、コピースタンプ、XMPプリセット、アナログリール履歴\n- テザー撮影、フォーカススタッキング、星景追尾スタック、ICCソフトプルーフ\n- 完全オフライン（インターネット通信権限なし）\n" > release_notes.md
 
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists, uploading APK..."
-            gh release upload "$TAG" dist/light_rumor.apk dist/light_rumor-v1.0.2.apk --clobber
+            gh release upload "$TAG" dist/light_rumor.apk "dist/light_rumor-${TAG}.apk" --clobber
           else
             echo "Creating release $TAG with APK..."
-            gh release create "$TAG" dist/light_rumor.apk dist/light_rumor-v1.0.2.apk \
+            gh release create "$TAG" dist/light_rumor.apk "dist/light_rumor-${TAG}.apk" \
               --title "light_rumor Release $TAG" \
               --notes-file release_notes.md \
               --latest
