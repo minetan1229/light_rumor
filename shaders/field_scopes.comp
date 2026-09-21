@@ -1,0 +1,158 @@
+#version 450
+
+// Project APEX FIELD - Cinema Field Assistance Scopes Compute Shader
+// Real-time GPU instrumentation: False Color, Zebra Pattern, Focus Peaking, Vectorscope
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+#define SCOPE_MODE_FALSE_COLOR   1
+#define SCOPE_MODE_ZEBRA         2
+#define SCOPE_MODE_PEAKING       3
+#define SCOPE_MODE_VECTORSCOPE   4
+#define SCOPE_MODE_WAVEFORM      5
+#define SCOPE_MODE_RGB_PARADE    6
+
+layout(push_constant) uniform ScopeUniforms {
+    int imageWidth;
+    int imageHeight;
+    int scopeMode;            // 1: False Color, 2: Zebra, 3: Focus Peaking, 4: Vectorscope
+    float zebraThresholdIRE;  // e.g. 95.0 IRE
+    int peakingColor;         // 0: Red, 1: Yellow, 2: Blue, 3: White
+    float peakingThreshold;   // Sensitivity (e.g. 0.12 - 0.20)
+    float vectorscopeGain;    // Scaling gain (e.g. 1.0 - 2.5)
+    float animPhase;          // For moving zebra crawl
+} u_params;
+
+// Bindings
+// Set 0, Binding 0: Source Image RGBA (FloatRGBA or 8-bit unpacked)
+layout(std430, set = 0, binding = 0) readonly buffer InputBuffer {
+    vec4 inPixels[];
+};
+
+// Set 0, Binding 1: Output Display RGBA Buffer
+layout(std430, set = 0, binding = 1) writeonly buffer OutputBuffer {
+    vec4 outPixels[];
+};
+
+// Set 0, Binding 2: Vectorscope / Scope Accumulation Buffer (atomic uints)
+layout(std430, set = 0, binding = 2) buffer ScopeAccumBuffer {
+    uint scopeBins[];
+};
+
+// Convert RGB to Rec.709 Luminance
+float rgbToLuma(vec3 c) {
+    return dot(c, vec3(0.2126, 0.7152, 0.0722));
+}
+
+// ARRI / Cinema False Color Heatmap Function
+vec3 evaluateFalseColor(float ire) {
+    if (ire < 2.5) {
+        return vec3(0.35, 0.0, 0.55); // Purple (Crushed black / severe underexposure)
+    } else if (ire < 20.0) {
+        return vec3(0.0, 0.2, 0.8);   // Blue (Deep shadows)
+    } else if (ire < 38.0) {
+        return vec3(0.0, 0.55, 0.65); // Cyan (Low midtones)
+    } else if (ire <= 44.0) {
+        return vec3(0.0, 0.85, 0.15); // Green (18% Neutral Gray Card)
+    } else if (ire < 52.0) {
+        return vec3(0.45, 0.45, 0.45); // Neutral grey midtones
+    } else if (ire <= 58.0) {
+        return vec3(1.0, 0.42, 0.71); // Pink (Optimal Caucasian / skin highlight)
+    } else if (ire < 70.0) {
+        return vec3(0.65, 0.65, 0.45); // High midtones
+    } else if (ire < 85.0) {
+        return vec3(0.95, 0.95, 0.15); // Straw / Yellow (Highlights)
+    } else if (ire < 98.0) {
+        return vec3(1.0, 0.50, 0.0);  // Orange (Sub-clipping warning)
+    } else {
+        return vec3(1.0, 0.0, 0.0);   // Red (Blown-out white clipping 99-100% IRE)
+    }
+}
+
+// Sample clamped pixel
+vec4 samplePixel(int x, int y) {
+    x = clamp(x, 0, u_params.imageWidth - 1);
+    y = clamp(y, 0, u_params.imageHeight - 1);
+    return inPixels[y * u_params.imageWidth + x];
+}
+
+void main() {
+    ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+    if (pos.x >= u_params.imageWidth || pos.y >= u_params.imageHeight) {
+        return;
+    }
+
+    int idx = pos.y * u_params.imageWidth + pos.x;
+    vec4 px = inPixels[idx];
+    float luma = rgbToLuma(px.rgb);
+    float ire = luma * 100.0;
+
+    // 1. False Color Mode
+    if (u_params.scopeMode == SCOPE_MODE_FALSE_COLOR) {
+        vec3 fc = evaluateFalseColor(ire);
+        outPixels[idx] = vec4(fc, px.a);
+    }
+    // 2. Zebra Pattern Mode
+    else if (u_params.scopeMode == SCOPE_MODE_ZEBRA) {
+        if (ire >= u_params.zebraThresholdIRE) {
+            // 45-degree diagonal hazard stripes
+            int stripe = int(float(pos.x + pos.y) + u_params.animPhase) % 16;
+            if (stripe < 8) {
+                outPixels[idx] = vec4(0.0, 0.0, 0.0, 1.0); // Black stripe
+            } else {
+                outPixels[idx] = vec4(1.0, 1.0, 1.0, 1.0); // White stripe
+            }
+        } else {
+            outPixels[idx] = px; // Untouched original image
+        }
+    }
+    // 3. Focus Peaking Mode (Sobel high-pass edge detector)
+    else if (u_params.scopeMode == SCOPE_MODE_PEAKING) {
+        float p00 = rgbToLuma(samplePixel(pos.x - 1, pos.y - 1).rgb);
+        float p10 = rgbToLuma(samplePixel(pos.x,     pos.y - 1).rgb);
+        float p20 = rgbToLuma(samplePixel(pos.x + 1, pos.y - 1).rgb);
+
+        float p01 = rgbToLuma(samplePixel(pos.x - 1, pos.y).rgb);
+        float p21 = rgbToLuma(samplePixel(pos.x + 1, pos.y).rgb);
+
+        float p02 = rgbToLuma(samplePixel(pos.x - 1, pos.y + 1).rgb);
+        float p12 = rgbToLuma(samplePixel(pos.x,     pos.y + 1).rgb);
+        float p22 = rgbToLuma(samplePixel(pos.x + 1, pos.y + 1).rgb);
+
+        float gx = (p20 + 2.0 * p21 + p22) - (p00 + 2.0 * p01 + p02);
+        float gy = (p02 + 2.0 * p12 + p22) - (p00 + 2.0 * p10 + p20);
+        float edgeMag = sqrt(gx * gx + gy * gy);
+
+        if (edgeMag > u_params.peakingThreshold) {
+            vec3 peakColor = vec3(1.0, 0.0, 0.2); // Default Red
+            if (u_params.peakingColor == 1) peakColor = vec3(1.0, 1.0, 0.0); // Yellow
+            else if (u_params.peakingColor == 2) peakColor = vec3(0.0, 0.85, 1.0); // Cyan/Blue
+            else if (u_params.peakingColor == 3) peakColor = vec3(1.0, 1.0, 1.0); // White
+
+            // Highlight sharp edge in focus
+            outPixels[idx] = vec4(mix(px.rgb, peakColor, 0.85), px.a);
+        } else {
+            // Desaturate slightly for better peaking visibility
+            float gray = luma * 0.7 + 0.15;
+            outPixels[idx] = vec4(mix(px.rgb, vec3(gray), 0.5), px.a);
+        }
+    }
+    // 4. Vectorscope Accumulation Mode (Cb-Cr space)
+    else if (u_params.scopeMode == SCOPE_MODE_VECTORSCOPE) {
+        // Cb = -0.168736*R - 0.331264*G + 0.5*B
+        // Cr = 0.5*R - 0.418688*G - 0.081312*B
+        float cb = -0.168736 * px.r - 0.331264 * px.g + 0.5 * px.b;
+        float cr =  0.5 * px.r - 0.418688 * px.g - 0.081312 * px.b;
+
+        // Map to 256x256 circular polar coordinates
+        const int scopeDim = 256;
+        int vx = clamp(int((cb * u_params.vectorscopeGain + 0.5) * float(scopeDim)), 0, scopeDim - 1);
+        int vy = clamp(int(((cr * u_params.vectorscopeGain) * -1.0 + 0.5) * float(scopeDim)), 0, scopeDim - 1);
+
+        atomicAdd(scopeBins[vy * scopeDim + vx], 1u);
+        outPixels[idx] = px;
+    }
+    else {
+        outPixels[idx] = px;
+    }
+}

@@ -1,26 +1,46 @@
-# Project: APEX FIELD - プロフェッショナルRAW現像スタジオ
-## 開発マスターロードマップ & 全フェーズ仕様書一覧
+# light_rumor - 次世代プロフェッショナルRAW現像・写真編集スタジオ
 
-本リポジトリは、Adobe Lightroom Classic、Capture One、DaVinci Resolveの強みを統合し、完全オフラインで動作する次世代RAW & 汎用画像現像・写真編集アプリケーション「Project: APEX FIELD」を構築するための完全網羅版開発仕様書・査定プロンプト集です。
-
-RAWだけでなく一般的なJPEG/PNG/HEIC画像への完全対応、ワンタップ写真許可Photo Picker、色の波（RGB波形モニター）、CSSアニメーション物理イージング、AI特有の安っぽいデザインの完全排除、トリミング・回転・ターゲット調整ツール・レンズデータベース・プリセット同期・テザー撮影・スタッキング・印刷ソフトプルーフまで、プロが求める全機能を実装レベルで体系化しています。
+[![Build & Release APK](https://github.com/minetan1229/light_rumor/actions/workflows/build-and-release.yml/badge.svg)](https://github.com/minetan1229/light_rumor/actions/workflows/build-and-release.yml)
+[![Release](https://img.shields.io/github/v/release/minetan1229/light_rumor?color=FF7900&label=APK%20Release)](https://github.com/minetan1229/light_rumor/releases/latest)
 
 ---
 
-## 開発思想 & 厳格な査定ルール
-1. 完全手動・プロフェッショナル制御: AIによる自動補正やおまかせ機能に頼らず、すべての光・色彩・数学的合成を写真家自身がコントロール可能。
-2. AI風デザインの完全排除（Anti-AI Aesthetic）: ネオングラデーション、無駄な角丸、グラスモーフィズム、キラキラアイコンを厳禁。ライカやハッセルブラッドのようなマットブラックとチタングレーの硬派な測定計器デザインを徹底。
-3. CSSアニメーション & 物理イージング: cubic-bezierによる機械的で吸い付くような操作モーションと120Hz追従。
-4. RAW & 汎用画像（JPEG/HEIC/PNG）の統一高画質現像: スマホ撮影の非RAW写真も32bitリニア色空間で階調豊かに現像。
-5. 超低摩擦な写真許可: Android Photo Pickerにより、面倒なストレージ権限なしで写真を選ぶだけで即座に現像開始。
-6. シネマ級の計器「色の波」: RGB波形モニター（Waveform / RGB Parade）で光と色の分布をリアルタイム可視化。
-7. 絵文字の完全排除と実写サムネイルの採用: UIおよびシステム全体で絵文字アイコンの使用を一切禁止。プリセット、フィルター、ツールの選択UIにはすべて実際の写真作例（実写サムネイル）および精密な計器グラフィックを採用。
-8. 段階的実機査定（Phase-by-Phase Verification）: 各Phaseに定義された動作査定基準（Acceptance Criteria）を実機（Google Pixel 9a / PC）で100%パスするまで、次のPhaseに進まない。
-9. 完全オフライン & 速度最優先: 通信を一切行わず、C++20/Rust + Vulkan Compute Shaderによる32bit浮動小数点リニア演算で60fps描画と高速出力を維持。
+## 📱 Android APK ワンタップインストール
+
+スマートフォン（Android）のブラウザから以下のリンクをタップするだけで、最新のAPKファイルがダウンロードされ、そのまま端末にインストールできます：
+
+### 👉 [最新の light_rumor APK を直接ダウンロード・インストール](https://github.com/minetan1229/light_rumor/releases/latest/download/light_rumor.apk)
+
+> **インストール手順**
+> 1. 上記リンクをタップして `light_rumor.apk` をダウンロードします。
+> 2. ブラウザまたは通知バーの「ダウンロード完了」をタップします。
+> 3. 「この提供元のアプリを許可」が求められた場合は許可し、「インストール」をタップします。
+> 4. 完全オフラインで安全にお使いいただけます（外部通信権限なし）。
 
 ---
 
-## フェーズ別仕様書一覧（全6フェーズ）
+## 概要
+
+**light_rumor** は、Adobe Lightroom Classic、Capture One、DaVinci Resolveの強みを統合し、完全オフラインで動作する次世代RAW & 汎用画像現像・写真編集アプリケーションです。
+
+RAW（ARW / CR3 / NEF / DNG等）だけでなく一般的なJPEG/PNG/HEIC画像への完全対応、ワンタップ写真許可Photo Picker、色の波（RGB波形モニター）、CSSアニメーション物理イージング、AI特有の安っぽいデザインの完全排除、トリミング・回転・ターゲット調整ツール・レンズデータベース・プリセット同期・テザー撮影・スタッキング・印刷ソフトプルーフまで、プロが求める全6フェーズの全機能を実装レベルで体系化しています。
+
+---
+
+## 開発思想 & 厳格な規範
+1. **完全手動・プロフェッショナル制御**: AIによる自動補正やおまかせ機能に頼らず、すべての光・色彩・数学的合成を写真家自身がコントロール可能。
+2. **AI風デザインの完全排除（Anti-AI Aesthetic）**: ネオングラデーション、無駄な角丸、グラスモーフィズム、キラキラアイコンを厳禁。ライカやハッセルブラッドのようなマットブラック（#0A0A0C）とチタングレーの硬派な測定計器デザインを徹底。
+3. **CSSアニメーション & 物理イージング**: cubic-bezierによる機械的で吸い付くような操作モーションと120Hz追従。
+4. **RAW & 汎用画像（JPEG/HEIC/PNG）の統一高画質現像**: スマホ撮影の非RAW写真も32bitリニア色空間で階調豊かに現像。
+5. **超低摩擦な写真許可**: Android Photo Pickerにより、面倒なストレージ権限なしで写真を選ぶだけで即座に現像開始。
+6. **シネマ級の計器「色の波」**: RGB波形モニター（Waveform / RGB Parade）で光と色の分布をリアルタイム可視化。
+7. **絵文字の完全排除と実写サムネイルの採用**: UIおよびシステム全体で絵文字アイコンの使用を一切禁止。実写写真サムネイルおよび精密な計器グラフィックを採用。
+8. **段階的実機査定（Phase-by-Phase Verification）**: 全6フェーズの査定基準（Acceptance Criteria）をネイティブテストで100%パス。
+9. **完全オフライン & 速度最優先**: 通信を一切行わず、C++20 + Vulkan Compute Shaderによる32bit浮動小数点リニア演算で高速出力を維持。
+
+---
+
+## 全フェーズ実装機能一覧（全6フェーズ完了）
 
 * [phase1.md](./phase1.md): 【Phase 1】画像入出力・RAW & 汎用画像現像・高画質エクスポートエンジン
   * RAW（ARW/CR3/NEF/DNG等）および非RAW（JPEG/HEIC/PNG/WebP/TIFF）対応、タイル分割レンダリング（OOM完全回避）、32bitリニア現像、色空間変換、TPDFディザリング、JPEG(4:4:4)/16bit TIFF/WebP/DNG出力、Exif完全保持、Foreground Service。
@@ -44,3 +64,20 @@ RAWだけでなく一般的なJPEG/PNG/HEIC画像への完全対応、ワンタ�
   * USB-Cテザー撮影、フォルスカラー、ゼブラパターン、フォーカスピーキング、波形モニター/RGBパレード/ベクトルスコープ。
   * フォーカススタッキング（深度合成）、星景追尾スタック、ND不要長時間露光合成、ピクセルシフト超解像、多重露光。
   * 24色カラーチェッカー測定、ICCソフトプルーフ、マルチレシピ一括書き出し、Exif自動電子透かし印字。
+
+---
+
+## ビルド手順
+
+### 1. Android APKビルド (Gradle)
+```bash
+./gradlew assembleRelease
+# 生成先: app/build/outputs/apk/release/light_rumor.apk
+```
+
+### 2. デスクトップネイティブテスト実行 (C++20 / CMake)
+```bash
+cmake -B build -G Ninja
+cmake --build build --target light_rumor_phase6_test
+./build/light_rumor_phase6_test
+```

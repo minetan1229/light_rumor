@@ -9,17 +9,27 @@ obj/
 *.dylib
 *.a
 *.lib
+*.patch
 
 # Output test images
 test_output_*
 *.ppm
-*.jpg
-*.tif
-*.tiff
-*.webp
+test_output_*.jpg
+test_output_*.tif
+test_output_*.tiff
+test_output_*.webp
+
+# Android & Gradle
+.gradle/
+local.properties
+**/build/
+captures/
+.externalNativeBuild/
+.cxx/
 
 # IDE
 .idea/
 .vscode/
+*.iml
 *.swp
 *~

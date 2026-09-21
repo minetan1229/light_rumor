@@ -1,5 +1,8 @@
 #include "apex/ExportPipeline.h"
 #include "apex/ImageWriter.h"
+#include "apex/DenoiseEngine.h"
+#include "apex/LensfunIntegration.h"
+#include "apex/MaskEngine.h"
 #include <iostream>
 #include <vector>
 #include <cmath>
@@ -90,8 +93,8 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
                                        std::vector<FloatRGBA>& outValidTile) {
     outValidTile.resize(static_cast<size_t>(validW) * validH);
 
-    // 1. Calculate White Balance multipliers
-    float kelvin = std::clamp(params.kelvin, 2000.0f, 12000.0f);
+    // 1. Calculate White Balance multipliers (2,000K to 50,000K)
+    float kelvin = std::clamp(params.kelvin, 2000.0f, 50000.0f);
     float kelvinRatio = kelvin / 5500.0f;
     float rGain = std::pow(1.0f / kelvinRatio, 0.65f);
     float bGain = std::pow(kelvinRatio, 0.85f);
@@ -107,7 +110,8 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
     size_t totalPadded = static_cast<size_t>(paddedW) * paddedH;
 
     // Pass 1: Pixel-wise Tone, WB, Color Mixer / Monochrome
-    for (size_t i = 0; i < totalPadded; ++i) {
+    #pragma omp parallel for schedule(static)
+    for (int64_t i = 0; i < static_cast<int64_t>(totalPadded); ++i) {
         FloatRGBA& p = workTile[i];
 
         // 1. White balance
@@ -126,7 +130,37 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
         p.g *= exposureMult;
         p.b *= exposureMult;
 
-        // 3. Highlight recovery (soft-knee compression for specular/overexposed areas)
+        // 3. Atmospheric Dehaze
+        if (std::abs(params.dehaze) > 1e-4f) {
+            float darkCh = std::min({p.r, p.g, p.b});
+            float t = std::clamp(1.0f - 0.75f * darkCh, 0.15f, 1.0f);
+            float atmos = 0.95f;
+            float factor = std::abs(params.dehaze) * 0.01f;
+            float dehazedR = (p.r - atmos) / std::lerp(1.0f, t, factor * 0.6f) + atmos;
+            float dehazedG = (p.g - atmos) / std::lerp(1.0f, t, factor * 0.6f) + atmos;
+            float dehazedB = (p.b - atmos) / std::lerp(1.0f, t, factor * 0.6f) + atmos;
+            p.r = std::max(0.0f, p.r * (1.0f - factor) + dehazedR * factor);
+            p.g = std::max(0.0f, p.g * (1.0f - factor) + dehazedG * factor);
+            p.b = std::max(0.0f, p.b * (1.0f - factor) + dehazedB * factor);
+        }
+
+        // 4. Primary Calibration
+        if (std::abs(params.primaryRed.hueShift) > 1e-4f || std::abs(params.primaryRed.saturationShift) > 1e-4f ||
+            std::abs(params.primaryGreen.hueShift) > 1e-4f || std::abs(params.primaryGreen.saturationShift) > 1e-4f ||
+            std::abs(params.primaryBlue.hueShift) > 1e-4f || std::abs(params.primaryBlue.saturationShift) > 1e-4f) {
+            float h, s, l;
+            rgbToHsl(p.r, p.g, p.b, h, s, l);
+            float wR = std::max(0.0f, 1.0f - std::abs(h - 0.0f) / 60.0f) + std::max(0.0f, 1.0f - std::abs(h - 360.0f) / 60.0f);
+            float wG = std::max(0.0f, 1.0f - std::abs(h - 120.0f) / 60.0f);
+            float wB = std::max(0.0f, 1.0f - std::abs(h - 240.0f) / 60.0f);
+            float dH = (wR * params.primaryRed.hueShift + wG * params.primaryGreen.hueShift + wB * params.primaryBlue.hueShift) * 0.3f;
+            float dS = (wR * params.primaryRed.saturationShift + wG * params.primaryGreen.saturationShift + wB * params.primaryBlue.saturationShift) * 0.01f;
+            h = std::fmod(h + dH + 360.0f, 360.0f);
+            s = std::clamp(s * (1.0f + dS), 0.0f, 1.0f);
+            hslToRgb(h, s, l, p.r, p.g, p.b);
+        }
+
+        // 5. Highlight recovery (soft-knee compression for specular/overexposed areas)
         if (params.highlights > 0.0f) {
             float hFactor = params.highlights * 0.015f;
             auto recoverC = [hFactor](float c) {
@@ -141,7 +175,7 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
             p.b = recoverC(p.b);
         }
 
-        // 4. Shadow lift
+        // 6. Shadow lift
         if (std::abs(params.shadows) > 1e-4f) {
             float sLift = std::pow(1.0f - std::clamp(lum, 0.0f, 1.0f), 3.0f) * (params.shadows * 0.004f);
             p.r = std::max(0.0f, p.r + sLift);
@@ -149,7 +183,7 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
             p.b = std::max(0.0f, p.b + sLift);
         }
 
-        // 5. Contrast (S-curve around 0.18 middle gray pivot)
+        // 7. Contrast (S-curve around 0.18 middle gray pivot)
         if (std::abs(params.contrast) > 1e-4f) {
             float cFactor = 1.0f + (params.contrast * 0.006f);
             auto applyContrast = [cFactor](float c) {
@@ -161,25 +195,26 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
             p.b = applyContrast(p.b);
         }
 
-        // 6. White & Black levels
+        // 8. White & Black levels
         p.r = std::max(0.0f, p.r - params.blacks * 0.0005f) * (1.0f + params.whites * 0.005f);
         p.g = std::max(0.0f, p.g - params.blacks * 0.0005f) * (1.0f + params.whites * 0.005f);
         p.b = std::max(0.0f, p.b - params.blacks * 0.0005f) * (1.0f + params.whites * 0.005f);
 
-        // 7. 8-Color Mixer or Monochrome Mode
+        // 9. 8-Color Mixer or Monochrome Mode
         if (params.isMonochrome) {
             float h, s, l;
             rgbToHsl(p.r, p.g, p.b, h, s, l);
 
-            // Compute weights across 8 optical color bands
+            // Compute weights across 8 optical color bands with strict 45 deg cutoff
             float totalWeight = 0.0f;
             float filteredWeight = 0.0f;
             for (int b = 0; b < 8; ++b) {
                 float dist = angularDistance(h, bandCenters[b]);
-                // Cosine bell with half-width ~45 deg
-                float w = std::max(0.0f, std::cos(dist * (3.14159265f / 90.0f)));
-                totalWeight += w;
-                filteredWeight += w * params.monochromeWeights[b];
+                if (dist < 45.0f) {
+                    float w = std::cos(dist * (3.14159265f / 90.0f));
+                    totalWeight += w;
+                    filteredWeight += w * params.monochromeWeights[b];
+                }
             }
             float filterGain = (totalWeight > 1e-5f) ? (filteredWeight / totalWeight) * 8.0f : 1.0f;
             float gray = (0.2126f * p.r + 0.7152f * p.g + 0.0722f * p.b) * filterGain;
@@ -196,11 +231,13 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
                 float sumW = 0.0f;
                 for (int b = 0; b < 8; ++b) {
                     float dist = angularDistance(h, bandCenters[b]);
-                    float w = std::max(0.0f, std::cos(dist * (3.14159265f / 90.0f)));
-                    sumW += w;
-                    deltaH += w * params.hslBands[b].hueShift;
-                    deltaS += w * params.hslBands[b].saturation;
-                    deltaL += w * params.hslBands[b].luminance;
+                    if (dist < 45.0f) {
+                        float w = std::cos(dist * (3.14159265f / 90.0f));
+                        sumW += w;
+                        deltaH += w * params.hslBands[b].hueShift;
+                        deltaS += w * params.hslBands[b].saturation;
+                        deltaL += w * params.hslBands[b].luminance;
+                    }
                 }
                 if (sumW > 1e-5f) {
                     deltaH /= sumW;
@@ -213,20 +250,20 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
                 }
             }
 
-            // 8. Vibrance (skin tone protection) & Global Saturation
+            // 10. Vibrance (skin tone protection) & Global Saturation
             if (std::abs(params.vibrance) > 1e-4f || std::abs(params.saturation) > 1e-4f) {
                 float curLum = 0.2126f * p.r + 0.7152f * p.g + 0.0722f * p.b;
                 float maxC = std::max({p.r, p.g, p.b});
                 float minC = std::min({p.r, p.g, p.b});
                 float sat = (maxC > 1e-5f) ? (maxC - minC) / maxC : 0.0f;
 
-                // Skin protection: Hue in [15, 50] deg
+                // Skin protection: Hue in [10, 50] deg centered around 25 deg
                 float skinWeight = 0.0f;
-                if (h >= 15.0f && h <= 50.0f) {
-                    skinWeight = 1.0f - (std::abs(h - 32.5f) / 17.5f);
+                if (h >= 10.0f && h <= 50.0f) {
+                    skinWeight = std::max(0.0f, 1.0f - (std::abs(h - 25.0f) / 20.0f));
                 }
 
-                float vibBoost = (params.vibrance * 0.01f) * (1.0f - sat) * (1.0f - skinWeight * 0.75f);
+                float vibBoost = (params.vibrance * 0.01f) * (1.0f - sat) * (1.0f - skinWeight * 0.85f);
                 float totalSatScale = (1.0f + vibBoost) * (1.0f + params.saturation * 0.01f);
 
                 p.r = curLum + (p.r - curLum) * totalSatScale;
@@ -235,7 +272,7 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
             }
         }
 
-        // 9. Tone Curve 1D LUT (if present)
+        // 11. Tone Curve 1D LUT (if present)
         if (params.toneCurveLUT.size() == 256) {
             auto applyLUT = [&](float val) {
                 float norm = std::clamp(val, 0.0f, 1.0f) * 255.0f;
@@ -250,97 +287,17 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
         }
     }
 
-    // Pass 2: Spatial Noise Reduction & Sharpening (Bilateral Luminance NR + Chroma False-Color Blur + Edge Sharpening)
-    bool needSpatial = (params.luminanceNR > 0.0f || params.chromaNR > 0.0f || params.sharpeningAmount > 0.0f);
-
-    std::vector<FloatRGBA> filteredTile = workTile;
-
-    if (needSpatial && padding >= 2) {
-        float lumaSigmaR = 0.02f + (params.luminanceNR * 0.002f);
-        float lumaInvR2 = 1.0f / (2.0f * lumaSigmaR * lumaSigmaR);
-        float sharpAmount = params.sharpeningAmount * 0.01f;
-        float maskThreshold = params.sharpeningMasking * 0.003f;
-
-        for (int32_t py = padding; py < paddedH - padding; ++py) {
-            for (int32_t px = padding; px < paddedW - padding; ++px) {
-                size_t centerIdx = static_cast<size_t>(py) * paddedW + px;
-                const FloatRGBA& centerP = workTile[centerIdx];
-                float centerLum = 0.2126f * centerP.r + 0.7152f * centerP.g + 0.0722f * centerP.b;
-
-                // 3x3 / 5x5 neighborhood sampling
-                float lumaSum = 0.0f;
-                float lumaWeightSum = 0.0f;
-                float chromaSumR = 0.0f;
-                float chromaSumB = 0.0f;
-                int chromaCount = 0;
-
-                // For sharpening: compute Laplacian / gradient magnitude
-                float leftLum   = 0.2126f * workTile[centerIdx - 1].r + 0.7152f * workTile[centerIdx - 1].g + 0.0722f * workTile[centerIdx - 1].b;
-                float rightLum  = 0.2126f * workTile[centerIdx + 1].r + 0.7152f * workTile[centerIdx + 1].g + 0.0722f * workTile[centerIdx + 1].b;
-                float topLum    = 0.2126f * workTile[centerIdx - paddedW].r + 0.7152f * workTile[centerIdx - paddedW].g + 0.0722f * workTile[centerIdx - paddedW].b;
-                float bottomLum = 0.2126f * workTile[centerIdx + paddedW].r + 0.7152f * workTile[centerIdx + paddedW].g + 0.0722f * workTile[centerIdx + paddedW].b;
-
-                float gradMag = std::abs(rightLum - leftLum) + std::abs(bottomLum - topLum);
-
-                if (params.luminanceNR > 0.0f || params.chromaNR > 0.0f) {
-                    for (int dy = -2; dy <= 2; ++dy) {
-                        for (int dx = -2; dx <= 2; ++dx) {
-                            size_t nIdx = static_cast<size_t>(py + dy) * paddedW + (px + dx);
-                            const FloatRGBA& np = workTile[nIdx];
-                            float nLum = 0.2126f * np.r + 0.7152f * np.g + 0.0722f * np.b;
-
-                            // Bilateral luminance weight
-                            float spatialDist2 = static_cast<float>(dx * dx + dy * dy);
-                            float lumDiff = nLum - centerLum;
-                            float w = std::exp(-spatialDist2 * 0.15f - (lumDiff * lumDiff) * lumaInvR2);
-
-                            lumaSum += nLum * w;
-                            lumaWeightSum += w;
-
-                            // Chroma blur
-                            chromaSumR += np.r - nLum;
-                            chromaSumB += np.b - nLum;
-                            chromaCount++;
-                        }
-                    }
-                }
-
-                float finalLum = (lumaWeightSum > 0.0f && params.luminanceNR > 0.0f) ? (lumaSum / lumaWeightSum) : centerLum;
-                float finalChromaR = (chromaCount > 0 && params.chromaNR > 0.0f) ? (chromaSumR / chromaCount) : (centerP.r - centerLum);
-                float finalChromaB = (chromaCount > 0 && params.chromaNR > 0.0f) ? (chromaSumB / chromaCount) : (centerP.b - centerLum);
-
-                // Blend NR by user strength
-                float blendLumaNR = params.luminanceNR * 0.01f;
-                finalLum = centerLum * (1.0f - blendLumaNR) + finalLum * blendLumaNR;
-
-                float blendChromaNR = params.chromaNR * 0.01f;
-                float outChromaR = (centerP.r - centerLum) * (1.0f - blendChromaNR) + finalChromaR * blendChromaNR;
-                float outChromaB = (centerP.b - centerLum) * (1.0f - blendChromaNR) + finalChromaB * blendChromaNR;
-
-                // Sharpening with edge masking:
-                // Only sharpen if gradient magnitude > maskThreshold (avoids sharpening smooth sky / noise)
-                if (params.sharpeningAmount > 0.0f) {
-                    float edgeWeight = std::clamp((gradMag - maskThreshold) / (maskThreshold + 1e-5f), 0.0f, 1.0f);
-                    float laplacian = (leftLum + rightLum + topLum + bottomLum) * 0.25f - centerLum;
-                    finalLum -= laplacian * sharpAmount * edgeWeight;
-                }
-
-                // Reconstruct RGB from luminance + chroma
-                float newG = (finalLum - 0.2126f * (finalLum + outChromaR) - 0.0722f * (finalLum + outChromaB)) / 0.7152f;
-                filteredTile[centerIdx].r = std::max(0.0f, finalLum + outChromaR);
-                filteredTile[centerIdx].g = std::max(0.0f, newG);
-                filteredTile[centerIdx].b = std::max(0.0f, finalLum + outChromaB);
-            }
-        }
+    // 12. Phase 5: Local Mask Layers & Retouch Operations
+    if (!params.retouchOps.empty()) {
+        MaskEngine::processRetouchOps(workTile, paddedW, paddedH, params.retouchOps);
+    }
+    if (!params.maskLayers.empty()) {
+        MaskEngine::processMaskLayers(workTile, paddedW, paddedH, params.maskLayers);
     }
 
-    // Extract only valid inner tile (strip padding)
-    for (int32_t vy = 0; vy < validH; ++vy) {
-        int32_t py = vy + padding;
-        const FloatRGBA* srcRow = &filteredTile[static_cast<size_t>(py) * paddedW + padding];
-        FloatRGBA* dstRow = &outValidTile[static_cast<size_t>(vy) * validW];
-        std::memcpy(dstRow, srcRow, sizeof(FloatRGBA) * validW);
-    }
+    // Pass 2: Spatial Noise Reduction & Sharpening via DenoiseEngine
+    static DenoiseEngine s_denoiseEngine;
+    s_denoiseEngine.processTile(workTile, paddedW, paddedH, validW, validH, padding, params, outValidTile);
 }
 
 void ExportPipeline::quantizeTo8Bit(const std::vector<FloatRGBA>& linearTile,
@@ -519,6 +476,8 @@ bool ExportPipeline::processImage(RawDecoder& decoder,
         writeOk = ImageWriter::writeTIFF16(outputPath, finalRgb16.data(), imgW, imgH, metaPtr);
     } else if (options.format == ExportFormat::TIFF8) {
         writeOk = ImageWriter::writeTIFF8(outputPath, finalRgb8.data(), imgW, imgH, metaPtr);
+    } else if (options.format == ExportFormat::WebP) {
+        writeOk = ImageWriter::writeWebP(outputPath, finalRgb8.data(), imgW, imgH, options.jpegQuality, metaPtr);
     } else {
         // Default to JPEG
         writeOk = ImageWriter::writeJPEG(outputPath, finalRgb8.data(), imgW, imgH, options.jpegQuality, options.chromaSubsampling, metaPtr);

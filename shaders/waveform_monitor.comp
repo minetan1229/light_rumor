@@ -1,0 +1,114 @@
+#version 450
+
+// Vulkan Compute Shader: Real-Time RGB Waveform Monitor & RGB Parade
+// High-performance atomic column bin accumulation for 60-120fps instrumentation
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+// Push constants / Uniform parameters
+layout(push_constant) uniform WaveformParams {
+    int imageWidth;        // Input image width
+    int imageHeight;       // Input image height
+    int waveWidth;         // Waveform buffer width (e.g. 512, 768)
+    int waveHeight;        // Waveform buffer height (e.g. 256)
+    int mode;              // 0: RGB Overlay, 1: RGB Parade, 2: Histogram, 3: Luma
+    float intensityScale;  // Luminance gain for accumulated hits
+    int clearBuffer;       // If 1, clears accumulation buffers
+    int flags;             // Optional bitflags
+} params;
+
+// Input pixel buffer: RGBA 8-bit or 32-bit float linear/sRGB
+layout(std430, set = 0, binding = 0) readonly buffer InputPixels {
+    vec4 inPixels[];
+};
+
+// Accumulation buffer: Separate atomic count arrays for Red, Green, Blue
+// Size: waveWidth * waveHeight elements each
+layout(std430, set = 0, binding = 1) buffer WaveformBufferR {
+    uint waveR[];
+};
+
+layout(std430, set = 0, binding = 2) buffer WaveformBufferG {
+    uint waveG[];
+};
+
+layout(std430, set = 0, binding = 3) buffer WaveformBufferB {
+    uint waveB[];
+};
+
+// Output RGBA 32-bit visual waveform texture (for direct presentation)
+layout(std430, set = 0, binding = 4) writeonly buffer OutputTexture {
+    uint outRGBA[]; // Packed 0xAABBGGRR
+};
+
+// Convert RGB to Rec.709 Luminance
+float rgbToLuma(vec3 c) {
+    return dot(c, vec3(0.2126, 0.7152, 0.0722));
+}
+
+void main() {
+    ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
+    if (pixelCoord.x >= params.imageWidth || pixelCoord.y >= params.imageHeight) {
+        return;
+    }
+
+    int inIdx = pixelCoord.y * params.imageWidth + pixelCoord.x;
+    vec4 px = inPixels[inIdx];
+
+    // Clamp input values between 0.0 and 1.0
+    vec3 c = clamp(px.rgb, 0.0, 1.0);
+    int H = params.waveHeight;
+    int W = params.waveWidth;
+
+    // Signal level mapped to [0, H-1] where 0 is at bottom, H-1 is at top (IRE 100)
+    int yR = clamp(int(c.r * float(H - 1)), 0, H - 1);
+    int yG = clamp(int(c.g * float(H - 1)), 0, H - 1);
+    int yB = clamp(int(c.b * float(H - 1)), 0, H - 1);
+
+    // Flip vertical coordinate so that 0% is at bottom of display
+    yR = (H - 1) - yR;
+    yG = (H - 1) - yG;
+    yB = (H - 1) - yB;
+
+    if (params.mode == 0) {
+        // Mode 0: RGB Overlay (All channels across full width W)
+        int col = clamp(int((float(pixelCoord.x) / float(params.imageWidth)) * float(W)), 0, W - 1);
+        atomicAdd(waveR[yR * W + col], 1u);
+        atomicAdd(waveG[yG * W + col], 1u);
+        atomicAdd(waveB[yB * W + col], 1u);
+    } 
+    else if (params.mode == 1) {
+        // Mode 1: RGB Parade (Screen split horizontally into 3 partitions: Red, Green, Blue)
+        int subW = W / 3;
+        int subCol = clamp(int((float(pixelCoord.x) / float(params.imageWidth)) * float(subW)), 0, subW - 1);
+        
+        int colR = subCol;
+        int colG = subW + subCol;
+        int colB = 2 * subW + subCol;
+
+        atomicAdd(waveR[yR * W + colR], 1u);
+        atomicAdd(waveG[yG * W + colG], 1u);
+        atomicAdd(waveB[yB * W + colB], 1u);
+    }
+    else if (params.mode == 2) {
+        // Mode 2: Classical Frequency Histogram
+        // Bins are mapped to horizontal X [0, 255]
+        int binR = clamp(int(c.r * 255.0), 0, 255);
+        int binG = clamp(int(c.g * 255.0), 0, 255);
+        int binB = clamp(int(c.b * 255.0), 0, 255);
+
+        atomicAdd(waveR[binR], 1u);
+        atomicAdd(waveG[binG], 1u);
+        atomicAdd(waveB[binB], 1u);
+    }
+    else if (params.mode == 3) {
+        // Mode 3: Cinema Luma (Rec.709 luminance waveform)
+        float luma = rgbToLuma(c);
+        int yL = clamp(int(luma * float(H - 1)), 0, H - 1);
+        yL = (H - 1) - yL;
+        int col = clamp(int((float(pixelCoord.x) / float(params.imageWidth)) * float(W)), 0, W - 1);
+        atomicAdd(waveR[yL * W + col], 1u);
+        atomicAdd(waveG[yL * W + col], 1u);
+        atomicAdd(waveB[yL * W + col], 1u);
+    }
+}

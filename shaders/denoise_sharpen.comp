@@ -1,0 +1,147 @@
+#version 450
+
+// Vulkan Compute Shader: Dual-Domain Denoise (Luminance & Chroma) and Edge-Masked Sharpening
+// 60fps GPU acceleration for Pixel 9a / Vulkan 1.3 with B&W edge mask visualizer
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(push_constant) uniform DenoiseSharpenParams {
+    // Luminance NR
+    float luminanceNR;          // 0.0 to 1.0 (strength)
+    float luminanceDetail;      // 0.0 to 1.0 (detail retention)
+    float luminanceContrast;    // 0.0 to 1.0 (black contrast protection)
+
+    // Chroma NR (False-color suppression)
+    float chromaNR;             // 0.0 to 1.0 (strength)
+    float chromaDetail;         // 0.0 to 1.0 (edge preservation)
+    float chromaSmoothness;     // 0.0 to 1.0 (color blend spread)
+
+    // Sharpening & Edge Masking
+    float sharpenAmount;        // 0.0 to 1.5
+    float sharpenRadius;        // 0.5 to 3.0 px
+    float sharpenDetail;        // 0.0 to 1.0
+    float sharpenMasking;       // 0.0 to 1.0 (edge detection threshold)
+    int previewMask;            // 1: Output B&W edge map for masking slider feedback
+
+    // Geometry
+    ivec2 tileSize;             // (width, height) of valid tile
+    int padding;                // padding border pixels
+} params;
+
+// Input buffer: Padded float RGBA
+layout(std430, set = 0, binding = 0) readonly buffer InputBuffer {
+    vec4 inPixels[];
+};
+
+// Output buffer: Filtered float RGBA
+layout(std430, set = 0, binding = 1) writeonly buffer OutputBuffer {
+    vec4 outPixels[];
+};
+
+void main() {
+    ivec2 localId = ivec2(gl_GlobalInvocationID.xy);
+    if (localId.x >= params.tileSize.x || localId.y >= params.tileSize.y) {
+        return;
+    }
+
+    int paddedW = params.tileSize.x + 2 * params.padding;
+    int padX = localId.x + params.padding;
+    int padY = localId.y + params.padding;
+    int centerIdx = padY * paddedW + padX;
+
+    vec4 centerP = inPixels[centerIdx];
+    float centerLum = dot(centerP.rgb, vec3(0.2126, 0.7152, 0.0722));
+
+    // Sample orthogonal neighbors for gradient / Laplacian calculation
+    float lumLeft   = dot(inPixels[centerIdx - 1].rgb, vec3(0.2126, 0.7152, 0.0722));
+    float lumRight  = dot(inPixels[centerIdx + 1].rgb, vec3(0.2126, 0.7152, 0.0722));
+    float lumTop    = dot(inPixels[centerIdx - paddedW].rgb, vec3(0.2126, 0.7152, 0.0722));
+    float lumBottom = dot(inPixels[centerIdx + paddedW].rgb, vec3(0.2126, 0.7152, 0.0722));
+
+    // Gradient magnitude: Sobel-like edge strength
+    float gradMag = abs(lumRight - lumLeft) + abs(lumBottom - lumTop);
+
+    // 1. Edge Mask calculation:
+    // Flat areas (< maskThreshold) have edgeWeight = 0
+    // Real edges (> maskThreshold) have edgeWeight up to 1.0
+    float maskThreshold = params.sharpenMasking * 0.15;
+    float edgeWeight = clamp((gradMag - maskThreshold) / max(maskThreshold * 0.5, 0.005), 0.0, 1.0);
+
+    // If in Masking Preview mode, output black-and-white visualizer (edges white, flat areas black)
+    if (params.previewMask != 0) {
+        int outIdx = localId.y * params.tileSize.x + localId.x;
+        outPixels[outIdx] = vec4(vec3(edgeWeight), 1.0);
+        return;
+    }
+
+    // 2. Spatial Bilateral Luminance NR & Chroma False-Color Filter (5x5 kernel)
+    float lumaSum = 0.0;
+    float lumaWeightSum = 0.0;
+    float chromaSumR = 0.0;
+    float chromaSumB = 0.0;
+    float chromaWeightSum = 0.0;
+
+    float lumaSigmaR = 0.015 + params.luminanceNR * 0.15 * (1.0 - params.luminanceDetail * 0.5);
+    float lumaInvR2 = 1.0 / (2.0 * lumaSigmaR * lumaSigmaR);
+
+    float chromaRadius = 1.0 + params.chromaSmoothness * 2.0;
+
+    for (int dy = -2; dy <= 2; ++dy) {
+        for (int dx = -2; dx <= 2; ++dx) {
+            int nIdx = (padY + dy) * paddedW + (padX + dx);
+            vec4 np = inPixels[nIdx];
+            float nLum = dot(np.rgb, vec3(0.2126, 0.7152, 0.0722));
+
+            float spatialDist2 = float(dx * dx + dy * dy);
+
+            // Bilateral luminance weight
+            float lumDiff = nLum - centerLum;
+            float wLuma = exp(-spatialDist2 * 0.25 - (lumDiff * lumDiff) * lumaInvR2);
+            lumaSum += nLum * wLuma;
+            lumaWeightSum += wLuma;
+
+            // Chroma false-color weight (spreads out blotchy color noise)
+            float wChroma = exp(-spatialDist2 / (2.0 * chromaRadius * chromaRadius));
+            chromaSumR += (np.r - nLum) * wChroma;
+            chromaSumB += (np.b - nLum) * wChroma;
+            chromaWeightSum += wChroma;
+        }
+    }
+
+    // Filtered luminance & chrominance
+    float filteredLum = (lumaWeightSum > 0.0) ? (lumaSum / lumaWeightSum) : centerLum;
+    float filteredChromaR = (chromaWeightSum > 0.0) ? (chromaSumR / chromaWeightSum) : (centerP.r - centerLum);
+    float filteredChromaB = (chromaWeightSum > 0.0) ? (chromaSumB / chromaWeightSum) : (centerP.b - centerLum);
+
+    // Blend Luminance NR
+    float blendedLum = mix(centerLum, filteredLum, params.luminanceNR);
+    // Contrast preservation
+    if (params.luminanceContrast > 0.0) {
+        blendedLum = mix(blendedLum, centerLum, pow(1.0 - clamp(centerLum, 0.0, 1.0), 2.0) * params.luminanceContrast * 0.5);
+    }
+
+    // Blend Chroma NR
+    float origChromaR = centerP.r - centerLum;
+    float origChromaB = centerP.b - centerLum;
+    float blendedChromaR = mix(origChromaR, filteredChromaR, params.chromaNR);
+    float blendedChromaB = mix(origChromaB, filteredChromaB, params.chromaNR);
+
+    // 3. Unsharp Masking with Edge Mask
+    if (params.sharpenAmount > 0.0) {
+        // High-pass difference
+        float laplacian = (lumLeft + lumRight + lumTop + lumBottom) * 0.25 - centerLum;
+        // Sharpen boost applied only where edgeWeight > 0
+        float sharpBoost = -laplacian * params.sharpenAmount * 1.5 * edgeWeight;
+        blendedLum = max(0.0, blendedLum + sharpBoost);
+    }
+
+    // Reconstruct RGB from luminance and chroma
+    // L = 0.2126 R + 0.7152 G + 0.0722 B
+    // G = (L - 0.2126 R - 0.0722 B) / 0.7152
+    float finalR = max(0.0, blendedLum + blendedChromaR);
+    float finalB = max(0.0, blendedLum + blendedChromaB);
+    float finalG = max(0.0, (blendedLum - 0.2126 * finalR - 0.0722 * finalB) / 0.7152);
+
+    int outIdx = localId.y * params.tileSize.x + localId.x;
+    outPixels[outIdx] = vec4(finalR, finalG, finalB, centerP.a);
+}

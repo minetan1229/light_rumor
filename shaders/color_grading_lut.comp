@@ -1,0 +1,124 @@
+#version 450
+
+// Vulkan Compute Shader: 3-Way Color Grading Wheels (Lift/Gamma/Gain/Offset) & 3D LUT Sampling
+// 60fps GPU pipeline for cinema look and commercial LUT grading
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(push_constant) uniform ColorGradingParams {
+    // 3-Way Color Wheels (RGB vector shifts)
+    vec4 wheelShadows;          // rgb: color tint, a: luminance offset (-1..1)
+    vec4 wheelMidtones;         // rgb: color tint, a: luminance offset (-1..1)
+    vec4 wheelHighlights;       // rgb: color tint, a: luminance offset (-1..1)
+    vec4 wheelGlobal;           // rgb: color tint, a: luminance offset (-1..1)
+
+    float blending;             // 0.0 to 1.0 (overlap range)
+    float balance;              // -1.0 to 1.0 (midpoint balance)
+    float lutOpacity;           // 0.0 to 1.0 (3D LUT blend strength)
+    int lutSize;                // e.g. 33 for 33x33x33 LUT, 0 if disabled
+
+    ivec2 tileSize;             // tile dimensions
+    int padding;
+} params;
+
+// Input buffer: Padded float RGBA
+layout(std430, set = 0, binding = 0) readonly buffer InputBuffer {
+    vec4 inPixels[];
+};
+
+// Output buffer: Filtered float RGBA
+layout(std430, set = 0, binding = 1) writeonly buffer OutputBuffer {
+    vec4 outPixels[];
+};
+
+// 3D LUT Buffer (packed linear array of vec4 RGB)
+layout(std430, set = 0, binding = 2) readonly buffer Lut3DBuffer {
+    vec4 lut3DPixels[];
+};
+
+// Trilinear interpolation in 3D LUT buffer
+vec3 sample3DLut(vec3 rgb, int N) {
+    if (N < 2) return rgb;
+    vec3 coord = clamp(rgb, 0.0, 1.0) * float(N - 1);
+    ivec3 i0 = ivec3(floor(coord));
+    ivec3 i1 = min(i0 + ivec3(1), ivec3(N - 1));
+    vec3 f = fract(coord);
+
+    int N2 = N * N;
+    auto getIdx = [N, N2](ivec3 p) {
+        return p.z * N2 + p.y * N + p.x;
+    };
+
+    vec3 c000 = lut3DPixels[getIdx(ivec3(i0.x, i0.y, i0.z))].rgb;
+    vec3 c100 = lut3DPixels[getIdx(ivec3(i1.x, i0.y, i0.z))].rgb;
+    vec3 c010 = lut3DPixels[getIdx(ivec3(i0.x, i1.y, i0.z))].rgb;
+    vec3 c110 = lut3DPixels[getIdx(ivec3(i1.x, i1.y, i0.z))].rgb;
+    vec3 c001 = lut3DPixels[getIdx(ivec3(i0.x, i0.y, i1.z))].rgb;
+    vec3 c101 = lut3DPixels[getIdx(ivec3(i1.x, i0.y, i1.z))].rgb;
+    vec3 c011 = lut3DPixels[getIdx(ivec3(i0.x, i1.y, i1.z))].rgb;
+    vec3 c111 = lut3DPixels[getIdx(ivec3(i1.x, i1.y, i1.z))].rgb;
+
+    vec3 c00 = mix(c000, c100, f.x);
+    vec3 c10 = mix(c010, c110, f.x);
+    vec3 c01 = mix(c001, c101, f.x);
+    vec3 c11 = mix(c011, c111, f.x);
+
+    vec3 c0 = mix(c00, c10, f.y);
+    vec3 c1 = mix(c01, c11, f.y);
+
+    return mix(c0, c1, f.z);
+}
+
+void main() {
+    ivec2 localId = ivec2(gl_GlobalInvocationID.xy);
+    if (localId.x >= params.tileSize.x || localId.y >= params.tileSize.y) {
+        return;
+    }
+
+    int paddedW = params.tileSize.x + 2 * params.padding;
+    int padX = localId.x + params.padding;
+    int padY = localId.y + params.padding;
+    int idx = padY * paddedW + padX;
+
+    vec4 p = inPixels[idx];
+    vec3 col = p.rgb;
+
+    // 1. 3-Way Color Wheels
+    float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+
+    // Midtone range center shifted by balance [-1.0, 1.0]
+    float midCenter = clamp(0.5 + params.balance * 0.2, 0.15, 0.85);
+    float blendWidth = max(0.1, params.blending * 0.4);
+
+    // Weights for shadows, midtones, highlights
+    float shadowW = clamp(1.0 - (lum / (midCenter + blendWidth)), 0.0, 1.0);
+    shadowW = shadowW * shadowW; // smooth quadratic falloff
+
+    float highlightW = clamp((lum - (midCenter - blendWidth)) / (1.0 - (midCenter - blendWidth)), 0.0, 1.0);
+    highlightW = highlightW * highlightW;
+
+    float midtoneW = max(0.0, 1.0 - shadowW - highlightW);
+
+    // Apply Lift (Shadows), Gamma (Midtones), Gain (Highlights), Offset (Global)
+    col += params.wheelShadows.rgb * shadowW * 0.5;
+    col += vec3(params.wheelShadows.a) * shadowW * 0.2;
+
+    col += params.wheelMidtones.rgb * midtoneW * 0.5;
+    col += vec3(params.wheelMidtones.a) * midtoneW * 0.2;
+
+    col += params.wheelHighlights.rgb * highlightW * 0.5;
+    col += vec3(params.wheelHighlights.a) * highlightW * 0.2;
+
+    col += params.wheelGlobal.rgb * 0.3;
+    col += vec3(params.wheelGlobal.a) * 0.15;
+    col = max(vec3(0.0), col);
+
+    // 2. 3D LUT Sampling with Opacity Blending
+    if (params.lutSize > 1 && params.lutOpacity > 1e-4) {
+        vec3 lutCol = sample3DLut(col, params.lutSize);
+        col = mix(col, lutCol, params.lutOpacity);
+    }
+
+    int outIdx = localId.y * params.tileSize.x + localId.x;
+    outPixels[outIdx] = vec4(col, p.a);
+}

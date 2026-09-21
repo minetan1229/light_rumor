@@ -1,0 +1,261 @@
+#version 450
+
+// Vulkan Compute Shader: Basic Tone, White Balance, Tint, Skin-Protected Vibrance, Dehaze & Calibration
+// Operates on 32-bit floating point linear buffers (ACEScg / Linear Rec.2020)
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(push_constant) uniform BasicToneParams {
+    // 1. WB & Tint
+    vec3 wbGains;               // (rGain, gGain, bGain)
+    vec3 shadowTint;            // (shadowR, shadowG, shadowB)
+
+    // 2. Primary Calibration
+    vec2 calibRed;              // (hueShift, satShift) [-1.0, 1.0]
+    vec2 calibGreen;            // (hueShift, satShift) [-1.0, 1.0]
+    vec2 calibBlue;             // (hueShift, satShift) [-1.0, 1.0]
+
+    // 3. Basic Tone
+    float exposureMult;         // 2^EV
+    float contrast;             // -1.0 to 1.0
+    float highlights;           // -1.0 to 1.0
+    float shadows;              // -1.0 to 1.0
+    float whites;               // -1.0 to 1.0
+    float blacks;               // -1.0 to 1.0
+
+    // 4. Presence & Vibrance
+    float vibrance;             // -1.0 to 1.0 (Skin-protected)
+    float saturation;           // -1.0 to 1.0 (Global)
+    float dehaze;               // -1.0 to 1.0 (Atmospheric scattering)
+    float clarity;              // -1.0 to 1.0 (Mid-frequency contrast)
+    float texture;              // -1.0 to 1.0 (High-frequency texture)
+
+    // 5. Geometry & Dimensions
+    ivec2 tileSize;             // Tile width, height
+    int padding;                // Overlap padding
+    int outputColorSpace;       // 0: Linear, 1: sRGB, 2: AdobeRGB, 3: Display P3
+} params;
+
+// Input buffer: Padded float RGBA
+layout(std430, set = 0, binding = 0) readonly buffer InputBuffer {
+    vec4 inPixels[];
+};
+
+// Output buffer: Processed float RGBA
+layout(std430, set = 0, binding = 1) writeonly buffer OutputBuffer {
+    vec4 outPixels[];
+};
+
+// Optional 1D Tone Curve LUT (256 samples)
+layout(std430, set = 0, binding = 2) readonly buffer ToneCurveBuffer {
+    float toneCurveLUT[256];
+};
+
+// Fast RGB to HSL
+vec3 rgbToHsl(vec3 c) {
+    float cMin = min(min(c.r, c.g), c.b);
+    float cMax = max(max(c.r, c.g), c.b);
+    float delta = cMax - cMin;
+    vec3 hsl = vec3(0.0, 0.0, (cMax + cMin) * 0.5);
+
+    if (delta > 1e-6) {
+        hsl.y = hsl.z < 0.5 ? (delta / (cMax + cMin)) : (delta / (2.0 - cMax - cMin));
+        if (c.r == cMax) {
+            hsl.x = (c.g - c.b) / delta + (c.g < c.b ? 6.0 : 0.0);
+        } else if (c.g == cMax) {
+            hsl.x = (c.b - c.r) / delta + 2.0;
+        } else {
+            hsl.x = (c.r - c.g) / delta + 4.0;
+        }
+        hsl.x /= 6.0;
+    }
+    return hsl;
+}
+
+float hueToRgb(float p, float q, float t) {
+    if (t < 0.0) t += 1.0;
+    if (t > 1.0) t -= 1.0;
+    if (t < 1.0 / 6.0) return p + (q - p) * 6.0 * t;
+    if (t < 1.0 / 2.0) return q;
+    if (t < 2.0 / 3.0) return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
+    return p;
+}
+
+vec3 hslToRgb(vec3 hsl) {
+    if (hsl.y < 1e-6) return vec3(hsl.z);
+    float q = hsl.z < 0.5 ? (hsl.z * (1.0 + hsl.y)) : (hsl.z + hsl.y - hsl.z * hsl.y);
+    float p = 2.0 * hsl.z - q;
+    return vec3(
+        hueToRgb(p, q, hsl.x + 1.0 / 3.0),
+        hueToRgb(p, q, hsl.x),
+        hueToRgb(p, q, hsl.x - 1.0 / 3.0)
+    );
+}
+
+// Highlight recovery (soft-knee shoulder)
+vec3 recoverHighlights(vec3 c, float amount) {
+    if (amount <= 0.0) return c;
+    const float threshold = 0.75;
+    float maxC = max(max(c.r, c.g), c.b);
+    if (maxC > threshold) {
+        float excess = maxC - threshold;
+        float compressed = threshold + (excess / (1.0 + excess * amount * 0.8));
+        c *= (compressed / maxC);
+    }
+    return c;
+}
+
+// Shadow lift (smooth quadratic roll-off in dark tones)
+vec3 liftShadows(vec3 c, float amount) {
+    if (abs(amount) < 1e-5) return c;
+    float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    float lift = pow(1.0 - clamp(lum, 0.0, 1.0), 3.0) * (amount * 0.35);
+    return max(vec3(0.0), c + vec3(lift));
+}
+
+// Atmospheric Dehaze model
+vec3 applyDehaze(vec3 c, float dehazeAmount) {
+    if (abs(dehazeAmount) < 1e-5) return c;
+    // Dark channel estimation
+    float darkCh = min(min(c.r, c.g), c.b);
+    // Transmission factor estimation
+    float t = clamp(1.0 - 0.75 * darkCh, 0.15, 1.0);
+    // Dehazed color reconstruction
+    vec3 atmosphericLight = vec3(0.95, 0.96, 0.98);
+    float factor = 1.0 + dehazeAmount * 0.5;
+    vec3 dehazed = (c - atmosphericLight) / mix(1.0, t, dehazeAmount * 0.6) + atmosphericLight;
+    return mix(c, max(vec3(0.0), dehazed), abs(dehazeAmount));
+}
+
+// Skin-protected non-linear Vibrance
+vec3 applyVibrance(vec3 c, float vib) {
+    if (abs(vib) < 1e-5) return c;
+    float maxC = max(max(c.r, c.g), c.b);
+    float minC = min(min(c.r, c.g), c.b);
+    float sat = (maxC > 1e-5) ? (maxC - minC) / maxC : 0.0;
+
+    // Skin protection: Hue around 20-40 degrees (0.05 to 0.12 normalized)
+    vec3 hsl = rgbToHsl(c);
+    float hueDist = abs(hsl.x - 0.08);
+    float skinWeight = clamp(1.0 - (hueDist / 0.10), 0.0, 1.0);
+
+    // Muted boost on skin tones and already saturated areas; strong boost on dull backgrounds
+    float boost = vib * (1.0 - sat) * (1.0 - skinWeight * 0.80);
+    float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    return mix(vec3(lum), c, 1.0 + boost);
+}
+
+// Apply Primary Calibration
+vec3 applyCalibration(vec3 c) {
+    if (abs(params.calibRed.x) < 1e-4 && abs(params.calibRed.y) < 1e-4 &&
+        abs(params.calibGreen.x) < 1e-4 && abs(params.calibGreen.y) < 1e-4 &&
+        abs(params.calibBlue.x) < 1e-4 && abs(params.calibBlue.y) < 1e-4) {
+        return c;
+    }
+    vec3 hsl = rgbToHsl(c);
+    // Distance to Red (0.0), Green (0.333), Blue (0.667)
+    float wR = max(0.0, 1.0 - abs(hsl.x - 0.0) * 6.0) + max(0.0, 1.0 - abs(hsl.x - 1.0) * 6.0);
+    float wG = max(0.0, 1.0 - abs(hsl.x - 0.333) * 6.0);
+    float wB = max(0.0, 1.0 - abs(hsl.x - 0.667) * 6.0);
+
+    float dHue = (wR * params.calibRed.x + wG * params.calibGreen.x + wB * params.calibBlue.x) * 0.15;
+    float dSat = (wR * params.calibRed.y + wG * params.calibGreen.y + wB * params.calibBlue.y) * 0.50;
+
+    hsl.x = fract(hsl.x + dHue);
+    hsl.y = clamp(hsl.y * (1.0 + dSat), 0.0, 1.0);
+    return hslToRgb(hsl);
+}
+
+// Output transfer function
+vec3 applyOETF(vec3 linearC, int cs) {
+    if (cs == 0) return linearC; // Pure linear floating point
+    vec3 res;
+    if (cs == 2) {
+        // AdobeRGB: gamma 2.1992
+        res = pow(max(linearC, vec3(0.0)), vec3(1.0 / 2.19921875));
+    } else {
+        // sRGB / Display P3 transfer function
+        for (int i = 0; i < 3; ++i) {
+            float val = linearC[i];
+            if (val <= 0.0031308) {
+                res[i] = val * 12.92;
+            } else {
+                res[i] = 1.055 * pow(max(val, 0.0), 1.0 / 2.4) - 0.055;
+            }
+        }
+    }
+    return clamp(res, 0.0, 1.0);
+}
+
+void main() {
+    ivec2 localId = ivec2(gl_GlobalInvocationID.xy);
+    if (localId.x >= params.tileSize.x || localId.y >= params.tileSize.y) {
+        return;
+    }
+
+    int paddedW = params.tileSize.x + 2 * params.padding;
+    int padX = localId.x + params.padding;
+    int padY = localId.y + params.padding;
+    int paddedIdx = padY * paddedW + padX;
+
+    vec4 pix = inPixels[paddedIdx];
+    vec3 col = pix.rgb;
+
+    // 1. White Balance & Tint
+    col *= params.wbGains;
+    // Shadow tint lift in deep dark areas
+    float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+    col += params.shadowTint * pow(1.0 - clamp(lum, 0.0, 1.0), 2.0);
+
+    // 2. Exposure EV
+    col *= params.exposureMult;
+
+    // 3. Atmospheric Dehaze
+    col = applyDehaze(col, params.dehaze);
+
+    // 4. Highlight Recovery & Shadow Lift
+    col = recoverHighlights(col, params.highlights);
+    col = liftShadows(col, params.shadows);
+
+    // 5. Contrast around 0.18 middle gray pivot
+    if (abs(params.contrast) > 1e-5) {
+        float factor = 1.0 + params.contrast * 0.6;
+        col = pow(max(col / 0.18, vec3(0.0)), vec3(factor)) * 0.18;
+    }
+
+    // 6. White & Black levels
+    col = max(vec3(0.0), col - vec3(params.blacks * 0.05));
+    if (abs(params.whites) > 1e-5) {
+        col *= (1.0 + params.whites * 0.5);
+    }
+
+    // 7. Primary Calibration
+    col = applyCalibration(col);
+
+    // 8. Vibrance (Skin-protected) & Global Saturation
+    col = applyVibrance(col, params.vibrance);
+    if (abs(params.saturation) > 1e-5) {
+        float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+        col = mix(vec3(l), col, 1.0 + params.saturation);
+    }
+
+    // 9. Tone Curve 1D LUT (if valid)
+    if (toneCurveLUT[255] > 0.0 || toneCurveLUT[0] >= 0.0) {
+        auto sampleCurve = [&](float val) {
+            float n = clamp(val, 0.0, 1.0) * 255.0;
+            int i0 = int(floor(n));
+            int i1 = min(i0 + 1, 255);
+            float f = fract(n);
+            return mix(toneCurveLUT[i0], toneCurveLUT[i1], f);
+        };
+        col.r = sampleCurve(col.r);
+        col.g = sampleCurve(col.g);
+        col.b = sampleCurve(col.b);
+    }
+
+    // 10. Output Color Space OETF
+    vec3 outputCol = applyOETF(col, params.outputColorSpace);
+
+    int outIdx = localId.y * params.tileSize.x + localId.x;
+    outPixels[outIdx] = vec4(outputCol, pix.a);
+}

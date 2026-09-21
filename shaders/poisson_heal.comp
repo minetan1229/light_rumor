@@ -1,0 +1,106 @@
+#version 450
+
+// Project APEX FIELD - Poisson Image Editing & Healing Compute Shader
+// Implements discrete Laplacian membrane solver: Delta d = 0 with Dirichlet boundary
+// d(p) = f*(p) - g(p) for seamless sensor dust removal and texture healing.
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+#define HEAL_MODE_CLONE          0
+#define HEAL_MODE_POISSON_ITER   1
+#define HEAL_MODE_COMPOSITE      2
+
+layout(push_constant) uniform HealUniforms {
+    ivec2 imageSize;
+    ivec2 sourceOffset;    // (srcX - dstX, srcY - dstY)
+    vec2 targetCenter;
+    float radius;
+    float feather;
+    int mode;              // 0: Clone, 1: Poisson Jacobi Iteration, 2: Final Composite
+    int iteration;
+} u_params;
+
+// Bindings
+// Set 0, Binding 0: Target / Destination Image (RGBA32F)
+layout(std430, set = 0, binding = 0) readonly buffer DestImageBuffer {
+    vec4 inDestPixels[];
+};
+
+// Set 0, Binding 1: Difference Field Ping Buffer (RGB membrane potential d)
+layout(std430, set = 0, binding = 1) buffer DiffPingBuffer {
+    vec4 diffPing[];
+};
+
+// Set 0, Binding 2: Difference Field Pong Buffer
+layout(std430, set = 0, binding = 2) buffer DiffPongBuffer {
+    vec4 diffPong[];
+};
+
+// Set 0, Binding 3: Final Output Healed RGBA Buffer
+layout(std430, set = 0, binding = 3) writeonly buffer OutputImageBuffer {
+    vec4 outPixels[];
+};
+
+// Set 0, Binding 4: Retouch Mask Weight Buffer (0.0 outside, 1.0 inside heal spot)
+layout(std430, set = 0, binding = 4) readonly buffer RetouchMaskBuffer {
+    float maskWeights[];
+};
+
+// Sample destination image with clamping
+vec4 sampleDest(ivec2 p) {
+    p = clamp(p, ivec2(0), u_params.imageSize - ivec2(1));
+    return inDestPixels[p.y * u_params.imageSize.x + p.x];
+}
+
+// Sample source patch texture
+vec4 sampleSource(ivec2 p) {
+    ivec2 srcP = p + u_params.sourceOffset;
+    srcP = clamp(srcP, ivec2(0), u_params.imageSize - ivec2(1));
+    return inDestPixels[srcP.y * u_params.imageSize.x + srcP.x];
+}
+
+void main() {
+    ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+    if (pos.x >= u_params.imageSize.x || pos.y >= u_params.imageSize.y) {
+        return;
+    }
+
+    int idx = pos.y * u_params.imageSize.x + pos.x;
+    float m = maskWeights[idx];
+
+    if (u_params.mode == HEAL_MODE_CLONE) {
+        // Direct Clone Stamp with feather blending
+        vec4 dst = sampleDest(pos);
+        vec4 src = sampleSource(pos);
+        outPixels[idx] = mix(dst, src, m);
+    }
+    else if (u_params.mode == HEAL_MODE_POISSON_ITER) {
+        // Jacobi iteration step for Laplace difference equation: Delta d = 0
+        if (m < 0.01) {
+            // Outside of healing domain: Dirichlet boundary condition d = f* - g
+            vec4 dst = sampleDest(pos);
+            vec4 src = sampleSource(pos);
+            vec4 boundaryDiff = dst - src;
+            diffPong[idx] = boundaryDiff;
+        } else {
+            // Inside healing domain Omega: 4-neighbor averaging relaxation
+            ivec2 sz = u_params.imageSize;
+            int idxLeft  = pos.y * sz.x + max(pos.x - 1, 0);
+            int idxRight = pos.y * sz.x + min(pos.x + 1, sz.x - 1);
+            int idxUp    = max(pos.y - 1, 0) * sz.x + pos.x;
+            int idxDown  = min(pos.y + 1, sz.y - 1) * sz.x + pos.x;
+
+            vec4 sumD = diffPing[idxLeft] + diffPing[idxRight] + diffPing[idxUp] + diffPing[idxDown];
+            diffPong[idx] = sumD * 0.25;
+        }
+    }
+    else if (u_params.mode == HEAL_MODE_COMPOSITE) {
+        // Final Poisson blend: f = g + d
+        vec4 dst = sampleDest(pos);
+        vec4 src = sampleSource(pos);
+        vec4 d = diffPong[idx];
+        vec4 healed = src + d;
+        healed.a = dst.a;
+        outPixels[idx] = mix(dst, clamp(healed, vec4(0.0), vec4(10.0)), m);
+    }
+}

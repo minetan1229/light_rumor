@@ -1,0 +1,117 @@
+name: Build and Release light_rumor APK
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build APK & Create Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Set up Android SDK & NDK
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: '11076708'
+
+      - name: Install NDK & CMake
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.1" "cmake;3.22.1" "ndk;27.2.12479018"
+
+      - name: Set NDK Environment Variable
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> $GITHUB_ENV
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/27.2.12479018" >> $GITHUB_ENV
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant Execute Permission for Gradlew
+        run: chmod +x gradlew
+
+      - name: Build APK with Gradle
+        run: ./gradlew assembleRelease assembleDebug --stacktrace
+
+      - name: Locate and Stage APKs
+        run: |
+          mkdir -p dist
+          # Find generated release or debug APK
+          RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          DEBUG_APK=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          
+          if [ -n "$RELEASE_APK" ] && [ -f "$RELEASE_APK" ]; then
+            cp "$RELEASE_APK" dist/light_rumor.apk
+            echo "Staged release APK: $RELEASE_APK as dist/light_rumor.apk"
+          elif [ -n "$DEBUG_APK" ] && [ -f "$DEBUG_APK" ]; then
+            cp "$DEBUG_APK" dist/light_rumor.apk
+            echo "Staged debug APK: $DEBUG_APK as dist/light_rumor.apk"
+          else
+            echo "Error: No APK found!"
+            find app/build/outputs/ -type f
+            exit 1
+          fi
+
+      - name: Upload APK as Workflow Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: light_rumor-apk
+          path: dist/light_rumor.apk
+          retention-days: 30
+
+      - name: Determine Release Tag
+        id: release_tag
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            TAG_NAME="${{ github.ref_name }}"
+          else
+            TAG_NAME="v1.0.0"
+          fi
+          echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+        with:
+          tag_name: ${{ steps.release_tag.outputs.tag }}
+          name: light_rumor Release ${{ steps.release_tag.outputs.tag }}
+          body: |
+            ## 📱 light_rumor Android APK
+            
+            スマートフォンから直接ダウンロードしてインストールできます：
+            
+            👉 **[light_rumor APKをダウンロードしてインストール](https://github.com/minetan1229/light_rumor/releases/download/${{ steps.release_tag.outputs.tag }}/light_rumor.apk)**
+            
+            ### 特徴
+            - Adobe Lightroom Classic / Capture One / DaVinci Resolve の強みを凝縮
+            - 完全手動・32bitリニアRAW現像エンジン（Vulkan / C++20）
+            - シネマ級RGB波形モニター（色の波）、フォルスカラー、ゼブラ、フォーカスピーキング
+            - 9種の手動マスク、コピースタンプ、XMPプリセット、アナログリール履歴
+            - テザー撮影、フォーカススタッキング、星景追尾スタック、ICCソフトプルーフ
+            - 完全オフライン（インターネット通信権限なし）
+          files: |
+            dist/light_rumor.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

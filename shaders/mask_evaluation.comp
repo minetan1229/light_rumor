@@ -1,0 +1,332 @@
+#version 450
+
+// Project APEX FIELD - Local Mask Evaluation Compute Shader
+// Evaluates 9 mask types (Linear, Radial, Polygon, Brush, Luminance, Color, Depth, Sobel)
+// and executes Boolean operations (Union, Subtract, Intersect, Invert) at 60fps+.
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+// Mask Types
+#define MASK_TYPE_LINEAR      0
+#define MASK_TYPE_RADIAL      1
+#define MASK_TYPE_POLYGON     2
+#define MASK_TYPE_BRUSH       3
+#define MASK_TYPE_LUMINANCE   4
+#define MASK_TYPE_COLOR       5
+#define MASK_TYPE_DEPTH       6
+#define MASK_TYPE_SOBEL       7
+#define MASK_TYPE_COMPOSITE   8
+
+// Boolean Operations
+#define BOOL_OP_REPLACE   0
+#define BOOL_OP_UNION     1
+#define BOOL_OP_SUBTRACT  2
+#define BOOL_OP_INTERSECT 3
+
+layout(push_constant) uniform MaskUniforms {
+    ivec2 imageSize;
+    int maskType;
+    int booleanOp;
+    int invert;
+    float opacity;
+
+    // Linear Gradient
+    vec2 linearStart;
+    vec2 linearEnd;
+    float linearFeather;
+    int linearEasing; // 0: Linear, 1: Smoothstep
+
+    // Radial / Elliptical
+    vec2 radialCenter;
+    vec2 radialRadius; // (rx, ry)
+    float radialAngle;  // in radians
+    float radialFeather; // 0.0 to 1.0
+
+    // Luminance Range
+    vec2 lumaRange;      // (min, max) in [0.0, 1.0]
+    vec2 lumaFeather;    // (featherLow, featherHigh)
+
+    // Color Range
+    vec3 colorTarget;    // H (0..360), S (0..1), L (0..1)
+    vec3 colorTolerance; // tolH, tolS, tolL
+    float colorFeather;
+
+    // Depth Range
+    vec2 depthRange;     // (min, max) in [0.0, 1.0]
+    float depthFeather;
+
+    // Edge / Sobel
+    float edgeThreshold;
+    float edgeFeather;
+
+    // Polygon / Bezier
+    int vertexCount;
+} u_params;
+
+// Bindings
+// Set 0, Binding 0: Image RGBA input (for Luminance, Color, Sobel)
+layout(std430, set = 0, binding = 0) readonly buffer ImageInputBuffer {
+    vec4 inPixels[];
+};
+
+// Set 0, Binding 1: Depth Buffer (for Depth Mask)
+layout(std430, set = 0, binding = 1) readonly buffer DepthInputBuffer {
+    float inDepth[];
+};
+
+// Set 0, Binding 2: Polygon Vertices (vec2 array, max 32 points)
+layout(std430, set = 0, binding = 2) readonly buffer PolygonBuffer {
+    vec2 vertices[32];
+};
+
+// Set 0, Binding 3: Base / Accumulated Mask buffer (Read/Write for Boolean composition)
+layout(std430, set = 0, binding = 3) buffer MaskAccumBuffer {
+    float maskAccum[];
+};
+
+// Set 0, Binding 4: Output evaluated layer mask (Writeonly)
+layout(std430, set = 0, binding = 4) writeonly buffer MaskOutputBuffer {
+    float maskOut[];
+};
+
+// Helper: RGB to HSL
+vec3 rgbToHsl(vec3 c) {
+    float cMin = min(min(c.r, c.g), c.b);
+    float cMax = max(max(c.r, c.g), c.b);
+    float delta = cMax - cMin;
+    vec3 hsl = vec3(0.0, 0.0, (cMax + cMin) * 0.5);
+
+    if (delta > 1e-6) {
+        hsl.y = hsl.z < 0.5 ? (delta / (cMax + cMin)) : (delta / (2.0 - cMax - cMin));
+        if (c.r == cMax) {
+            hsl.x = (c.g - c.b) / delta + (c.g < c.b ? 6.0 : 0.0);
+        } else if (c.g == cMax) {
+            hsl.x = (c.b - c.r) / delta + 2.0;
+        } else {
+            hsl.x = (c.r - c.g) / delta + 4.0;
+        }
+        hsl.x *= 60.0; // 0 to 360 degrees
+    }
+    return hsl;
+}
+
+// 1. Linear Gradient Evaluation
+float evaluateLinearGradient(vec2 p) {
+    vec2 v = u_params.linearEnd - u_params.linearStart;
+    float lenSq = dot(v, v);
+    if (lenSq < 1e-6) return 0.0;
+
+    float t = dot(p - u_params.linearStart, v) / lenSq;
+    t = clamp(t, 0.0, 1.0);
+
+    if (u_params.linearEasing == 1) {
+        // S-curve smoothstep easing
+        t = smoothstep(0.0, 1.0, t);
+    }
+    return t;
+}
+
+// 2. Radial / Elliptical Gradient Evaluation
+float evaluateRadialGradient(vec2 p) {
+    vec2 rel = p - u_params.radialCenter;
+    float cosA = cos(-u_params.radialAngle);
+    float sinA = sin(-u_params.radialAngle);
+    vec2 rotated = vec2(
+        rel.x * cosA - rel.y * sinA,
+        rel.x * sinA + rel.y * cosA
+    );
+
+    vec2 r = max(u_params.radialRadius, vec2(1e-4));
+    float distNorm = length(rotated / r);
+
+    if (distNorm >= 1.0) return 0.0;
+
+    float feather = clamp(u_params.radialFeather, 0.01, 1.0);
+    float innerR = max(0.0, 1.0 - feather);
+    if (distNorm <= innerR) {
+        return 1.0;
+    }
+    return 1.0 - smoothstep(innerR, 1.0, distNorm);
+}
+
+// 3. Polygon Point-in-Polygon & Signed Distance
+float evaluatePolygon(vec2 p) {
+    int n = u_params.vertexCount;
+    if (n < 3) return 0.0;
+
+    bool inside = false;
+    float minDist = 1e8;
+
+    for (int i = 0, j = n - 1; i < n; j = i++) {
+        vec2 vi = vertices[i];
+        vec2 vj = vertices[j];
+
+        // Ray casting point-in-polygon
+        if (((vi.y > p.y) != (vj.y > p.y)) &&
+            (p.x < (vj.x - vi.x) * (p.y - vi.y) / ((vj.y - vi.y) + 1e-7) + vi.x)) {
+            inside = !inside;
+        }
+
+        // Segment distance for anti-aliasing / edge feather
+        vec2 seg = vj - vi;
+        float segLenSq = dot(seg, seg);
+        float t = (segLenSq > 1e-6) ? clamp(dot(p - vi, seg) / segLenSq, 0.0, 1.0) : 0.0;
+        float d = length(p - (vi + t * seg));
+        minDist = min(minDist, d);
+    }
+
+    float feather = max(0.005, u_params.linearFeather);
+    float edgeWeight = clamp(minDist / feather, 0.0, 1.0);
+    return inside ? (0.5 + 0.5 * edgeWeight) : max(0.0, 0.5 - 0.5 * edgeWeight);
+}
+
+// 5. Luminance Range Mask
+float evaluateLuminance(vec3 col) {
+    // Rec.709 Luminance
+    float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
+
+    float low = u_params.lumaRange.x;
+    float high = u_params.lumaRange.y;
+    float fLow = max(1e-4, u_params.lumaFeather.x);
+    float fHigh = max(1e-4, u_params.lumaFeather.y);
+
+    float wLow = smoothstep(low - fLow, low, luma);
+    float wHigh = 1.0 - smoothstep(high, high + fHigh, luma);
+    return clamp(wLow * wHigh, 0.0, 1.0);
+}
+
+// 6. Color Range Mask
+float evaluateColorRange(vec3 col) {
+    vec3 hsl = rgbToHsl(col);
+
+    // Circular hue difference in [0, 180]
+    float dH = abs(hsl.x - u_params.colorTarget.x);
+    if (dH > 180.0) dH = 360.0 - dH;
+
+    float dS = abs(hsl.y - u_params.colorTarget.y);
+    float dL = abs(hsl.z - u_params.colorTarget.z);
+
+    float f = max(1e-4, u_params.colorFeather);
+    float wH = 1.0 - smoothstep(u_params.colorTolerance.x, u_params.colorTolerance.x + f * 45.0, dH);
+    float wS = 1.0 - smoothstep(u_params.colorTolerance.y, u_params.colorTolerance.y + f * 0.3, dS);
+    float wL = 1.0 - smoothstep(u_params.colorTolerance.z, u_params.colorTolerance.z + f * 0.3, dL);
+
+    return clamp(wH * wS * wL, 0.0, 1.0);
+}
+
+// 7. Depth Map Mask
+float evaluateDepth(int idx) {
+    float d = inDepth[idx];
+    float low = u_params.depthRange.x;
+    float high = u_params.depthRange.y;
+    float f = max(1e-4, u_params.depthFeather);
+
+    float wLow = smoothstep(low - f, low, d);
+    float wHigh = 1.0 - smoothstep(high, high + f, d);
+    return clamp(wLow * wHigh, 0.0, 1.0);
+}
+
+// 8. Sobel Edge Mask
+float evaluateSobel(ivec2 pos) {
+    ivec2 sz = u_params.imageSize;
+    float luma[3][3];
+
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            int cx = clamp(pos.x + dx, 0, sz.x - 1);
+            int cy = clamp(pos.y + dy, 0, sz.y - 1);
+            vec3 c = inPixels[cy * sz.x + cx].rgb;
+            luma[dy + 1][dx + 1] = dot(c, vec3(0.2126, 0.7152, 0.0722));
+        }
+    }
+
+    // Sobel kernels
+    float gx = (-1.0 * luma[0][0] + 1.0 * luma[0][2]) +
+               (-2.0 * luma[1][0] + 2.0 * luma[1][2]) +
+               (-1.0 * luma[2][0] + 1.0 * luma[2][2]);
+
+    float gy = (-1.0 * luma[0][0] - 2.0 * luma[0][1] - 1.0 * luma[0][2]) +
+               ( 1.0 * luma[2][0] + 2.0 * luma[2][1] + 1.0 * luma[2][2]);
+
+    float grad = sqrt(gx * gx + gy * gy);
+    float thresh = max(0.01, u_params.edgeThreshold);
+    float f = max(1e-4, u_params.edgeFeather);
+    return smoothstep(thresh - f, thresh + f, grad);
+}
+
+void main() {
+    ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+    if (pos.x >= u_params.imageSize.x || pos.y >= u_params.imageSize.y) {
+        return;
+    }
+
+    int idx = pos.y * u_params.imageSize.x + pos.x;
+    vec2 pNorm = vec2(pos) / vec2(u_params.imageSize);
+
+    // Evaluate single mask weight
+    float rawWeight = 0.0;
+    switch (u_params.maskType) {
+        case MASK_TYPE_LINEAR:
+            rawWeight = evaluateLinearGradient(pNorm);
+            break;
+        case MASK_TYPE_RADIAL:
+            rawWeight = evaluateRadialGradient(pNorm);
+            break;
+        case MASK_TYPE_POLYGON:
+            rawWeight = evaluatePolygon(pNorm);
+            break;
+        case MASK_TYPE_BRUSH:
+            // Brush accumulator buffer sampling
+            rawWeight = maskAccum[idx];
+            break;
+        case MASK_TYPE_LUMINANCE:
+            rawWeight = evaluateLuminance(inPixels[idx].rgb);
+            break;
+        case MASK_TYPE_COLOR:
+            rawWeight = evaluateColorRange(inPixels[idx].rgb);
+            break;
+        case MASK_TYPE_DEPTH:
+            rawWeight = evaluateDepth(idx);
+            break;
+        case MASK_TYPE_SOBEL:
+            rawWeight = evaluateSobel(pos);
+            break;
+        default:
+            rawWeight = 1.0;
+            break;
+    }
+
+    // Invert option
+    if (u_params.invert != 0) {
+        rawWeight = 1.0 - rawWeight;
+    }
+
+    // Opacity modulation
+    float newWeight = clamp(rawWeight * u_params.opacity, 0.0, 1.0);
+
+    // Boolean Operation with existing accumulated mask
+    float baseWeight = maskAccum[idx];
+    float finalWeight = newWeight;
+
+    switch (u_params.booleanOp) {
+        case BOOL_OP_REPLACE:
+            finalWeight = newWeight;
+            break;
+        case BOOL_OP_UNION:
+            // Additive combination
+            finalWeight = min(1.0, baseWeight + newWeight);
+            break;
+        case BOOL_OP_SUBTRACT:
+            // Subtractive combination
+            finalWeight = max(0.0, baseWeight - newWeight);
+            break;
+        case BOOL_OP_INTERSECT:
+            // Multiplicative intersection
+            finalWeight = baseWeight * newWeight;
+            break;
+    }
+
+    maskOut[idx] = clamp(finalWeight, 0.0, 1.0);
+    // Also update accumulator
+    maskAccum[idx] = clamp(finalWeight, 0.0, 1.0);
+}

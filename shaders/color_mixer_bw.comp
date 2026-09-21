@@ -1,0 +1,181 @@
+#version 450
+
+// Vulkan Compute Shader: 8-Color Independent HSL Mixer, Advanced 8-Channel B&W Mixer & Split Toning
+// 60fps GPU pipeline for ACEScg / Linear Rec.2020 floating point
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(push_constant) uniform ColorMixerParams {
+    int isMonochrome;           // 0: Color HSL, 1: 8-Channel Monochrome
+    ivec2 tileSize;             // (width, height)
+    int padding;                // padding pixels
+
+    // Split toning
+    vec2 splitHighlights;       // (hue: 0-1, sat: 0-1)
+    vec2 splitShadows;          // (hue: 0-1, sat: 0-1)
+    float splitBalance;         // -1.0 to 1.0 (midpoint bias)
+} params;
+
+// Input buffer: Padded float RGBA
+layout(std430, set = 0, binding = 0) readonly buffer InputBuffer {
+    vec4 inPixels[];
+};
+
+// Output buffer: Filtered float RGBA
+layout(std430, set = 0, binding = 1) writeonly buffer OutputBuffer {
+    vec4 outPixels[];
+};
+
+// 8-color HSL adjustments & Monochrome weights buffer
+// Band indices: 0:Red, 1:Orange, 2:Yellow, 3:Green, 4:Aqua, 5:Blue, 6:Purple, 7:Magenta
+layout(std430, set = 0, binding = 2) readonly buffer HslMixerBuffer {
+    vec4 hslBands[8];           // x: hueShift (-1..1), y: satShift (-1..1), z: lumShift (-1..1), w: unused
+    vec4 monoWeights0;          // weights for bands 0..3
+    vec4 monoWeights1;          // weights for bands 4..7
+};
+
+// 8 band center angles in normalized hue [0.0, 1.0]
+const float bandCenters[8] = float[8](
+    0.0 / 360.0,    // Red
+    30.0 / 360.0,   // Orange
+    60.0 / 360.0,   // Yellow
+    120.0 / 360.0,  // Green
+    180.0 / 360.0,  // Aqua
+    240.0 / 360.0,  // Blue
+    285.0 / 360.0,  // Purple
+    330.0 / 360.0   // Magenta
+);
+
+// Circular angular distance in [0.0, 0.5]
+float hueDistance(float h1, float h2) {
+    float d = abs(h1 - h2);
+    return d > 0.5 ? 1.0 - d : d;
+}
+
+vec3 rgbToHsl(vec3 c) {
+    float cMin = min(min(c.r, c.g), c.b);
+    float cMax = max(max(c.r, c.g), c.b);
+    float delta = cMax - cMin;
+    vec3 hsl = vec3(0.0, 0.0, (cMax + cMin) * 0.5);
+
+    if (delta > 1e-6) {
+        hsl.y = hsl.z < 0.5 ? (delta / (cMax + cMin)) : (delta / (2.0 - cMax - cMin));
+        if (c.r == cMax) {
+            hsl.x = (c.g - c.b) / delta + (c.g < c.b ? 6.0 : 0.0);
+        } else if (c.g == cMax) {
+            hsl.x = (c.b - c.r) / delta + 2.0;
+        } else {
+            hsl.x = (c.r - c.g) / delta + 4.0;
+        }
+        hsl.x /= 6.0;
+    }
+    return hsl;
+}
+
+float hueToRgb(float p, float q, float t) {
+    if (t < 0.0) t += 1.0;
+    if (t > 1.0) t -= 1.0;
+    if (t < 1.0 / 6.0) return p + (q - p) * 6.0 * t;
+    if (t < 1.0 / 2.0) return q;
+    if (t < 2.0 / 3.0) return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
+    return p;
+}
+
+vec3 hslToRgb(vec3 hsl) {
+    if (hsl.y < 1e-6) return vec3(hsl.z);
+    float q = hsl.z < 0.5 ? (hsl.z * (1.0 + hsl.y)) : (hsl.z + hsl.y - hsl.z * hsl.y);
+    float p = 2.0 * hsl.z - q;
+    return vec3(
+        hueToRgb(p, q, hsl.x + 1.0 / 3.0),
+        hueToRgb(p, q, hsl.x),
+        hueToRgb(p, q, hsl.x - 1.0 / 3.0)
+    );
+}
+
+// Split toning application
+vec3 applySplitToning(vec3 c, float lum) {
+    if (params.splitHighlights.y < 1e-4 && params.splitShadows.y < 1e-4) {
+        return c;
+    }
+    // Midtone split point pivot adjusted by balance [-1.0, 1.0]
+    float pivot = clamp(0.5 + params.splitBalance * 0.25, 0.1, 0.9);
+    float shadowWeight = clamp((pivot - lum) / pivot, 0.0, 1.0);
+    float highlightWeight = clamp((lum - pivot) / (1.0 - pivot), 0.0, 1.0);
+
+    vec3 shadowColor = hslToRgb(vec3(params.splitShadows.x, 1.0, 0.5));
+    vec3 highlightColor = hslToRgb(vec3(params.splitHighlights.x, 1.0, 0.5));
+
+    vec3 tinted = c;
+    tinted = mix(tinted, shadowColor * lum * 2.0, shadowWeight * params.splitShadows.y * 0.5);
+    tinted = mix(tinted, highlightColor * lum * 2.0, highlightWeight * params.splitHighlights.y * 0.5);
+    return tinted;
+}
+
+void main() {
+    ivec2 localId = ivec2(gl_GlobalInvocationID.xy);
+    if (localId.x >= params.tileSize.x || localId.y >= params.tileSize.y) {
+        return;
+    }
+
+    int paddedW = params.tileSize.x + 2 * params.padding;
+    int padX = localId.x + params.padding;
+    int padY = localId.y + params.padding;
+    int idx = padY * paddedW + padX;
+
+    vec4 p = inPixels[idx];
+    vec3 col = p.rgb;
+    vec3 hsl = rgbToHsl(col);
+    float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+
+    if (params.isMonochrome != 0) {
+        // --- Advanced 8-Channel Monochrome Mixer ---
+        float totalWeight = 0.0;
+        float filteredWeight = 0.0;
+
+        for (int b = 0; b < 8; ++b) {
+            float dist = hueDistance(hsl.x, bandCenters[b]);
+            // Cosine bell with half-width ~45 degrees (0.125 normalized)
+            float w = max(0.0, cos(clamp(dist / 0.125, 0.0, 1.0) * 1.570796));
+            float weightB = (b < 4) ? monoWeights0[b] : monoWeights1[b - 4];
+            totalWeight += w;
+            filteredWeight += w * weightB;
+        }
+
+        // Default neutral panchromatic gain: average weight ~0.125
+        float filterGain = (totalWeight > 1e-5) ? (filteredWeight / totalWeight) * 8.0 : 1.0;
+        float monoVal = max(0.0, lum * filterGain);
+        vec3 monoCol = vec3(monoVal);
+
+        // Apply Split Toning on B&W
+        monoCol = applySplitToning(monoCol, monoVal);
+        col = monoCol;
+    } else {
+        // --- 8-Color Independent HSL Mixer ---
+        if (hsl.y > 1e-4) {
+            float sumW = 0.0;
+            vec3 deltaHSL = vec3(0.0);
+
+            for (int b = 0; b < 8; ++b) {
+                float dist = hueDistance(hsl.x, bandCenters[b]);
+                float w = max(0.0, cos(clamp(dist / 0.125, 0.0, 1.0) * 1.570796));
+                sumW += w;
+                deltaHSL += w * hslBands[b].xyz;
+            }
+
+            if (sumW > 1e-5) {
+                deltaHSL /= sumW;
+                // Apply shifts: Hue (degrees to normalized 1/360), Saturation, Luminance
+                hsl.x = fract(hsl.x + deltaHSL.x * (1.0 / 6.0)); // ±60 deg max shift per band
+                hsl.y = clamp(hsl.y * (1.0 + deltaHSL.y), 0.0, 1.0);
+                hsl.z = clamp(hsl.z * (1.0 + deltaHSL.z), 0.0, 1.0);
+                col = hslToRgb(hsl);
+            }
+        }
+
+        // Apply Split Toning on Color
+        col = applySplitToning(col, lum);
+    }
+
+    int outIdx = localId.y * params.tileSize.x + localId.x;
+    outPixels[outIdx] = vec4(col, p.a);
+}

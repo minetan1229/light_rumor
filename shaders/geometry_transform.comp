@@ -1,0 +1,106 @@
+#version 450
+
+// Vulkan Compute Shader: Real-Time Geometry Transform, Crop, Rotate & Keystone Perspective
+// Operates on 32-bit floating point RGBA buffers with inverse projective mapping and bilinear interpolation
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(push_constant) uniform GeometryParams {
+    ivec2 srcSize;              // Source image dimensions (width, height)
+    ivec2 dstSize;              // Destination crop / output dimensions (width, height)
+    vec4 cropRectNorm;          // Normalized crop rect (x, y, w, h) in [0.0, 1.0]
+    float rotationRad;          // Fine rotation in radians (-0.785 to +0.785 = ±45 deg)
+    int rotationSteps;          // 0: 0°, 1: 90° CW, 2: 180°, 3: 270° CW
+    int flipH;                  // 1 = flip horizontal
+    int flipV;                  // 1 = flip vertical
+    float perspectiveV;         // Vertical keystone perspective (-1.0 to +1.0)
+    float perspectiveH;         // Horizontal keystone perspective (-1.0 to +1.0)
+    float distortion;           // Radial distortion correction (-1.0 to +1.0)
+    int guideMode;              // Composition guide mode (0: None, 1: 3rds, etc.)
+} params;
+
+// Source buffer: Padded or full float RGBA
+layout(std430, set = 0, binding = 0) readonly buffer InputBuffer {
+    vec4 inPixels[];
+};
+
+// Destination buffer: Transformed float RGBA
+layout(std430, set = 0, binding = 1) writeonly buffer OutputBuffer {
+    vec4 outPixels[];
+};
+
+// Bilinear sampling helper with boundary clamping
+vec4 sampleBilinear(vec2 uv) {
+    vec2 coord = uv * vec2(params.srcSize) - vec2(0.5);
+    coord = clamp(coord, vec2(0.0), vec2(params.srcSize - 1));
+
+    ivec2 i0 = ivec2(floor(coord));
+    ivec2 i1 = min(i0 + ivec2(1), params.srcSize - 1);
+    vec2 f = fract(coord);
+
+    vec4 p00 = inPixels[i0.y * params.srcSize.x + i0.x];
+    vec4 p10 = inPixels[i0.y * params.srcSize.x + i1.x];
+    vec4 p01 = inPixels[i1.y * params.srcSize.x + i0.x];
+    vec4 p11 = inPixels[i1.y * params.srcSize.x + i1.x];
+
+    return mix(mix(p00, p10, f.x), mix(p01, p11, f.x), f.y);
+}
+
+void main() {
+    ivec2 dstCoord = ivec2(gl_GlobalInvocationID.xy);
+    if (dstCoord.x >= params.dstSize.x || dstCoord.y >= params.dstSize.y) {
+        return;
+    }
+
+    // Normalized destination coordinate [-0.5, 0.5] centered
+    vec2 normDst = (vec2(dstCoord) + 0.5) / vec2(params.dstSize) - vec2(0.5);
+
+    // 1. Horizontal & Vertical Flips
+    if (params.flipH != 0) normDst.x = -normDst.x;
+    if (params.flipV != 0) normDst.y = -normDst.y;
+
+    // 2. 90-degree step rotations
+    if (params.rotationSteps == 1) { // 90° CW -> inverse is 90° CCW
+        normDst = vec2(normDst.y, -normDst.x);
+    } else if (params.rotationSteps == 2) { // 180°
+        normDst = -normDst;
+    } else if (params.rotationSteps == 3) { // 270° CW
+        normDst = vec2(-normDst.y, normDst.x);
+    }
+
+    // 3. Fine Straighten rotation (-angle inverse)
+    float c = cos(-params.rotationRad);
+    float s = sin(-params.rotationRad);
+    vec2 rotated = vec2(
+        normDst.x * c - normDst.y * s,
+        normDst.x * s + normDst.y * c
+    );
+
+    // 4. Keystone Perspective Correction (Inverse projective homography)
+    float pV = params.perspectiveV * 0.4;
+    float pH = params.perspectiveH * 0.4;
+    float w = 1.0 + rotated.y * pV + rotated.x * pH;
+    w = max(w, 0.05); // prevent divide by zero
+    vec2 projected = rotated / w;
+
+    // 5. Radial Lens Distortion Correction: r' = r * (1 + k * r^2)
+    if (abs(params.distortion) > 1e-4) {
+        float r2 = dot(projected, projected);
+        float k = params.distortion * 0.5;
+        projected *= (1.0 + k * r2);
+    }
+
+    // 6. Map to Crop Window in Source Normalized UV [0.0, 1.0]
+    vec2 cropOrigin = params.cropRectNorm.xy;
+    vec2 cropScale = params.cropRectNorm.zw;
+    vec2 srcUV = cropOrigin + (projected + vec2(0.5)) * cropScale;
+
+    // Boundary check: Out-of-bounds yields black / border
+    vec4 resultColor = vec4(0.0, 0.0, 0.0, 1.0);
+    if (srcUV.x >= 0.0 && srcUV.x <= 1.0 && srcUV.y >= 0.0 && srcUV.y <= 1.0) {
+        resultColor = sampleBilinear(srcUV);
+    }
+
+    int dstIdx = dstCoord.y * params.dstSize.x + dstCoord.x;
+    outPixels[dstIdx] = resultColor;
+}
