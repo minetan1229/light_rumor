@@ -72,7 +72,7 @@ jobs:
           if [ ${#apks[@]} -gt 0 ]; then
             echo "Found APK: ${apks[0]}"
             cp "${apks[0]}" dist/light_rumor.apk
-            cp "${apks[0]}" dist/light_rumor-v1.0.0.apk
+            cp "${apks[0]}" dist/light_rumor-v1.0.1.apk
             ls -lh dist/
           else
             echo "Error: No APK file found!"
@@ -98,21 +98,21 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="v1.0.0"
+          TAG="v1.0.1"
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             TAG="${{ github.ref_name }}"
           fi
 
           echo "Publishing release for tag: $TAG"
 
-          printf "## 📱 light_rumor Android APK\n\nスマートフォンから直接ダウンロードしてインストールできます：\n\n👉 **[light_rumor APKをダウンロードしてインストール](https://github.com/minetan1229/light_rumor/raw/master/dist/light_rumor-v1.0.0.apk)**\n\n### 主な特徴\n- Adobe Lightroom Classic / Capture One / DaVinci Resolve の強みを凝縮\n- 完全手動・32bitリニアRAW現像エンジン（Vulkan / C++20）\n- シネマ級RGB波形モニター（色の波）、フォルスカラー、ゼブラ、フォーカスピーキング\n- 9種の手動マスク、コピースタンプ、XMPプリセット、アナログリール履歴\n- テザー撮影、フォーカススタッキング、星景追尾スタック、ICCソフトプルーフ\n- 完全オフライン（インターネット通信権限なし）\n" > release_notes.md
+          printf "## 📱 light_rumor Android APK (v1.0.1)\n\nスマートフォンから直接ダウンロードしてインストールできます：\n\n👉 **[light_rumor v1.0.1 APKをダウンロードしてインストール](https://github.com/minetan1229/light_rumor/raw/master/dist/light_rumor-v1.0.1.apk)**\n\n### v1.0.1 更新内容\n- 起動直後にアプリがクラッシュする問題の解消（Activity初期化ライフサイクルの適正化）\n- Obsidian Blackデザインシステムの全体適用\n\n### 主な特徴\n- Adobe Lightroom Classic / Capture One / DaVinci Resolve の強みを凝縮\n- 完全手動・32bitリニアRAW現像エンジン（Vulkan / C++20）\n- シネマ級RGB波形モニター（色の波）、フォルスカラー、ゼブラ、フォーカスピーキング\n- 9種の手動マスク、コピースタンプ、XMPプリセット、アナログリール履歴\n- テザー撮影、フォーカススタッキング、星景追尾スタック、ICCソフトプルーフ\n- 完全オフライン（インターネット通信権限なし）\n" > release_notes.md
 
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists, uploading APK..."
-            gh release upload "$TAG" dist/light_rumor.apk dist/light_rumor-v1.0.0.apk --clobber
+            gh release upload "$TAG" dist/light_rumor.apk dist/light_rumor-v1.0.1.apk --clobber
           else
             echo "Creating release $TAG with APK..."
-            gh release create "$TAG" dist/light_rumor.apk dist/light_rumor-v1.0.0.apk \
+            gh release create "$TAG" dist/light_rumor.apk dist/light_rumor-v1.0.1.apk \
               --title "light_rumor Release $TAG" \
               --notes-file release_notes.md \
               --latest

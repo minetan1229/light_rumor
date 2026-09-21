@@ -6,7 +6,7 @@
 ---
 
 ## ダウンロード
-### ⬇️ [**light_rumor v1.0.0 をダウンロード（APK）**](https://github.com/minetan1229/light_rumor/raw/master/dist/light_rumor-v1.0.0.apk)
+### ⬇️ [**light_rumor v1.0.1 をダウンロード（APK）**](https://github.com/minetan1229/light_rumor/raw/master/dist/light_rumor-v1.0.1.apk)
 
 Android 8.0（API 26）以降、**全6フェーズのプロフェッショナル機能すべてが使えます**。
 
