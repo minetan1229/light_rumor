@@ -19,12 +19,12 @@ android {
 
         externalNativeBuild {
             cmake {
-                cppFlags += "-std=c++20"
-                arguments += "-DANDROID_STL=c++_shared"
+                cppFlags = "-std=c++20"
+                arguments += listOf("-DANDROID_STL=c++_shared")
             }
         }
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a", "x86_64"))
         }
     }
 
@@ -42,12 +42,12 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = "21"
+        jvmTarget = "17"
     }
 
     buildFeatures {
