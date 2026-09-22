@@ -44,7 +44,7 @@ void DenoiseEngine::applyLuminanceNR(const FloatRGBA* src, FloatRGBA* dst,
                                      int32_t width, int32_t height,
                                      float strength, float detail, float contrast) {
     if (strength <= 0.0f) {
-        std::memcpy(dst, src, sizeof(FloatRGBA) * width * height);
+        std::memcpy(dst, src, sizeof(FloatRGBA) * static_cast<size_t>(width) * height);
         return;
     }
 
@@ -119,7 +119,7 @@ void DenoiseEngine::applyChromaNR(const FloatRGBA* src, FloatRGBA* dst,
                                   float strength, float detail, float smoothness) {
     (void)detail;
     if (strength <= 0.0f) {
-        std::memcpy(dst, src, sizeof(FloatRGBA) * width * height);
+        std::memcpy(dst, src, sizeof(FloatRGBA) * static_cast<size_t>(width) * height);
         return;
     }
 
@@ -201,9 +201,20 @@ void DenoiseEngine::applyChromaNR(const FloatRGBA* src, FloatRGBA* dst,
     #pragma omp parallel for schedule(static)
     for (int32_t i = 0; i < width * height; ++i) {
         float L = luma[i];
-        float finalR = std::max(0.0f, L + outCr[i]);
-        float finalB = std::max(0.0f, L + outCb[i]);
-        float finalG = std::max(0.0f, (L - 0.2126f * finalR - 0.0722f * finalB) / 0.7152f);
+        float cr = outCr[i];
+        float cb = outCb[i];
+        float numer = L - 0.2126f * (L + cr) - 0.0722f * (L + cb);
+        if (numer < 0.0f) {
+            // Desaturate chroma so green does not clip to zero causing magenta fringing
+            float excess = (0.2126f * std::max(0.0f, cr) + 0.0722f * std::max(0.0f, cb));
+            float scale = (excess > 1e-5f) ? std::clamp((L * 0.7152f) / excess, 0.0f, 1.0f) : 1.0f;
+            cr *= scale;
+            cb *= scale;
+            numer = std::max(0.0f, L - 0.2126f * (L + cr) - 0.0722f * (L + cb));
+        }
+        float finalR = std::max(0.0f, L + cr);
+        float finalB = std::max(0.0f, L + cb);
+        float finalG = std::max(0.0f, numer / 0.7152f);
         dst[i] = FloatRGBA(finalR, finalG, finalB, src[i].a);
     }
 }
@@ -215,7 +226,7 @@ void DenoiseEngine::applySharpening(const FloatRGBA* src, FloatRGBA* dst,
     (void)radius;
     (void)detail;
     if (amount <= 0.0f && !previewMask) {
-        std::memcpy(dst, src, sizeof(FloatRGBA) * width * height);
+        std::memcpy(dst, src, sizeof(FloatRGBA) * static_cast<size_t>(width) * height);
         return;
     }
 
@@ -298,6 +309,7 @@ bool DenoiseEngine::processTile(const std::vector<FloatRGBA>& inPaddedTile,
     int32_t actualPadY = (padTop >= 0) ? padTop : ((paddedH > validH) ? padding : 0);
     actualPadX = std::clamp(actualPadX, 0, std::max(0, paddedW - validW));
     actualPadY = std::clamp(actualPadY, 0, std::max(0, paddedH - validH));
+    if (actualPadX + validW > paddedW || actualPadY + validH > paddedH) return false;
 
     bool needLuma = (params.luminanceNR > 0.0f);
     bool needChroma = (params.chromaNR > 0.0f);

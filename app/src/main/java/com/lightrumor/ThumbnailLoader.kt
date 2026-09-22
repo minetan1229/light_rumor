@@ -70,7 +70,18 @@ object ThumbnailLoader {
                 try {
                     val size = android.util.Size(targetWidth.coerceAtMost(1080), targetHeight.coerceAtMost(1080))
                     val nativeThumb = context.contentResolver.loadThumbnail(item.uri, size, null)
-                    if (nativeThumb != null) return@withContext nativeThumb
+                    val softThumb = if (nativeThumb.config == Bitmap.Config.HARDWARE) {
+                        val copied = nativeThumb.copy(Bitmap.Config.ARGB_8888, false)
+                        if (copied != null) {
+                            nativeThumb.recycle()
+                            copied
+                        } else {
+                            nativeThumb
+                        }
+                    } else {
+                        nativeThumb
+                    }
+                    return@withContext softThumb
                 } catch (_: Throwable) {}
             }
 
@@ -79,20 +90,16 @@ object ThumbnailLoader {
                 val thumbBytes = LightRumorNativeEngine.extractThumbnailBytes(item.filePath)
                 if (thumbBytes != null && thumbBytes.isNotEmpty()) {
                     val bmp = decodeSampledBitmapFromByteArray(thumbBytes, targetWidth, targetHeight)
-                    if (bmp != null) return@withContext bmp
+                    if (bmp != null) {
+                        return@withContext fixOrientationFromSource(context, item.uri, item.filePath, bmp)
+                    }
                 }
             }
 
-            // 3. Load via ContentResolver or File InputStream
-            val inputStream = openInputStream(context, item.uri, item.filePath)
-            if (inputStream != null) {
-                inputStream.use { stream ->
-                    val bytes = stream.readBytes()
-                    val bmp = decodeSampledBitmapFromByteArray(bytes, targetWidth, targetHeight)
-                    if (bmp != null) {
-                        return@withContext fixOrientationIfNeeded(bytes, bmp)
-                    }
-                }
+            // 3. Load via ContentResolver or File with streaming downsampling (OOM safe)
+            val bmp = decodeSampledBitmapFromSource(context, item.uri, item.filePath, targetWidth, targetHeight)
+            if (bmp != null) {
+                return@withContext fixOrientationFromSource(context, item.uri, item.filePath, bmp)
             }
 
             null
@@ -133,7 +140,13 @@ object ThumbnailLoader {
                         val fNum = exif.getAttributeDouble(ExifInterface.TAG_F_NUMBER, 0.0)
                         meta.fNumber = if (fNum > 0) "f/${fNum}" else ""
 
-                        val iso = exif.getAttributeInt(ExifInterface.TAG_ISO_SPEED_RATINGS, 0)
+                        @Suppress("DEPRECATION")
+                        val iso = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                            val sens = exif.getAttributeInt(ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY, 0)
+                            if (sens > 0) sens else exif.getAttributeInt(ExifInterface.TAG_ISO_SPEED_RATINGS, 0)
+                        } else {
+                            exif.getAttributeInt(ExifInterface.TAG_ISO_SPEED_RATINGS, 0)
+                        }
                         meta.isoSpeed = if (iso > 0) "ISO $iso" else ""
 
                         val focal = exif.getAttributeDouble(ExifInterface.TAG_FOCAL_LENGTH, 0.0)
@@ -153,13 +166,22 @@ object ThumbnailLoader {
     }
 
     private fun openInputStream(context: Context?, uri: Uri, filePath: String): InputStream? {
-        return if (context != null && uri.scheme == "content") {
-            context.contentResolver.openInputStream(uri)
-        } else if (filePath.isNotEmpty()) {
-            File(filePath).inputStream()
-        } else if (uri.path != null) {
-            File(uri.path!!).inputStream()
-        } else null
+        return try {
+            if (context != null && uri.scheme == "content") {
+                context.contentResolver.openInputStream(uri)
+            } else if (filePath.isNotEmpty()) {
+                val file = File(filePath)
+                if (file.exists()) file.inputStream() else null
+            } else {
+                val path = uri.path
+                if (!path.isNullOrEmpty()) {
+                    val file = File(path)
+                    if (file.exists()) file.inputStream() else null
+                } else null
+            }
+        } catch (_: Throwable) {
+            null
+        }
     }
 
     private fun decodeSampledBitmapFromByteArray(data: ByteArray, reqWidth: Int, reqHeight: Int): Bitmap? {
@@ -189,9 +211,59 @@ object ThumbnailLoader {
         return max(1, inSampleSize)
     }
 
-    private fun fixOrientationIfNeeded(jpegBytes: ByteArray, bitmap: Bitmap): Bitmap {
+    private fun decodeSampledBitmapFromSource(context: Context?, uri: Uri, filePath: String, reqWidth: Int, reqHeight: Int): Bitmap? {
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        if (filePath.isNotEmpty()) {
+            val f = File(filePath)
+            if (!f.exists() || f.length() == 0L) return null
+            BitmapFactory.decodeFile(filePath, options)
+            options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight)
+            options.inJustDecodeBounds = false
+            options.inPreferredConfig = Bitmap.Config.ARGB_8888
+            return BitmapFactory.decodeFile(filePath, options)
+        } else if (context != null && uri.scheme == "content") {
+            try {
+                // Use openFileDescriptor to decode bounds and image with a single descriptor (avoids double open)
+                val pfd = context.contentResolver.openFileDescriptor(uri, "r")
+                if (pfd != null) {
+                    pfd.use {
+                        val fd = it.fileDescriptor
+                        BitmapFactory.decodeFileDescriptor(fd, null, options)
+                        options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight)
+                        options.inJustDecodeBounds = false
+                        options.inPreferredConfig = Bitmap.Config.ARGB_8888
+                        return BitmapFactory.decodeFileDescriptor(fd, null, options)
+                    }
+                }
+                // Fallback for providers that do not support FileDescriptor
+                context.contentResolver.openInputStream(uri)?.use { stream ->
+                    BitmapFactory.decodeStream(stream, null, options)
+                }
+                options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight)
+                options.inJustDecodeBounds = false
+                options.inPreferredConfig = Bitmap.Config.ARGB_8888
+                return context.contentResolver.openInputStream(uri)?.use { stream ->
+                    BitmapFactory.decodeStream(stream, null, options)
+                }
+            } catch (_: Throwable) {
+                return null
+            }
+        }
+        return null
+    }
+
+    private fun fixOrientationFromSource(context: Context?, uri: Uri, filePath: String, bitmap: Bitmap): Bitmap {
         try {
-            val exif = ExifInterface(jpegBytes.inputStream())
+            val exif = if (filePath.isNotEmpty()) {
+                val f = File(filePath)
+                if (f.exists()) ExifInterface(filePath) else null
+            } else if (context != null && uri.scheme == "content") {
+                context.contentResolver.openInputStream(uri)?.use { stream ->
+                    ExifInterface(stream)
+                }
+            } else null
+
+            if (exif == null) return bitmap
             val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
             val matrix = Matrix()
             when (orientation) {
@@ -202,8 +274,12 @@ object ThumbnailLoader {
                 ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
                 else -> return bitmap
             }
-            return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-        } catch (e: Throwable) {
+            val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            if (rotated != bitmap) {
+                bitmap.recycle()
+            }
+            return rotated
+        } catch (_: Throwable) {
             return bitmap
         }
     }

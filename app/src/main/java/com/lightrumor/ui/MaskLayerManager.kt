@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -82,20 +84,20 @@ fun MaskLayerManager(
                                 hapticManager?.performDialTick()
                                 activeSubTab = idx
                             }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Text(
                             text = title,
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = FontFamily.SansSerif,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp,
+                            fontSize = 13.sp,
                             color = if (isSel) colors.accentAmber else colors.textSecondary
                         )
                     }
                 }
             }
 
-            // [+ ADD MASK] Button
+            // + マスク追加 Button
             Box(
                 modifier = Modifier
                     .background(colors.accentAmber, RoundedCornerShape(2.dp))
@@ -103,14 +105,14 @@ fun MaskLayerManager(
                         hapticManager?.performDialTick()
                         showAddDialog = true
                     }
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
                 Text(
-                    text = "[+ マスク追加]",
-                    fontFamily = FontFamily.Monospace,
+                    text = "+ マスク追加",
+                    fontFamily = FontFamily.SansSerif,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 10.sp,
-                    color = colors.surface
+                    fontSize = 12.sp,
+                    color = colors.background
                 )
             }
         }
@@ -127,15 +129,15 @@ fun MaskLayerManager(
                         ) {
                             Text(
                                 text = "有効なマスクがありません。[+ マスク追加] で開始",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp,
+                                fontFamily = FontFamily.SansSerif,
+                                fontSize = 13.sp,
                                 color = colors.textSecondary
                             )
                         }
                     } else {
                         LazyColumn(
                             modifier = Modifier.fillMaxSize().padding(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             itemsIndexed(maskLayers) { index, layer ->
                                 val isSelected = (index == selectedLayerIndex)
@@ -182,8 +184,8 @@ fun MaskLayerManager(
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text(
                                 text = "マスクレイヤーを選択してパラメータを調整",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp,
+                                fontFamily = FontFamily.SansSerif,
+                                fontSize = 13.sp,
                                 color = colors.textSecondary
                             )
                         }
@@ -283,33 +285,35 @@ private fun MaskLayerRow(
                 RoundedCornerShape(2.dp)
             )
             .clickable { onSelect() }
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(horizontal = 8.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = if (layer.enabled) "[有効]" else "[無効]",
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
-                fontSize = 9.sp,
-                color = if (layer.enabled) colors.accentAmber else colors.textSecondary,
-                modifier = Modifier.clickable { onToggleVisible() }
+            // Visibility LED Indicator
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(
+                        if (layer.enabled) colors.accentAmber else colors.borderStrong,
+                        RoundedCornerShape(1.dp)
+                    )
+                    .clickable { onToggleVisible() }
             )
 
             Box(
                 modifier = Modifier
                     .background(colors.surface, RoundedCornerShape(2.dp))
                     .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
-                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                    .padding(horizontal = 6.dp, vertical = 3.dp)
             ) {
                 Text(
                     text = layer.type.displayName,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 8.sp,
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = colors.textPrimary
                 )
@@ -317,8 +321,8 @@ private fun MaskLayerRow(
 
             Text(
                 text = layer.name,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 11.sp,
+                fontFamily = FontFamily.SansSerif,
+                fontSize = 13.sp,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                 color = colors.textPrimary,
                 maxLines = 1
@@ -334,14 +338,14 @@ private fun MaskLayerRow(
                     .background(if (layer.inverted) colors.accentAmber else Color.Transparent, RoundedCornerShape(2.dp))
                     .border(1.dp, if (layer.inverted) colors.accentAmber else colors.borderSubtle, RoundedCornerShape(2.dp))
                     .clickable { onToggleInvert() }
-                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                    .padding(horizontal = 6.dp, vertical = 3.dp)
             ) {
                 Text(
                     text = "反転",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 8.sp,
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (layer.inverted) colors.surface else colors.textSecondary
+                    color = if (layer.inverted) colors.background else colors.textSecondary
                 )
             }
 
@@ -358,24 +362,32 @@ private fun MaskLayerRow(
                         }
                         onBooleanOpChange(nextOp)
                     }
-                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                    .padding(horizontal = 6.dp, vertical = 3.dp)
             ) {
                 Text(
                     text = layer.booleanOp.displayName,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 8.sp,
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = colors.accentAmber
                 )
             }
 
-            Text(
-                text = "[削除]",
-                fontFamily = FontFamily.Monospace,
-                fontSize = 9.sp,
-                color = Color(0xFFE53935),
-                modifier = Modifier.clickable { onDelete() }.padding(horizontal = 4.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .background(colors.surface, RoundedCornerShape(2.dp))
+                    .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
+                    .clickable { onDelete() }
+                    .padding(horizontal = 6.dp, vertical = 3.dp)
+            ) {
+                Text(
+                    text = "削除",
+                    fontFamily = FontFamily.SansSerif,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    color = colors.statusReject
+                )
+            }
         }
     }
 }
@@ -396,11 +408,11 @@ private fun LocalAdjustmentsPanel(
     ) {
         Text(
             text = "局所調整: ${layer.name.uppercase()} (${layer.type.displayName})",
-            fontFamily = FontFamily.Monospace,
+            fontFamily = FontFamily.SansSerif,
             fontWeight = FontWeight.Bold,
-            fontSize = 10.sp,
+            fontSize = 14.sp,
             color = colors.accentAmber,
-            modifier = Modifier.padding(bottom = 6.dp)
+            modifier = Modifier.padding(bottom = 8.dp)
         )
 
         Row(
@@ -493,7 +505,7 @@ private fun LocalSliderMini(
     val colors = LightRumorTheme.colors
     Column(
         modifier = Modifier
-            .width(90.dp)
+            .width(100.dp)
             .background(colors.surfaceElevated, RoundedCornerShape(2.dp))
             .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
             .padding(6.dp),
@@ -501,17 +513,18 @@ private fun LocalSliderMini(
     ) {
         Text(
             text = label,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 9.sp,
+            fontFamily = FontFamily.SansSerif,
+            fontWeight = FontWeight.Medium,
+            fontSize = 12.sp,
             color = colors.textSecondary
         )
         Text(
             text = "${if (value > 0) "+" else ""}${"%.2f".format(value)}$unit",
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
-            fontSize = 10.sp,
+            fontSize = 13.sp,
             color = colors.textPrimary,
-            modifier = Modifier.padding(vertical = 2.dp)
+            modifier = Modifier.padding(vertical = 4.dp)
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -520,24 +533,28 @@ private fun LocalSliderMini(
             Text(
                 text = "[-]",
                 fontFamily = FontFamily.Monospace,
-                fontSize = 11.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 color = colors.accentAmber,
-                modifier = Modifier.clickable {
-                    val step = (range.endInclusive - range.start) * 0.05f
-                    onValueChange((value - step).coerceIn(range))
-                }
+                modifier = Modifier
+                    .clickable {
+                        val step = (range.endInclusive - range.start) * 0.05f
+                        onValueChange((value - step).coerceIn(range))
+                    }
+                    .padding(4.dp)
             )
             Text(
                 text = "[+]",
                 fontFamily = FontFamily.Monospace,
-                fontSize = 11.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 color = colors.accentAmber,
-                modifier = Modifier.clickable {
-                    val step = (range.endInclusive - range.start) * 0.05f
-                    onValueChange((value + step).coerceIn(range))
-                }
+                modifier = Modifier
+                    .clickable {
+                        val step = (range.endInclusive - range.start) * 0.05f
+                        onValueChange((value + step).coerceIn(range))
+                    }
+                    .padding(4.dp)
             )
         }
     }
@@ -557,58 +574,68 @@ private fun StylusBrushCanvas(
 
     Column(modifier = Modifier.fillMaxSize().padding(6.dp)) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "筆圧: ${"%.2f".format(currentPressure)}",
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 9.sp,
+                    fontSize = 12.sp,
                     color = colors.accentAmber
                 )
                 Text(
                     text = "半径: ${currentRadius.toInt()}px",
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 9.sp,
+                    fontSize = 12.sp,
                     color = colors.textSecondary
                 )
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .background(if (isEraserMode) Color(0xFFE53935) else Color.Transparent, RoundedCornerShape(2.dp))
-                        .border(1.dp, if (isEraserMode) Color(0xFFE53935) else colors.borderSubtle, RoundedCornerShape(2.dp))
+                        .background(if (isEraserMode) colors.statusReject else Color.Transparent, RoundedCornerShape(2.dp))
+                        .border(1.dp, if (isEraserMode) colors.statusReject else colors.borderSubtle, RoundedCornerShape(2.dp))
                         .clickable { isEraserMode = !isEraserMode }
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = if (isEraserMode) "消しゴム [有効]" else "消しゴム [無効]",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 8.sp,
+                        text = if (isEraserMode) "消しゴム [ON]" else "消しゴム [OFF]",
+                        fontFamily = FontFamily.SansSerif,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (isEraserMode) colors.surface else colors.textSecondary
+                        color = if (isEraserMode) colors.background else colors.textSecondary
                     )
                 }
 
-                Text(
-                    text = "[全消去]",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 9.sp,
-                    color = Color(0xFFE53935),
-                    modifier = Modifier.clickable { onClearStrokes() }
-                )
+                Box(
+                    modifier = Modifier
+                        .background(colors.surface, RoundedCornerShape(2.dp))
+                        .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
+                        .clickable { onClearStrokes() }
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "全消去",
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        color = colors.statusReject
+                    )
+                }
             }
         }
 
+        var canvasSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
         Box(
             modifier = Modifier
                 .weight(1.0f)
                 .fillMaxWidth()
-                .background(Color(0xFF101012), RoundedCornerShape(2.dp))
+                .background(colors.background, RoundedCornerShape(2.dp))
                 .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
+                .onGloballyPositioned { canvasSize = it.size }
         ) {
             Canvas(
                 modifier = Modifier
@@ -619,26 +646,34 @@ private fun StylusBrushCanvas(
                         val action = motionEvent.actionMasked
 
                         if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_MOVE) {
-                            val stroke = BrushStrokePoint(
-                                x = motionEvent.x,
-                                y = motionEvent.y,
-                                pressure = p,
-                                radius = currentRadius,
-                                flow = 0.8f,
-                                isEraser = isEraserMode
-                            )
-                            onStrokeAdded(stroke)
+                            val cw = canvasSize.width.toFloat()
+                            val ch = canvasSize.height.toFloat()
+                            if (cw > 10f && ch > 10f) {
+                                val nx = (motionEvent.x / cw).coerceIn(0f, 1f)
+                                val ny = (motionEvent.y / ch).coerceIn(0f, 1f)
+                                val stroke = BrushStrokePoint(
+                                    x = nx,
+                                    y = ny,
+                                    pressure = p,
+                                    radius = currentRadius,
+                                    flow = 0.8f,
+                                    isEraser = isEraserMode
+                                )
+                                onStrokeAdded(stroke)
+                            }
                         }
                         true
                     }
             ) {
+                val cw = size.width
+                val ch = size.height
                 activeLayer?.brushStrokes?.forEach { pt ->
                     val effRadius = pt.radius * pt.pressure
                     val effAlpha = (pt.flow * pt.pressure).coerceIn(0.1f, 1.0f)
                     drawCircle(
-                        color = if (pt.isEraser) Color(0xFF101012) else Color(0xFFFFB300).copy(alpha = effAlpha),
+                        color = if (pt.isEraser) Color(0xFF101012) else Color(0xFFFF8800).copy(alpha = effAlpha),
                         radius = effRadius,
-                        center = Offset(pt.x, pt.y)
+                        center = Offset(pt.x * cw, pt.y * ch)
                     )
                 }
             }
@@ -662,49 +697,52 @@ private fun AddMaskModal(
     ) {
         Column(
             modifier = Modifier
-                .width(320.dp)
+                .width(340.dp)
                 .background(colors.surfaceElevated, RoundedCornerShape(4.dp))
                 .border(1.dp, colors.accentAmber, RoundedCornerShape(4.dp))
-                .padding(12.dp)
+                .padding(14.dp)
+                .verticalScroll(rememberScrollState())
                 .clickable(enabled = false) {}
         ) {
             Text(
-                text = "マスク種別を選択 (9種類)",
-                fontFamily = FontFamily.Monospace,
+                text = "マスク種別を選択",
+                fontFamily = FontFamily.SansSerif,
                 fontWeight = FontWeight.Bold,
-                fontSize = 11.sp,
+                fontSize = 14.sp,
                 color = colors.accentAmber,
-                modifier = Modifier.padding(bottom = 8.dp)
+                modifier = Modifier.padding(bottom = 10.dp)
             )
 
-            MaskType.values().forEach { maskType ->
+            MaskType.entries.forEach { maskType ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(colors.surface, RoundedCornerShape(2.dp))
                         .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
                         .clickable { onAddMask(maskType) }
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = maskType.displayName,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 10.sp,
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 13.sp,
                         color = colors.textPrimary
                     )
                     Text(
-                        text = "[選択]",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 9.sp,
+                        text = "選択",
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
                         color = colors.accentAmber
                     )
                 }
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(6.dp))
             }
         }
     }
 }
+
 

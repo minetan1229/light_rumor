@@ -96,10 +96,11 @@ bool RawDecoder::openFile(const std::string& filePath) {
     m_rawHeight = m_height;
 
     // Convert 16-bit linear RGB to 32-bit linear float RGBA [0.0, 1.0]
-    m_linearBuffer.resize(static_cast<size_t>(m_width) * m_height);
+    const size_t totalPixels = static_cast<size_t>(m_width) * static_cast<size_t>(m_height);
+    m_linearBuffer.resize(totalPixels);
     const uint16_t* src16 = reinterpret_cast<const uint16_t*>(image->data);
 
-    for (int32_t i = 0; i < m_width * m_height; ++i) {
+    for (size_t i = 0; i < totalPixels; ++i) {
         float r = static_cast<float>(src16[i * 3 + 0]) / 65535.0f;
         float g = static_cast<float>(src16[i * 3 + 1]) / 65535.0f;
         float b = static_cast<float>(src16[i * 3 + 2]) / 65535.0f;
@@ -123,6 +124,59 @@ bool RawDecoder::openBuffer(const uint8_t* data, size_t size) {
     if (ret != LIBRAW_SUCCESS) return false;
     ret = m_impl->rawProcessor.unpack();
     if (ret != LIBRAW_SUCCESS) return false;
+
+    // Extract Exif metadata
+    const auto& idata = m_impl->rawProcessor.imgdata.idata;
+    const auto& other = m_impl->rawProcessor.imgdata.other;
+    const auto& lens = m_impl->rawProcessor.imgdata.lens;
+
+    m_metadata.make = idata.make ? idata.make : "Camera";
+    m_metadata.model = idata.model ? idata.model : "RawModel";
+    m_metadata.lensModel = lens.Lens ? lens.Lens : "Standard Lens";
+    m_metadata.isoSpeed = static_cast<uint32_t>(other.iso_speed);
+    m_metadata.exposureTime = other.shutter > 0 ? other.shutter : 1.0 / 250.0;
+    m_metadata.fNumber = other.aperture > 0 ? other.aperture : 2.8;
+    m_metadata.focalLength = other.focal_len > 0 ? other.focal_len : 50.0;
+
+    // Configure 16-bit linear demosaic without camera tone curve
+    m_impl->rawProcessor.imgdata.params.output_bps = 16;
+    m_impl->rawProcessor.imgdata.params.gamm[0] = 1.0f; // Linear gamma
+    m_impl->rawProcessor.imgdata.params.gamm[1] = 1.0f;
+    m_impl->rawProcessor.imgdata.params.no_auto_bright = 1;
+    m_impl->rawProcessor.imgdata.params.use_camera_wb = 0; // Pure sensor linear
+    m_impl->rawProcessor.imgdata.params.output_color = 0;   // Raw color space
+
+    ret = m_impl->rawProcessor.dcraw_process();
+    if (ret != LIBRAW_SUCCESS) {
+        std::cerr << "[RawDecoder] dcraw_process failed: " << libraw_strerror(ret) << std::endl;
+        return false;
+    }
+
+    libraw_processed_image_t* image = m_impl->rawProcessor.dcraw_make_mem_image(&ret);
+    if (!image || image->type != LIBRAW_IMAGE_BITMAP) {
+        std::cerr << "[RawDecoder] dcraw_make_mem_image failed" << std::endl;
+        if (image) LibRaw::dcraw_clear_mem(image);
+        return false;
+    }
+
+    m_width = image->width;
+    m_height = image->height;
+    m_rawWidth = m_width;
+    m_rawHeight = m_height;
+
+    // Convert 16-bit linear RGB to 32-bit linear float RGBA [0.0, 1.0]
+    const size_t totalPixels = static_cast<size_t>(m_width) * static_cast<size_t>(m_height);
+    m_linearBuffer.resize(totalPixels);
+    const uint16_t* src16 = reinterpret_cast<const uint16_t*>(image->data);
+
+    for (size_t i = 0; i < totalPixels; ++i) {
+        float r = static_cast<float>(src16[i * 3 + 0]) / 65535.0f;
+        float g = static_cast<float>(src16[i * 3 + 1]) / 65535.0f;
+        float b = static_cast<float>(src16[i * 3 + 2]) / 65535.0f;
+        m_linearBuffer[i] = FloatRGBA(r, g, b, 1.0f);
+    }
+
+    LibRaw::dcraw_clear_mem(image);
     m_isLoaded = true;
     return true;
 #else
@@ -155,13 +209,13 @@ bool RawDecoder::extractTile(int32_t tileX, int32_t tileY,
     outPaddedRect.width = paddedW;
     outPaddedRect.height = paddedH;
 
-    outBuffer.resize(static_cast<size_t>(paddedW) * paddedH);
+    outBuffer.resize(static_cast<size_t>(paddedW) * static_cast<size_t>(paddedH));
 
     // Extract rows into outBuffer
     for (int32_t py = 0; py < paddedH; ++py) {
         int32_t srcY = paddedY0 + py;
-        const FloatRGBA* srcRow = &m_linearBuffer[static_cast<size_t>(srcY) * m_width + paddedX0];
-        FloatRGBA* dstRow = &outBuffer[static_cast<size_t>(py) * paddedW];
+        const FloatRGBA* srcRow = &m_linearBuffer[static_cast<size_t>(srcY) * static_cast<size_t>(m_width) + paddedX0];
+        FloatRGBA* dstRow = &outBuffer[static_cast<size_t>(py) * static_cast<size_t>(paddedW)];
         std::memcpy(dstRow, srcRow, sizeof(FloatRGBA) * paddedW);
     }
 
@@ -169,6 +223,7 @@ bool RawDecoder::extractTile(int32_t tileX, int32_t tileY,
 }
 
 bool RawDecoder::generateSyntheticRaw(int32_t width, int32_t height, const ExifMetadata& metadata) {
+    if (width <= 0 || height <= 0) return false;
     close();
 
     m_width = width;
@@ -177,7 +232,7 @@ bool RawDecoder::generateSyntheticRaw(int32_t width, int32_t height, const ExifM
     m_rawHeight = height;
     m_metadata = metadata;
 
-    m_linearBuffer.resize(static_cast<size_t>(width) * height);
+    m_linearBuffer.resize(static_cast<size_t>(width) * static_cast<size_t>(height));
 
     // Generate realistic linear RAW sensor dataset:
     // 1. Top half: Sky gradient with smooth blue gradient (linear values 0.20 to 0.70)
@@ -233,7 +288,7 @@ bool RawDecoder::generateSyntheticRaw(int32_t width, int32_t height, const ExifM
                 pixel.b = patches[patchIdx].b;
 
                 // Add fine border around patches
-                int32_t localX = static_cast<int32_t>(x - (patchIdx * width / 12));
+                int32_t localX = static_cast<int32_t>(x - (static_cast<int64_t>(patchIdx) * width / 12));
                 int32_t patchW = width / 12;
                 if (localX < 4 || localX > patchW - 4 || y - chartTop < 4 || chartBottom - y < 4) {
                     pixel.r = 0.02f;
@@ -270,7 +325,7 @@ bool RawDecoder::generateSyntheticRaw(int32_t width, int32_t height, const ExifM
             pixel.b = std::max(0.0f, pixel.b + nLum + nChromaB);
             pixel.a = 1.0f;
 
-            m_linearBuffer[static_cast<size_t>(y) * width + x] = pixel;
+            m_linearBuffer[static_cast<size_t>(y) * static_cast<size_t>(width) + x] = pixel;
         }
     }
 
@@ -296,6 +351,7 @@ static bool parseJpegInfo(const uint8_t* data, size_t size, int32_t& outW, int32
         if (marker == 0x00 || (marker >= 0xD0 && marker <= 0xD7)) continue;
         if (pos + 2 > size) break;
         uint16_t len = (static_cast<uint16_t>(data[pos]) << 8) | data[pos + 1];
+        if (len < 2 || pos + len > size) break;
         if (marker >= 0xC0 && marker <= 0xC3) { // SOF0, SOF1, SOF2
             if (pos + 7 <= size) {
                 outH = (static_cast<int32_t>(data[pos + 3]) << 8) | data[pos + 4];
@@ -364,10 +420,10 @@ bool RawDecoder::extractEmbeddedThumbnailFromBuffer(const uint8_t* data,
     // 3. Fallback: synthesize a fast, crisp 320x240 preview JPEG
     outWidth = 320;
     outHeight = 240;
-    std::vector<uint8_t> rgb(static_cast<size_t>(outWidth) * outHeight * 3);
+    std::vector<uint8_t> rgb(static_cast<size_t>(outWidth) * static_cast<size_t>(outHeight) * 3);
     for (int32_t y = 0; y < outHeight; ++y) {
         for (int32_t x = 0; x < outWidth; ++x) {
-            size_t idx = (static_cast<size_t>(y) * outWidth + x) * 3;
+            size_t idx = (static_cast<size_t>(y) * static_cast<size_t>(outWidth) + x) * 3;
             rgb[idx + 0] = static_cast<uint8_t>(40 + (x * 120) / outWidth);
             rgb[idx + 1] = static_cast<uint8_t>(60 + (y * 100) / outHeight);
             rgb[idx + 2] = static_cast<uint8_t>(100 + ((outWidth - x) * 80) / outWidth);
@@ -382,11 +438,11 @@ bool RawDecoder::extractEmbeddedThumbnail(const std::string& filePath,
                                          int32_t& outHeight) {
     std::ifstream file(filePath, std::ios::binary | std::ios::ate);
     if (!file.is_open()) return false;
-    size_t size = static_cast<size_t>(file.tellg());
-    if (size == 0) return false;
+    std::streamoff size = file.tellg();
+    if (size <= 0) return false;
 
     // Read up to first 8MB or entire file if smaller
-    size_t readSize = std::min<size_t>(size, 8 * 1024 * 1024);
+    size_t readSize = std::min<size_t>(static_cast<size_t>(size), 8 * 1024 * 1024);
     std::vector<uint8_t> buffer(readSize);
     file.seekg(0);
     file.read(reinterpret_cast<char*>(buffer.data()), readSize);

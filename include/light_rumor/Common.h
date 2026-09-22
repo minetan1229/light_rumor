@@ -392,6 +392,9 @@ struct ExportOptions {
     int32_t tileSize = 2048;   // 2048x2048 tiles to avoid OOM
     int32_t tilePadding = 16;  // Overlap padding to prevent seam artifacts
     bool useGpu = true;        // Vulkan acceleration when available
+    int32_t maxLongEdge = 0;   // 0 = original resolution, e.g. 2048 for SNS
+    bool enableWatermark = false;
+    std::string watermarkText;
 };
 
 // Progress callback: percentage 0.0 to 100.0, status message

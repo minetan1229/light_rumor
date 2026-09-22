@@ -32,6 +32,7 @@ import com.lightrumor.*
 fun DetailDenoiseScreen(
     params: DevelopmentParams,
     onParamsChange: (DevelopmentParams) -> Unit,
+    onParamsChangeFinished: (() -> Unit)? = null,
     hapticManager: HapticManager? = null,
     modifier: Modifier = Modifier
 ) {
@@ -57,8 +58,7 @@ fun DetailDenoiseScreen(
             Text(
                 text = "シャープネス & エッジマスク",
                 style = LightRumorTheme.typography.Header,
-                color = colors.accentAmber,
-                fontSize = 11.sp
+                color = colors.accentAmber
             )
 
             // Visualize Mask Toggle (Alt/Option Key preview equivalent)
@@ -66,27 +66,25 @@ fun DetailDenoiseScreen(
             Box(
                 modifier = Modifier
                     .background(
-                        if (isMaskPreview) colors.accentRed else colors.surfaceElevated,
-                        RoundedCornerShape(2.dp)
+                        if (isMaskPreview) colors.accentRed.copy(alpha = 0.2f) else colors.surfaceElevated,
+                        LightRumorShapes.Panel
                     )
                     .border(
                         1.dp,
-                        if (isMaskPreview) colors.accentRed else colors.borderStrong,
-                        RoundedCornerShape(2.dp)
+                        if (isMaskPreview) colors.accentRed else colors.borderSubtle,
+                        LightRumorShapes.Panel
                     )
                     .clickable {
                         hapticManager?.performDialTick()
                         onParamsChange(params.copy(sharpeningPreviewMask = !isMaskPreview))
                     }
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = if (isMaskPreview) "マスクプレビュー [有効]" else "マスク表示",
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 9.sp,
-                    color = if (isMaskPreview) Color.White else colors.textPrimary
+                    text = if (isMaskPreview) "マスクプレビュー [ON]" else "マスク表示",
+                    style = LightRumorTheme.typography.Button,
+                    color = if (isMaskPreview) colors.accentRed else colors.textSecondary
                 )
             }
         }
@@ -95,6 +93,7 @@ fun DetailDenoiseScreen(
             label = "シャープ適用量",
             value = params.sharpeningAmount,
             onValueChange = { onParamsChange(params.copy(sharpeningAmount = it)) },
+            onValueChangeFinished = onParamsChangeFinished,
             range = 0f..150f,
             defaultValue = 0f,
             unit = "",
@@ -107,6 +106,7 @@ fun DetailDenoiseScreen(
             label = "シャープ半径",
             value = params.sharpeningRadius,
             onValueChange = { onParamsChange(params.copy(sharpeningRadius = it)) },
+            onValueChangeFinished = onParamsChangeFinished,
             range = 0.5f..3.0f,
             defaultValue = 1.0f,
             unit = "px",
@@ -119,6 +119,7 @@ fun DetailDenoiseScreen(
             label = "シャープディテール",
             value = params.sharpeningDetail,
             onValueChange = { onParamsChange(params.copy(sharpeningDetail = it)) },
+            onValueChangeFinished = onParamsChangeFinished,
             range = 0f..100f,
             defaultValue = 25f,
             unit = "",
@@ -131,6 +132,7 @@ fun DetailDenoiseScreen(
             label = "エッジマスク",
             value = params.sharpeningMasking,
             onValueChange = { onParamsChange(params.copy(sharpeningMasking = it)) },
+            onValueChangeFinished = onParamsChangeFinished,
             range = 0f..100f,
             defaultValue = 0f,
             unit = "",
@@ -139,7 +141,7 @@ fun DetailDenoiseScreen(
             hapticManager = hapticManager
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         // ---------------------------------------------------------------------
         // SECTION 2: NOISE REDUCTION (LUMINANCE)
@@ -148,7 +150,6 @@ fun DetailDenoiseScreen(
             text = "輝度ノイズ低減",
             style = LightRumorTheme.typography.Header,
             color = colors.accentAmber,
-            fontSize = 11.sp,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
         )
 
@@ -156,6 +157,7 @@ fun DetailDenoiseScreen(
             label = "輝度 NR",
             value = params.luminanceNR,
             onValueChange = { onParamsChange(params.copy(luminanceNR = it)) },
+            onValueChangeFinished = onParamsChangeFinished,
             range = 0f..100f,
             defaultValue = 0f,
             unit = "",
@@ -168,6 +170,7 @@ fun DetailDenoiseScreen(
             label = "輝度ディテール",
             value = params.luminanceNRDetail,
             onValueChange = { onParamsChange(params.copy(luminanceNRDetail = it)) },
+            onValueChangeFinished = onParamsChangeFinished,
             range = 0f..100f,
             defaultValue = 50f,
             unit = "",
@@ -180,6 +183,7 @@ fun DetailDenoiseScreen(
             label = "輝度コントラスト",
             value = params.luminanceNRContrast,
             onValueChange = { onParamsChange(params.copy(luminanceNRContrast = it)) },
+            onValueChangeFinished = onParamsChangeFinished,
             range = 0f..100f,
             defaultValue = 0f,
             unit = "",
@@ -188,7 +192,7 @@ fun DetailDenoiseScreen(
             hapticManager = hapticManager
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         // ---------------------------------------------------------------------
         // SECTION 3: COLOR NOISE REDUCTION (CHROMA SPECKLE)
@@ -197,7 +201,6 @@ fun DetailDenoiseScreen(
             text = "カラーノイズ低減",
             style = LightRumorTheme.typography.Header,
             color = colors.accentAmber,
-            fontSize = 11.sp,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
         )
 
@@ -205,6 +208,7 @@ fun DetailDenoiseScreen(
             label = "カラー NR",
             value = params.chromaNR,
             onValueChange = { onParamsChange(params.copy(chromaNR = it)) },
+            onValueChangeFinished = onParamsChangeFinished,
             range = 0f..100f,
             defaultValue = 25f,
             unit = "",
@@ -217,6 +221,7 @@ fun DetailDenoiseScreen(
             label = "カラーディテール",
             value = params.chromaNRDetail,
             onValueChange = { onParamsChange(params.copy(chromaNRDetail = it)) },
+            onValueChangeFinished = onParamsChangeFinished,
             range = 0f..100f,
             defaultValue = 50f,
             unit = "",
@@ -229,6 +234,7 @@ fun DetailDenoiseScreen(
             label = "カラースムーズ",
             value = params.chromaNRSmoothness,
             onValueChange = { onParamsChange(params.copy(chromaNRSmoothness = it)) },
+            onValueChangeFinished = onParamsChangeFinished,
             range = 0f..100f,
             defaultValue = 50f,
             unit = "",
@@ -237,7 +243,7 @@ fun DetailDenoiseScreen(
             hapticManager = hapticManager
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         // ---------------------------------------------------------------------
         // SECTION 4: OPTICS & CHROMATIC ABERRATION DEFRINGE
@@ -246,7 +252,6 @@ fun DetailDenoiseScreen(
             text = "光学補正 & フリンジ除去",
             style = LightRumorTheme.typography.Header,
             color = colors.accentAmber,
-            fontSize = 11.sp,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
         )
 
@@ -254,6 +259,7 @@ fun DetailDenoiseScreen(
             label = "パープルフリンジ",
             value = params.lensCorrection.defringePurple,
             onValueChange = { onParamsChange(params.copy(lensCorrection = params.lensCorrection.copy(defringePurple = it))) },
+            onValueChangeFinished = onParamsChangeFinished,
             range = 0f..100f,
             defaultValue = 0f,
             unit = "",
@@ -266,6 +272,7 @@ fun DetailDenoiseScreen(
             label = "グリーンフリンジ",
             value = params.lensCorrection.defringeGreen,
             onValueChange = { onParamsChange(params.copy(lensCorrection = params.lensCorrection.copy(defringeGreen = it))) },
+            onValueChangeFinished = onParamsChangeFinished,
             range = 0f..100f,
             defaultValue = 0f,
             unit = "",
@@ -278,6 +285,7 @@ fun DetailDenoiseScreen(
             label = "周辺減光補正",
             value = params.lensCorrection.vignettingCorrection,
             onValueChange = { onParamsChange(params.copy(lensCorrection = params.lensCorrection.copy(vignettingCorrection = it))) },
+            onValueChangeFinished = onParamsChangeFinished,
             range = 0f..200f,
             defaultValue = 100f,
             unit = "%",

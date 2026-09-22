@@ -205,7 +205,7 @@ double WaveformEngine::computeFromRGBA8(const uint8_t* rgbaPixels,
                     valB = 0;
                 } else {
                     valR = 0;
-                    valG = std::min(valG / 4, 30); // Subtle cinema cyan touch
+                    valG = std::min(valB / 4, 30); // Subtle cinema cyan touch based on Blue intensity
                 }
             }
 

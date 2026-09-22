@@ -41,68 +41,81 @@ fun ColorWaveformView(
     val colors = LightRumorTheme.colors
     var mode by remember { mutableIntStateOf(0) } // 0: RGB Overlay, 1: RGB Parade, 2: Histogram
     var waveformBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var renderTrigger by remember { mutableIntStateOf(0) }
 
-    val bufferCache = remember {
-        object {
-            var pixels = IntArray(0)
-            var bytes = ByteArray(0)
+    // Recompute waveform texture whenever previewBitmap or development params change
+    LaunchedEffect(previewBitmap, params, mode) {
+        if (previewBitmap == null || previewBitmap.isRecycled) return@LaunchedEffect
+
+        withContext(Dispatchers.Default) {
+            try {
+                val w = 512
+                val h = 256
+                val aspect = (previewBitmap.width.toFloat() / previewBitmap.height.coerceAtLeast(1).toFloat()).coerceIn(0.2f, 5.0f)
+                val sampleW = 256
+                val sampleH = (sampleW / aspect).toInt().coerceIn(128, 256)
+                val reqSize = sampleW * sampleH
+
+                val softBmp = Bitmap.createScaledBitmap(previewBitmap, sampleW, sampleH, true)
+                val pixels = IntArray(reqSize)
+                val byteBuf = ByteArray(reqSize * 4)
+
+                softBmp.getPixels(pixels, 0, sampleW, 0, 0, sampleW, sampleH)
+                if (softBmp != previewBitmap) {
+                    softBmp.recycle()
+                }
+
+                // Simulate development exposure / kelvin shifts on preview buffer
+                val expGain = Math.pow(2.0, params.exposureEV.toDouble()).toFloat()
+                val rGain = if (params.kelvin > 5500f) 1.0f + (params.kelvin - 5500f) / 10000f else 1.0f
+                val bGain = if (params.kelvin < 5500f) 1.0f + (5500f - params.kelvin) / 7000f else 1.0f
+
+                for (i in 0 until reqSize) {
+                    val p = pixels[i]
+                    val r = (((p shr 16) and 0xFF) * expGain * rGain).toInt().coerceIn(0, 255)
+                    val g = (((p shr 8) and 0xFF) * expGain).toInt().coerceIn(0, 255)
+                    val b = ((p and 0xFF) * expGain * bGain).toInt().coerceIn(0, 255)
+
+                    byteBuf[i * 4 + 0] = r.toByte()
+                    byteBuf[i * 4 + 1] = g.toByte()
+                    byteBuf[i * 4 + 2] = b.toByte()
+                    byteBuf[i * 4 + 3] = (0xFF).toByte()
+                }
+
+                val wavePixels = LightRumorNativeEngine.computeWaveform(
+                    rgbaBytes = byteBuf,
+                    width = sampleW,
+                    height = sampleH,
+                    mode = mode,
+                    waveW = w,
+                    waveH = h
+                )
+
+                val existing = waveformBitmap
+                val outBmp = if (existing != null && !existing.isRecycled && existing.width == w && existing.height == h && existing.isMutable) {
+                    existing
+                } else {
+                    Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                }
+                outBmp.setPixels(wavePixels, 0, w, 0, 0, w, h)
+                withContext(Dispatchers.Main) {
+                    waveformBitmap = outBmp
+                    renderTrigger++
+                }
+            } catch (e: Throwable) {
+                e.printStackTrace()
+            }
         }
     }
 
-    // Recompute waveform texture whenever previewBitmap or development params change
-    LaunchedEffect(previewBitmap, params.exposureEV, params.kelvin, params.contrast, params.highlights, params.shadows, mode) {
-        if (previewBitmap == null) return@LaunchedEffect
-
-        withContext(Dispatchers.Default) {
-            val w = 512
-            val h = 256
-            val srcW = previewBitmap.width
-            val srcH = previewBitmap.height
-            val reqSize = srcW * srcH
-
-            if (bufferCache.pixels.size < reqSize) {
-                bufferCache.pixels = IntArray(reqSize)
+    DisposableEffect(Unit) {
+        onDispose {
+            waveformBitmap?.let { bmp ->
+                if (!bmp.isRecycled) {
+                    bmp.recycle()
+                }
             }
-            if (bufferCache.bytes.size < reqSize * 4) {
-                bufferCache.bytes = ByteArray(reqSize * 4)
-            }
-            val pixels = bufferCache.pixels
-            val byteBuf = bufferCache.bytes
-
-            // Extract RGBA bytes
-            previewBitmap.getPixels(pixels, 0, srcW, 0, 0, srcW, srcH)
-
-            // Simulate development exposure / kelvin shifts on preview buffer
-            val expGain = Math.pow(2.0, params.exposureEV.toDouble()).toFloat()
-            val rGain = if (params.kelvin > 5500f) 1.0f + (params.kelvin - 5500f) / 10000f else 1.0f
-            val bGain = if (params.kelvin < 5500f) 1.0f + (5500f - params.kelvin) / 7000f else 1.0f
-
-            for (i in 0 until (srcW * srcH)) {
-                val p = pixels[i]
-                var r = (((p shr 16) and 0xFF) * expGain * rGain).toInt().coerceIn(0, 255)
-                var g = (((p shr 8) and 0xFF) * expGain).toInt().coerceIn(0, 255)
-                var b = ((p and 0xFF) * expGain * bGain).toInt().coerceIn(0, 255)
-
-                byteBuf[i * 4 + 0] = r.toByte()
-                byteBuf[i * 4 + 1] = g.toByte()
-                byteBuf[i * 4 + 2] = b.toByte()
-                byteBuf[i * 4 + 3] = (0xFF).toByte()
-            }
-
-            val wavePixels = LightRumorNativeEngine.computeWaveform(
-                rgbaBytes = byteBuf,
-                width = srcW,
-                height = srcH,
-                mode = mode,
-                waveW = w,
-                waveH = h
-            )
-
-            val outBmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-            outBmp.setPixels(wavePixels, 0, w, 0, 0, w, h)
-            val oldBmp = waveformBitmap
-            waveformBitmap = outBmp
-            oldBmp?.recycle()
+            waveformBitmap = null
         }
     }
 
@@ -110,7 +123,7 @@ fun ColorWaveformView(
     if (waveformSize == WaveformSize.MINIMIZED) {
         Box(
             modifier = modifier
-                .size(28.dp)
+                .size(32.dp)
                 .background(colors.surface.copy(alpha = 0.85f), RoundedCornerShape(4.dp))
                 .border(1.dp, colors.borderSubtle, RoundedCornerShape(4.dp))
                 .clickable { onSizeChange(WaveformSize.NORMAL) },
@@ -120,7 +133,7 @@ fun ColorWaveformView(
                 text = "W",
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold,
-                fontSize = 11.sp,
+                fontSize = 13.sp,
                 color = colors.accentAmber
             )
         }
@@ -147,14 +160,14 @@ fun ColorWaveformView(
                         text = "WAVEFORM",
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 10.sp,
+                        fontSize = 13.sp,
                         color = colors.textPrimary
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = if (mode == 0) "RGB OVERLAY" else if (mode == 1) "RGB PARADE" else "HISTOGRAM",
                         fontFamily = FontFamily.Monospace,
-                        fontSize = 9.sp,
+                        fontSize = 11.sp,
                         color = colors.accentAmber
                     )
                 }
@@ -180,38 +193,41 @@ fun ColorWaveformView(
                 }
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             // Main Waveform Canvas / Image with IRE scale
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(if (isExpanded) 180.dp else 88.dp)
+                    .height(if (isExpanded) 200.dp else 100.dp)
                     .background(Color(0xFF0C0A0A), RoundedCornerShape(2.dp))
                     .clickable {
                         onSizeChange(if (isExpanded) WaveformSize.NORMAL else WaveformSize.EXPANDED)
                     }
             ) {
-                waveformBitmap?.let { bmp ->
-                    Image(
-                        bitmap = bmp.asImageBitmap(),
-                        contentDescription = "RGB Waveform",
-                        modifier = Modifier.fillMaxSize()
-                    )
+                val currentBmp = waveformBitmap
+                if (currentBmp != null && !currentBmp.isRecycled) {
+                    key(renderTrigger) {
+                        Image(
+                            bitmap = currentBmp.asImageBitmap(),
+                            contentDescription = "RGB Waveform",
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 }
 
                 // IRE Scale HUD Readouts (Left side)
                 Column(
                     modifier = Modifier
                         .fillMaxHeight()
-                        .padding(start = 4.dp, top = 2.dp, bottom = 2.dp),
+                        .padding(start = 6.dp, top = 3.dp, bottom = 3.dp),
                     verticalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("100%", fontFamily = FontFamily.Monospace, fontSize = 8.sp, color = colors.textTertiary)
-                    Text("70%", fontFamily = FontFamily.Monospace, fontSize = 8.sp, color = colors.accentAmber) // Skin
-                    Text("50%", fontFamily = FontFamily.Monospace, fontSize = 8.sp, color = colors.textTertiary)
-                    Text("18%", fontFamily = FontFamily.Monospace, fontSize = 8.sp, color = colors.textSecondary) // 18% Gray
-                    Text("0%", fontFamily = FontFamily.Monospace, fontSize = 8.sp, color = colors.textTertiary)
+                    Text("100%", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = colors.textTertiary)
+                    Text("70%", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = colors.accentAmber) // Skin
+                    Text("50%", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = colors.textTertiary)
+                    Text("18%", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = colors.textSecondary) // 18% Gray
+                    Text("0%", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = colors.textTertiary)
                 }
             }
         }
@@ -233,14 +249,14 @@ private fun ScopeModeButton(text: String, active: Boolean, onClick: () -> Unit) 
                 RoundedCornerShape(3.dp)
             )
             .clickable { onClick() }
-            .padding(horizontal = 7.dp, vertical = 4.dp),
+            .padding(horizontal = 8.dp, vertical = 5.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = text,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
-            fontSize = 10.sp,
+            fontSize = 12.sp,
             color = if (active) Color.Black else colors.textPrimary
         )
     }

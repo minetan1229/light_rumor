@@ -138,11 +138,14 @@ bool SoftProofingEngine::applySoftProof(const std::vector<FloatRGBA>& inPixels,
             b = blackLift + b * (1.0f - blackLift);
         }
 
-        // 2. Simulate Paper White (scale max white and apply subtle paper substrate warmth)
+        // 2. Simulate Paper White (multiplicative reflectance model without shadow color cast)
         if (config.simulatePaperWhite) {
-            r *= paperWhiteGain;
-            g *= paperWhiteGain;
-            b = b * paperWhiteGain + warmTintB * (1.0f - r); // warm paper base
+            float paperR = paperWhiteGain;
+            float paperG = paperWhiteGain - warmTintB * 0.2f;
+            float paperB = std::max(0.0f, paperWhiteGain - warmTintB * 0.5f);
+            r = r * paperR;
+            g = g * paperG;
+            b = b * paperB;
         }
 
         outProofPixels[idx] = FloatRGBA(

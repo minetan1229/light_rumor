@@ -66,8 +66,8 @@ fun PrecisionDial(
         Column(
             modifier = Modifier
                 .clickable(enabled = false) {} // block clicks from dismissing
-                .background(colors.surfaceElevated, RoundedCornerShape(8.dp))
-                .border(1.dp, colors.borderStrong, RoundedCornerShape(8.dp))
+                .background(colors.surfaceElevated, LightRumorShapes.Panel)
+                .border(1.dp, colors.borderStrong, LightRumorShapes.Panel)
                 .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -78,20 +78,18 @@ fun PrecisionDial(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "FINE DETENT DIAL: $label",
+                    text = "微調整ダイヤル: $label",
                     style = LightRumorTheme.typography.Header,
                     color = colors.textPrimary,
                     fontSize = 12.sp
                 )
                 Text(
-                    text = "DONE",
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
+                    text = "完了",
+                    style = LightRumorTheme.typography.Button,
                     color = colors.accentAmber,
                     modifier = Modifier
                         .clickable { onDismiss() }
-                        .padding(4.dp)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
                 )
             }
 
@@ -104,21 +102,29 @@ fun PrecisionDial(
                     .pointerInput(Unit) {
                         detectDragGestures(
                             onDragStart = { offset ->
-                                val center = Offset(110.dp.toPx(), 110.dp.toPx())
-                                lastAngle = atan2(offset.y - center.y, offset.x - center.x)
+                                val center = Offset(size.width / 2f, size.height / 2f)
+                                val dx = offset.x - center.x
+                                val dy = offset.y - center.y
+                                if (dx * dx + dy * dy >= 400f) {
+                                    lastAngle = atan2(dy, dx)
+                                }
                                 fractionalAngle = 0f
                             },
                             onDrag = { change, _ ->
                                 change.consume()
-                                val center = Offset(110.dp.toPx(), 110.dp.toPx())
-                                val currentAngle = atan2(change.position.y - center.y, change.position.x - center.x)
-                                var deltaAngle = currentAngle - lastAngle
-                                if (deltaAngle > PI) deltaAngle -= (2 * PI).toFloat()
-                                if (deltaAngle < -PI) deltaAngle += (2 * PI).toFloat()
-                                lastAngle = currentAngle
+                                val center = Offset(size.width / 2f, size.height / 2f)
+                                val dx = change.position.x - center.x
+                                val dy = change.position.y - center.y
+                                if (dx * dx + dy * dy >= 400f) {
+                                    val currentAngle = atan2(dy, dx)
+                                    var deltaAngle = currentAngle - lastAngle
+                                    if (deltaAngle > PI) deltaAngle -= (2 * PI).toFloat()
+                                    if (deltaAngle < -PI) deltaAngle += (2 * PI).toFloat()
+                                    lastAngle = currentAngle
 
-                                accumulatedAngle += deltaAngle
-                                fractionalAngle += deltaAngle
+                                    accumulatedAngle += deltaAngle
+                                    fractionalAngle += deltaAngle
+                                }
 
                                 val radPerStep = 0.035f
                                 val steps = (fractionalAngle / radPerStep).toInt()
@@ -178,7 +184,7 @@ fun PrecisionDial(
                         start = needleTop,
                         end = needleBottom,
                         strokeWidth = 3.dp.toPx(),
-                        cap = StrokeCap.Round
+                        cap = StrokeCap.Square
                     )
                 }
 
@@ -187,22 +193,19 @@ fun PrecisionDial(
                     val sign = if (value > 0f) "+" else ""
                     Text(
                         text = String.format("%s%.2f", sign, animatedValue),
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
+                        style = LightRumorTheme.typography.ValueReadout,
                         fontSize = 24.sp,
                         color = colors.textPrimary
                     )
                     Text(
                         text = unit.uppercase(),
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
+                        style = LightRumorTheme.typography.Badge,
                         color = colors.accentAmber
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "±0.01 STEP",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 9.sp,
+                        text = "±0.01 微調整",
+                        style = LightRumorTheme.typography.MicroIndex,
                         color = colors.textSecondary
                     )
                 }
@@ -212,7 +215,7 @@ fun PrecisionDial(
 
             // Quick Micro Steppers (+/- 0.01 and +/- 0.10)
             Row(
-                modifier = Modifier.width(220.dp),
+                modifier = Modifier.width(240.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 FineStepButton("-0.10", onClick = {
@@ -245,17 +248,16 @@ private fun FineStepButton(text: String, onClick: () -> Unit) {
     val colors = LightRumorTheme.colors
     Box(
         modifier = Modifier
-            .background(colors.surfacePressed, RoundedCornerShape(3.dp))
-            .border(1.dp, colors.borderSubtle, RoundedCornerShape(3.dp))
+            .background(colors.surfacePressed, LightRumorShapes.Button)
+            .border(1.dp, colors.borderSubtle, LightRumorShapes.Button)
             .clickable { onClick() }
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = text,
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Bold,
-            fontSize = 10.sp,
+            style = LightRumorTheme.typography.ValueReadout,
+            fontSize = 12.sp,
             color = colors.textPrimary
         )
     }

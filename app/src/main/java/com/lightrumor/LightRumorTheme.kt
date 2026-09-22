@@ -29,6 +29,8 @@ data class LightRumorColors(
     val accentAmber: Color,   // Sony Cine Amber (#FF7900)
     val accentRed: Color,     // Canon Cinema EOS Red (#E53935)
     val accentCyan: Color,    // Minolta Tech Cyan (#00A3E0)
+    val statusPick: Color = Color(0xFF388E3C),    // Professional Green pick indicator
+    val statusReject: Color = Color(0xFFE53935),  // Professional Red reject indicator
     val sliderTrack: Color,
     val sliderFill: Color,
     val sliderZeroTick: Color,
@@ -37,42 +39,46 @@ data class LightRumorColors(
 
 val ObsidianBlackColors = LightRumorColors(
     isDark = true,
-    background = Color(0xFF0A0A0C),       // Sony/Sigma matte obsidian black
-    surface = Color(0xFF121316),          // Knurled instrument panel
-    surfaceElevated = Color(0xFF1B1D22),  // Elevated thumb dial housing
-    surfacePressed = Color(0xFF24262C),
-    borderSubtle = Color(0xFF2D2F33),     // Hairline titanium border
-    borderStrong = Color(0xFF48484A),     // Structural frame divider
-    textPrimary = Color(0xFFF5F5F7),      // Crisp high-contrast readout
-    textSecondary = Color(0xFF8E8E93),    // Technical annotation
-    textTertiary = Color(0xFF55565B),     // Unit label
-    accentAmber = Color(0xFFFF7900),      // Sony Cine Amber active marker
-    accentRed = Color(0xFFE53935),        // Canon Cinema Red indicator
-    accentCyan = Color(0xFF00A3E0),       // Minolta Tech Cyan reticle
-    sliderTrack = Color(0xFF202227),
-    sliderFill = Color(0xFFFF7900),
-    sliderZeroTick = Color(0xFFE5E5EA),
-    graticule = Color(0xFF2D2F33)
+    background = Color(0xFF0B0B0D),       // Neutral obsidian studio black
+    surface = Color(0xFF131417),          // Knurled instrument panel chassis
+    surfaceElevated = Color(0xFF1C1D22),  // Elevated dial/fader housing
+    surfacePressed = Color(0xFF26282F),
+    borderSubtle = Color(0xFF2B2D35),     // Hairline titanium border
+    borderStrong = Color(0xFF424550),     // Structural frame divider
+    textPrimary = Color(0xFFF2F3F5),      // Crisp high-contrast readout
+    textSecondary = Color(0xFF989AA2),    // High-visibility technical annotation
+    textTertiary = Color(0xFF686A73),     // Unit label
+    accentAmber = Color(0xFFFF8800),      // Sony Cine Amber / Studio Gold active marker
+    accentRed = Color(0xFFE53935),        // Canon Cinema Red indicator / Reject flag
+    accentCyan = Color(0xFF00B4F0),       // Minolta Tech Cyan reticle
+    statusPick = Color(0xFF388E3C),
+    statusReject = Color(0xFFE53935),
+    sliderTrack = Color(0xFF202229),
+    sliderFill = Color(0xFFFF8800),
+    sliderZeroTick = Color(0xFFF2F3F5),
+    graticule = Color(0xFF2B2D35)
 )
 
 val TechnicalArcticColors = LightRumorColors(
     isDark = false,
-    background = Color(0xFFF4F4F6),       // High-contrast outdoor snow/desert white
-    surface = Color(0xFFEAEAEF),          // Technical instrument plate
-    surfaceElevated = Color(0xFFDFDFE6),  // Raised dial panel
-    surfacePressed = Color(0xFFD4D4DC),
-    borderSubtle = Color(0xFFC7C7CC),     // Precision ground aluminum edge
-    borderStrong = Color(0xFF8E8E93),
-    textPrimary = Color(0xFF1C1D21),      // Heavy black legend
-    textSecondary = Color(0xFF55565B),    // Slate technical text
-    textTertiary = Color(0xFF8E8E93),
+    background = Color(0xFFF0F1F4),       // High-contrast outdoor snow/desert white
+    surface = Color(0xFFE4E5EA),          // Technical instrument plate
+    surfaceElevated = Color(0xFFD8D9E0),  // Raised dial panel
+    surfacePressed = Color(0xFFCBCDD6),
+    borderSubtle = Color(0xFFB4B6C2),     // Precision ground aluminum edge
+    borderStrong = Color(0xFF767884),
+    textPrimary = Color(0xFF111215),      // Heavy black legend
+    textSecondary = Color(0xFF484A54),    // Slate technical text
+    textTertiary = Color(0xFF727480),
     accentAmber = Color(0xFFE66700),      // Outdoor high-visibility amber
     accentRed = Color(0xFFD32F2F),        // Tally red
-    accentCyan = Color(0xFF0082B4),       // Technical cyan
-    sliderTrack = Color(0xFFD8D8DE),
+    accentCyan = Color(0xFF007AA8),       // Technical cyan
+    statusPick = Color(0xFF2E7D32),
+    statusReject = Color(0xFFD32F2F),
+    sliderTrack = Color(0xFFC8CAD4),
     sliderFill = Color(0xFFE66700),
-    sliderZeroTick = Color(0xFF1C1D21),
-    graticule = Color(0xFFC7C7CC)
+    sliderZeroTick = Color(0xFF111215),
+    graticule = Color(0xFFB4B6C2)
 )
 
 /**
@@ -88,34 +94,50 @@ object LightRumorShapes {
 
 /**
  * Optical Instrument Typography:
+ * High legibility across all screen densities.
  * Monospace figures for all numeric readouts (+0.75 EV, 5600 K, 1/250s, f/2.8).
+ * Crisp SansSerif with high tracking for labels and UI headers.
  */
 object LightRumorTypography {
+    val TitleLarge = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Bold,
+        fontSize = 17.sp,
+        letterSpacing = 1.0.sp
+    )
+
     val Header = TextStyle(
-        fontFamily = FontFamily.Monospace,
+        fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Bold,
         fontSize = 14.sp,
-        letterSpacing = 1.0.sp
+        letterSpacing = 0.8.sp
+    )
+
+    val TitleMedium = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Bold,
+        fontSize = 14.sp,
+        letterSpacing = 0.5.sp
     )
 
     val Label = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Bold,
         fontSize = 12.sp,
-        letterSpacing = 0.8.sp
+        letterSpacing = 0.6.sp
+    )
+
+    val Body = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Normal,
+        fontSize = 13.sp,
+        letterSpacing = 0.2.sp
     )
 
     val ValueReadout = TextStyle(
         fontFamily = FontFamily.Monospace,
         fontWeight = FontWeight.Bold,
-        fontSize = 14.sp,
-        letterSpacing = 0.5.sp
-    )
-
-    val MicroIndex = TextStyle(
-        fontFamily = FontFamily.Monospace,
-        fontWeight = FontWeight.Medium,
-        fontSize = 10.sp,
+        fontSize = 13.sp,
         letterSpacing = 0.4.sp
     )
 
@@ -123,20 +145,51 @@ object LightRumorTypography {
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Bold,
         fontSize = 12.sp,
-        letterSpacing = 0.8.sp
+        letterSpacing = 0.6.sp
+    )
+
+    val Button = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Bold,
+        fontSize = 12.sp,
+        letterSpacing = 0.4.sp
+    )
+
+    val Caption = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Medium,
+        fontSize = 11.sp,
+        letterSpacing = 0.2.sp
+    )
+
+    val Badge = TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.Bold,
+        fontSize = 10.sp,
+        letterSpacing = 0.4.sp
+    )
+
+    val MicroIndex = TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.Medium,
+        fontSize = 10.sp,
+        letterSpacing = 0.2.sp
     )
 }
 
 val LocalLightRumorColors = compositionLocalOf { ObsidianBlackColors }
+val LocalUiFontScale = compositionLocalOf { 1.0f }
 
 @Composable
 fun LightRumorTheme(
     isDark: Boolean = true,
+    fontScale: Float = 1.0f,
     content: @Composable () -> Unit
 ) {
     val colors = if (isDark) ObsidianBlackColors else TechnicalArcticColors
     CompositionLocalProvider(
         LocalLightRumorColors provides colors,
+        LocalUiFontScale provides fontScale,
         content = content
     )
 }
@@ -147,4 +200,7 @@ object LightRumorTheme {
         get() = LocalLightRumorColors.current
     val shapes = LightRumorShapes
     val typography = LightRumorTypography
+    val fontScale: Float
+        @Composable
+        get() = LocalUiFontScale.current
 }

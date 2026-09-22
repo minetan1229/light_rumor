@@ -91,7 +91,7 @@ bool testLRUCacheAndPrefetch() {
     std::list<int> lruOrder;
     std::unordered_map<int, std::list<int>::iterator> cacheMap;
 
-    auto access = [&](int id, bool isPrefetch) -> bool {
+    auto access = [&](int id, [[maybe_unused]] bool isPrefetch) -> bool {
         auto it = cacheMap.find(id);
         if (it != cacheMap.end()) {
             lruOrder.erase(it->second);

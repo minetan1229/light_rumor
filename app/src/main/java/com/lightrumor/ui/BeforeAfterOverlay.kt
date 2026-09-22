@@ -53,6 +53,23 @@ enum class MaskDisplayMode(val label: String) {
     DUAL_COLOR("両方色分け")  // 適用＝赤、欠けた部＝シアンで2色同時表示
 }
 
+fun calculateFittedRect(containerW: Float, containerH: Float, imgW: Float, imgH: Float): Rect {
+    if (containerW <= 0f || containerH <= 0f || imgW <= 0f || imgH <= 0f) {
+        return Rect(0f, 0f, containerW, containerH)
+    }
+    val containerAspect = containerW / containerH
+    val imgAspect = imgW / imgH
+    return if (imgAspect > containerAspect) {
+        val fh = containerW / imgAspect
+        val top = (containerH - fh) / 2f
+        Rect(0f, top, containerW, top + fh)
+    } else {
+        val fw = containerH * imgAspect
+        val left = (containerW - fw) / 2f
+        Rect(left, 0f, left + fw, containerH)
+    }
+}
+
 fun buildPhotoDevelopColorMatrix(params: DevelopmentParams): ColorMatrix {
     val evScale = Math.pow(2.0, params.exposureEV.toDouble()).toFloat().coerceIn(0.05f, 20.0f)
     val cFactor = (params.contrast / 100f).coerceIn(-0.95f, 3.0f)
@@ -252,10 +269,12 @@ fun BeforeAfterOverlay(
                             color = colors.borderStrong,
                             start = Offset(dividerX, 0f),
                             end = Offset(dividerX, size.height),
-                            strokeWidth = 2.dp.toPx()
+                            strokeWidth = 1.5.dp.toPx()
                         )
-                        drawCircle(color = colors.accentAmber, radius = 8.dp.toPx(), center = Offset(dividerX, size.height / 2f))
-                        drawCircle(color = Color.Black, radius = 3.dp.toPx(), center = Offset(dividerX, size.height / 2f))
+                        // Precision Reticle Handle
+                        drawCircle(color = colors.surface, radius = 9.dp.toPx(), center = Offset(dividerX, size.height / 2f))
+                        drawCircle(color = colors.accentAmber, radius = 9.dp.toPx(), center = Offset(dividerX, size.height / 2f), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5.dp.toPx()))
+                        drawCircle(color = colors.accentAmber, radius = 2.dp.toPx(), center = Offset(dividerX, size.height / 2f))
                     }
 
                     Row(
@@ -264,8 +283,8 @@ fun BeforeAfterOverlay(
                             .padding(12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("補正前 (ORIGINAL)", fontFamily = FontFamily.Monospace, fontSize = 9.sp, color = colors.textSecondary)
-                        Text("補正後 (DEVELOPED)", fontFamily = FontFamily.Monospace, fontSize = 9.sp, color = colors.accentAmber)
+                        Text("補正前 (ORIGINAL)", fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = colors.textSecondary)
+                        Text("補正後 (DEVELOPED)", fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = colors.accentAmber)
                     }
                 }
             }
@@ -316,10 +335,12 @@ fun BeforeAfterOverlay(
                             color = colors.borderStrong,
                             start = Offset(0f, dividerY),
                             end = Offset(size.width, dividerY),
-                            strokeWidth = 2.dp.toPx()
+                            strokeWidth = 1.5.dp.toPx()
                         )
-                        drawCircle(color = colors.accentAmber, radius = 8.dp.toPx(), center = Offset(size.width / 2f, dividerY))
-                        drawCircle(color = Color.Black, radius = 3.dp.toPx(), center = Offset(size.width / 2f, dividerY))
+                        // Precision Reticle Handle
+                        drawCircle(color = colors.surface, radius = 9.dp.toPx(), center = Offset(size.width / 2f, dividerY))
+                        drawCircle(color = colors.accentAmber, radius = 9.dp.toPx(), center = Offset(size.width / 2f, dividerY), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5.dp.toPx()))
+                        drawCircle(color = colors.accentAmber, radius = 2.dp.toPx(), center = Offset(size.width / 2f, dividerY))
                     }
                 }
             }
@@ -343,8 +364,9 @@ fun BeforeAfterOverlay(
                         }
                         Text(
                             text = "補正前",
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp,
+                            fontFamily = FontFamily.SansSerif,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
                             color = colors.textSecondary,
                             modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
                         )
@@ -367,8 +389,9 @@ fun BeforeAfterOverlay(
                         }
                         Text(
                             text = "補正後",
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp,
+                            fontFamily = FontFamily.SansSerif,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
                             color = colors.accentAmber,
                             modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
                         )
@@ -388,17 +411,17 @@ fun BeforeAfterOverlay(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = 10.dp)
-                    .background(Color(0xEE141414), RoundedCornerShape(4.dp))
-                    .border(1.dp, colors.accentAmber, RoundedCornerShape(4.dp))
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                    .background(colors.surfaceElevated.copy(alpha = 0.92f), RoundedCornerShape(3.dp))
+                    .border(1.dp, colors.accentAmber, RoundedCornerShape(3.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = "マスクを追加:",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    color = Color.White,
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 12.sp,
+                    color = colors.textPrimary,
                     fontWeight = FontWeight.Bold
                 )
                 Box(
@@ -415,13 +438,13 @@ fun BeforeAfterOverlay(
                             )
                             onMaskLayersChange?.invoke(listOf(newLayer))
                         }
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
-                    Text("+ 円形マスク", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.Black, fontFamily = FontFamily.Monospace)
+                    Text("+ 円形マスク", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = colors.background, fontFamily = FontFamily.SansSerif)
                 }
                 Box(
                     modifier = Modifier
-                        .background(colors.surfaceElevated, RoundedCornerShape(2.dp))
+                        .background(colors.surface, RoundedCornerShape(2.dp))
                         .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
                         .clickable {
                             val newLayer = MaskLayerState(
@@ -434,13 +457,13 @@ fun BeforeAfterOverlay(
                             )
                             onMaskLayersChange?.invoke(listOf(newLayer))
                         }
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
-                    Text("+ 線形グラデ", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White, fontFamily = FontFamily.Monospace)
+                    Text("+ 線形グラデ", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary, fontFamily = FontFamily.SansSerif)
                 }
                 Box(
                     modifier = Modifier
-                        .background(colors.surfaceElevated, RoundedCornerShape(2.dp))
+                        .background(colors.surface, RoundedCornerShape(2.dp))
                         .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
                         .clickable {
                             val newLayer = MaskLayerState(
@@ -449,9 +472,9 @@ fun BeforeAfterOverlay(
                             )
                             onMaskLayersChange?.invoke(listOf(newLayer))
                         }
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
-                    Text("+ ブラシ", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White, fontFamily = FontFamily.Monospace)
+                    Text("+ ブラシ", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary, fontFamily = FontFamily.SansSerif)
                 }
             }
         }
@@ -467,11 +490,16 @@ fun BeforeAfterOverlay(
                         var draggingTarget = 0 // 0: None, 1: Center/Start, 2: Radius/End
                         detectDragGestures(
                             onDragStart = { offset ->
-                                val w = size.width.toFloat()
-                                val h = size.height.toFloat()
-                                if (w <= 0f || h <= 0f) return@detectDragGestures
-                                val nx = offset.x / w
-                                val ny = offset.y / h
+                                val totalW = size.width.toFloat()
+                                val totalH = size.height.toFloat()
+                                if (totalW <= 0f || totalH <= 0f) return@detectDragGestures
+                                val imgW = (activeBitmap?.width ?: 1).toFloat()
+                                val imgH = (activeBitmap?.height ?: 1).toFloat()
+                                val fitted = calculateFittedRect(totalW, totalH, imgW, imgH)
+                                if (fitted.width <= 0f || fitted.height <= 0f) return@detectDragGestures
+
+                                val nx = ((offset.x - fitted.left) / fitted.width).coerceIn(0f, 1f)
+                                val ny = ((offset.y - fitted.top) / fitted.height).coerceIn(0f, 1f)
                                 
                                 val layer = currentActiveLayer ?: return@detectDragGestures
 
@@ -487,10 +515,10 @@ fun BeforeAfterOverlay(
                                         draggingTarget = if (distStart < distEnd) 1 else 2
                                     }
                                     MaskType.BRUSH -> {
-                                        val updatedList = layer.brushStrokes.toMutableList()
-                                        updatedList.add(BrushStrokePoint(x = nx, y = ny, radius = layer.brushRadius))
-                                        layer.brushStrokes = updatedList
-                                        localMaskLayers = localMaskLayers.toList()
+                                        val updatedList = layer.brushStrokes + BrushStrokePoint(x = nx, y = ny, radius = layer.brushRadius)
+                                        localMaskLayers = localMaskLayers.mapIndexed { i, l ->
+                                            if (i == selectedMaskIndex) l.copy(brushStrokes = updatedList) else l
+                                        }
                                     }
                                     else -> {}
                                 }
@@ -503,42 +531,61 @@ fun BeforeAfterOverlay(
                             },
                             onDrag = { change, dragAmount ->
                                 change.consume()
-                                val w = size.width.toFloat()
-                                val h = size.height.toFloat()
-                                if (w <= 0f || h <= 0f) return@detectDragGestures
-                                val dnx = dragAmount.x / w
-                                val dny = dragAmount.y / h
+                                val totalW = size.width.toFloat()
+                                val totalH = size.height.toFloat()
+                                if (totalW <= 0f || totalH <= 0f) return@detectDragGestures
+                                val imgW = (activeBitmap?.width ?: 1).toFloat()
+                                val imgH = (activeBitmap?.height ?: 1).toFloat()
+                                val fitted = calculateFittedRect(totalW, totalH, imgW, imgH)
+                                if (fitted.width <= 0f || fitted.height <= 0f) return@detectDragGestures
+
+                                val dnx = dragAmount.x / fitted.width
+                                val dny = dragAmount.y / fitted.height
                                 
                                 val layer = currentActiveLayer ?: return@detectDragGestures
 
                                 when (layer.type) {
                                     MaskType.RADIAL_GRADIENT -> {
-                                        if (draggingTarget == 1) {
-                                            layer.radialCenterX = (layer.radialCenterX + dnx).coerceIn(0.02f, 0.98f)
-                                            layer.radialCenterY = (layer.radialCenterY + dny).coerceIn(0.02f, 0.98f)
-                                        } else if (draggingTarget == 2) {
-                                            layer.radialRadiusX = (layer.radialRadiusX + dnx).coerceIn(0.05f, 0.85f)
-                                            layer.radialRadiusY = (layer.radialRadiusY + dny).coerceIn(0.05f, 0.85f)
+                                        localMaskLayers = localMaskLayers.mapIndexed { i, l ->
+                                            if (i == selectedMaskIndex) {
+                                                if (draggingTarget == 1) {
+                                                    l.copy(
+                                                        radialCenterX = (l.radialCenterX + dnx).coerceIn(0.02f, 0.98f),
+                                                        radialCenterY = (l.radialCenterY + dny).coerceIn(0.02f, 0.98f)
+                                                    )
+                                                } else if (draggingTarget == 2) {
+                                                    l.copy(
+                                                        radialRadiusX = (l.radialRadiusX + dnx).coerceIn(0.05f, 0.85f),
+                                                        radialRadiusY = (l.radialRadiusY + dny).coerceIn(0.05f, 0.85f)
+                                                    )
+                                                } else l
+                                            } else l
                                         }
-                                        localMaskLayers = localMaskLayers.toList()
                                     }
                                     MaskType.LINEAR_GRADIENT -> {
-                                        if (draggingTarget == 1) {
-                                            layer.linearStartX = (layer.linearStartX + dnx).coerceIn(0.02f, 0.98f)
-                                            layer.linearStartY = (layer.linearStartY + dny).coerceIn(0.02f, 0.98f)
-                                        } else {
-                                            layer.linearEndX = (layer.linearEndX + dnx).coerceIn(0.02f, 0.98f)
-                                            layer.linearEndY = (layer.linearEndY + dny).coerceIn(0.02f, 0.98f)
+                                        localMaskLayers = localMaskLayers.mapIndexed { i, l ->
+                                            if (i == selectedMaskIndex) {
+                                                if (draggingTarget == 1) {
+                                                    l.copy(
+                                                        linearStartX = (l.linearStartX + dnx).coerceIn(0.02f, 0.98f),
+                                                        linearStartY = (l.linearStartY + dny).coerceIn(0.02f, 0.98f)
+                                                    )
+                                                } else {
+                                                    l.copy(
+                                                        linearEndX = (l.linearEndX + dnx).coerceIn(0.02f, 0.98f),
+                                                        linearEndY = (l.linearEndY + dny).coerceIn(0.02f, 0.98f)
+                                                    )
+                                                }
+                                            } else l
                                         }
-                                        localMaskLayers = localMaskLayers.toList()
                                     }
                                     MaskType.BRUSH -> {
-                                        val nx = (change.position.x / w).coerceIn(0f, 1f)
-                                        val ny = (change.position.y / h).coerceIn(0f, 1f)
-                                        val updatedList = layer.brushStrokes.toMutableList()
-                                        updatedList.add(BrushStrokePoint(x = nx, y = ny, radius = layer.brushRadius))
-                                        layer.brushStrokes = updatedList
-                                        localMaskLayers = localMaskLayers.toList()
+                                        val nx = ((change.position.x - fitted.left) / fitted.width).coerceIn(0f, 1f)
+                                        val ny = ((change.position.y - fitted.top) / fitted.height).coerceIn(0f, 1f)
+                                        val updatedList = layer.brushStrokes + BrushStrokePoint(x = nx, y = ny, radius = layer.brushRadius)
+                                        localMaskLayers = localMaskLayers.mapIndexed { i, l ->
+                                            if (i == selectedMaskIndex) l.copy(brushStrokes = updatedList) else l
+                                        }
                                     }
                                     else -> {}
                                 }
@@ -547,24 +594,38 @@ fun BeforeAfterOverlay(
                     }
             ) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
-                    val w = size.width
-                    val h = size.height
+                    val imgW = (activeBitmap?.width ?: 1).toFloat()
+                    val imgH = (activeBitmap?.height ?: 1).toFloat()
+                    val fitted = calculateFittedRect(size.width, size.height, imgW, imgH)
+                    val w = fitted.width
+                    val h = fitted.height
+                    val ox = fitted.left
+                    val oy = fitted.top
+
                     val colApplied = overlayColor.color
                     val colExcluded = Color(0x9900B0FF) // 欠けたところ（非対象エリア）は鮮明なシアン/ブルー
 
                     // 両方色分けモードの場合、まず全面を「欠けたところの色」で塗る
                     if (maskDisplayMode == MaskDisplayMode.DUAL_COLOR) {
-                        drawRect(color = colExcluded.copy(alpha = 0.28f))
+                        drawRect(
+                            color = colExcluded.copy(alpha = 0.28f),
+                            topLeft = Offset(ox, oy),
+                            size = Size(w, h)
+                        )
                     } else if (maskDisplayMode == MaskDisplayMode.EXCLUDED) {
-                        drawRect(color = colApplied.copy(alpha = 0.35f))
+                        drawRect(
+                            color = colApplied.copy(alpha = 0.35f),
+                            topLeft = Offset(ox, oy),
+                            size = Size(w, h)
+                        )
                     }
                     
                     val layer = currentActiveLayer ?: return@Canvas
 
                     when (layer.type) {
                         MaskType.RADIAL_GRADIENT -> {
-                            val cx = layer.radialCenterX * w
-                            val cy = layer.radialCenterY * h
+                            val cx = ox + layer.radialCenterX * w
+                            val cy = oy + layer.radialCenterY * h
                             val rx = layer.radialRadiusX * w
                             val ry = layer.radialRadiusY * h
 
@@ -596,10 +657,10 @@ fun BeforeAfterOverlay(
                         }
 
                         MaskType.LINEAR_GRADIENT -> {
-                            val sx = layer.linearStartX * w
-                            val sy = layer.linearStartY * h
-                            val ex = layer.linearEndX * w
-                            val ey = layer.linearEndY * h
+                            val sx = ox + layer.linearStartX * w
+                            val sy = oy + layer.linearStartY * h
+                            val ex = ox + layer.linearEndX * w
+                            val ey = oy + layer.linearEndY * h
 
                             drawLine(
                                 color = colApplied,
@@ -621,7 +682,7 @@ fun BeforeAfterOverlay(
                                 drawCircle(
                                     color = colApplied.copy(alpha = 0.50f),
                                     radius = pt.radius,
-                                    center = Offset(pt.x * w, pt.y * h)
+                                    center = Offset(ox + pt.x * w, oy + pt.y * h)
                                 )
                             }
                         }
@@ -638,9 +699,9 @@ fun BeforeAfterOverlay(
                     .padding(10.dp)
                     .background(colors.surface.copy(alpha = 0.90f), RoundedCornerShape(3.dp))
                     .border(1.dp, colors.borderSubtle, RoundedCornerShape(3.dp))
-                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 // 表示モード切替: 適用エリア / 欠けたところ / 両方色分け
                 Box(
@@ -654,22 +715,22 @@ fun BeforeAfterOverlay(
                                 MaskDisplayMode.DUAL_COLOR -> MaskDisplayMode.APPLIED
                             }
                         }
-                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                        .padding(horizontal = 8.dp, vertical = 5.dp)
                 ) {
                     Text(
                         text = "表示: ${maskDisplayMode.label}",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 9.sp,
+                        fontFamily = FontFamily.SansSerif,
+                        fontSize = 12.sp,
                         color = colors.accentAmber,
                         fontWeight = FontWeight.Bold
                     )
                 }
 
                 // 4色ルビカラーセレクター
-                MaskOverlayColor.values().forEach { mc ->
+                MaskOverlayColor.entries.forEach { mc ->
                     Box(
                         modifier = Modifier
-                            .size(16.dp)
+                            .size(20.dp)
                             .background(mc.color, CircleShape)
                             .border(if (overlayColor == mc) 2.dp else 0.5.dp, Color.White, CircleShape)
                             .clickable { overlayColor = mc }
@@ -677,20 +738,24 @@ fun BeforeAfterOverlay(
                 }
 
                 // ブラシのときのストローク消去
-                if (activeLayer.type == MaskType.BRUSH && activeLayer.brushStrokes.isNotEmpty()) {
+                val currentBrushLayer = localMaskLayers.getOrNull(selectedMaskIndex)
+                if (currentBrushLayer?.type == MaskType.BRUSH && currentBrushLayer.brushStrokes.isNotEmpty()) {
                     Box(
                         modifier = Modifier
                             .background(Color(0xFF882222), RoundedCornerShape(2.dp))
                             .clickable {
-                                activeLayer.brushStrokes = emptyList()
-                                onMaskLayersChange?.invoke(maskLayers.toList())
+                                val updatedLayers = localMaskLayers.mapIndexed { idx, l ->
+                                    if (idx == selectedMaskIndex) l.copy(brushStrokes = emptyList()) else l
+                                }
+                                localMaskLayers = updatedLayers
+                                onMaskLayersChange?.invoke(updatedLayers)
                             }
-                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
                             text = "クリア",
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 8.sp,
+                            fontFamily = FontFamily.SansSerif,
+                            fontSize = 12.sp,
                             color = Color.White,
                             fontWeight = FontWeight.Bold
                         )
@@ -707,13 +772,13 @@ fun BeforeAfterOverlay(
                     .padding(top = 12.dp)
                     .background(Color(0xCC000000), RoundedCornerShape(3.dp))
                     .border(1.dp, colors.accentAmber, RoundedCornerShape(3.dp))
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 Text(
                     text = "原画 RAW（長押し中）",
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = FontFamily.SansSerif,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
+                    fontSize = 14.sp,
                     color = colors.accentAmber
                 )
             }
@@ -726,14 +791,17 @@ fun BeforeAfterOverlay(
                 .padding(10.dp)
                 .background(colors.surface.copy(alpha = 0.85f), RoundedCornerShape(3.dp))
                 .border(1.dp, colors.borderSubtle, RoundedCornerShape(3.dp))
-                .padding(3.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             CompareTabButton("オフ", active = compareMode == CompareMode.Off) {
                 onCompareModeChange(CompareMode.Off)
             }
-            CompareTabButton("分割", active = compareMode == CompareMode.SplitVertical) {
+            CompareTabButton("左右分割", active = compareMode == CompareMode.SplitVertical) {
                 onCompareModeChange(CompareMode.SplitVertical)
+            }
+            CompareTabButton("上下分割", active = compareMode == CompareMode.SplitHorizontal) {
+                onCompareModeChange(CompareMode.SplitHorizontal)
             }
             CompareTabButton("並列", active = compareMode == CompareMode.SideBySide) {
                 onCompareModeChange(CompareMode.SideBySide)
@@ -749,14 +817,14 @@ private fun CompareTabButton(text: String, active: Boolean, onClick: () -> Unit)
         modifier = Modifier
             .background(if (active) colors.accentAmber else colors.surfacePressed, RoundedCornerShape(2.dp))
             .clickable { onClick() }
-            .padding(horizontal = 6.dp, vertical = 3.dp),
+            .padding(horizontal = 10.dp, vertical = 5.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = text,
-            fontFamily = FontFamily.Monospace,
+            fontFamily = FontFamily.SansSerif,
             fontWeight = FontWeight.Bold,
-            fontSize = 9.sp,
+            fontSize = 12.sp,
             color = if (active) Color.Black else colors.textPrimary
         )
     }

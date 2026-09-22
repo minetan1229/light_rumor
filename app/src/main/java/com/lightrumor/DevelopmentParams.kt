@@ -125,6 +125,7 @@ data class DevelopmentParams(
     var splitToning: SplitToningParams = SplitToningParams(),
     var lensCorrection: LensCorrectionParams = LensCorrectionParams(),
     var geometry: CropTransformParams = CropTransformParams(),
+    var toneCurveLUT: FloatArray = FloatArray(0),
     var outputColorSpace: ColorSpace = ColorSpace.sRGB,
     var enableDithering: Boolean = true
 ) {
@@ -170,6 +171,7 @@ data class DevelopmentParams(
         if (splitToning != other.splitToning) return false
         if (lensCorrection != other.lensCorrection) return false
         if (geometry != other.geometry) return false
+        if (!toneCurveLUT.contentEquals(other.toneCurveLUT)) return false
         if (outputColorSpace != other.outputColorSpace) return false
         if (enableDithering != other.enableDithering) return false
 
@@ -179,6 +181,9 @@ data class DevelopmentParams(
     override fun hashCode(): Int {
         var result = kelvin.hashCode()
         result = 31 * result + tint.hashCode()
+        result = 31 * result + shadowTintR.hashCode()
+        result = 31 * result + shadowTintG.hashCode()
+        result = 31 * result + shadowTintB.hashCode()
         result = 31 * result + exposureEV.hashCode()
         result = 31 * result + contrast.hashCode()
         result = 31 * result + highlights.hashCode()
@@ -195,14 +200,23 @@ data class DevelopmentParams(
         result = 31 * result + hslBands.contentHashCode()
         result = 31 * result + monochromeWeights.contentHashCode()
         result = 31 * result + luminanceNR.hashCode()
+        result = 31 * result + luminanceNRDetail.hashCode()
+        result = 31 * result + luminanceNRContrast.hashCode()
         result = 31 * result + chromaNR.hashCode()
+        result = 31 * result + chromaNRDetail.hashCode()
+        result = 31 * result + chromaNRSmoothness.hashCode()
         result = 31 * result + sharpeningAmount.hashCode()
+        result = 31 * result + sharpeningRadius.hashCode()
+        result = 31 * result + sharpeningDetail.hashCode()
+        result = 31 * result + sharpeningMasking.hashCode()
+        result = 31 * result + sharpeningPreviewMask.hashCode()
         result = 31 * result + primaryRed.hashCode()
         result = 31 * result + primaryGreen.hashCode()
         result = 31 * result + primaryBlue.hashCode()
         result = 31 * result + splitToning.hashCode()
         result = 31 * result + lensCorrection.hashCode()
         result = 31 * result + geometry.hashCode()
+        result = 31 * result + toneCurveLUT.contentHashCode()
         result = 31 * result + outputColorSpace.hashCode()
         result = 31 * result + enableDithering.hashCode()
         return result
@@ -216,7 +230,8 @@ data class DevelopmentParams(
         primaryBlue = primaryBlue.copy(),
         splitToning = splitToning.copy(),
         lensCorrection = lensCorrection.copy(),
-        geometry = geometry.copy()
+        geometry = geometry.copy(),
+        toneCurveLUT = toneCurveLUT.clone()
     )
 }
 
@@ -414,6 +429,9 @@ data class BatchSyncOptions(
             dst.sharpeningRadius = src.sharpeningRadius
             dst.sharpeningDetail = src.sharpeningDetail
             dst.sharpeningMasking = src.sharpeningMasking
+        }
+        if (syncToneCurve) {
+            dst.toneCurveLUT = src.toneCurveLUT.clone()
         }
         if (syncCropGeometry) {
             dst.geometry = src.geometry.copy()

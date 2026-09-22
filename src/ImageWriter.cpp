@@ -348,13 +348,13 @@ void forwardDCT(const float inBlock[64], float outBlock[64]) {
 class JpegBitWriter {
 public:
     std::vector<uint8_t>& stream;
-    uint32_t bitBuffer = 0;
+    uint64_t bitBuffer = 0;
     int bitCount = 0;
 
     JpegBitWriter(std::vector<uint8_t>& s) : stream(s) {}
 
     void writeBits(uint32_t code, int numBits) {
-        bitBuffer = (bitBuffer << numBits) | (code & ((1u << numBits) - 1));
+        bitBuffer = (bitBuffer << numBits) | (static_cast<uint64_t>(code) & ((1ULL << numBits) - 1ULL));
         bitCount += numBits;
         while (bitCount >= 8) {
             uint8_t byte = static_cast<uint8_t>((bitBuffer >> (bitCount - 8)) & 0xFF);
@@ -504,14 +504,22 @@ bool ImageWriter::writeJPEGMemory(const uint8_t* rgbData,
     if (!rgbData || width <= 0 || height <= 0) return false;
 
     quality = std::clamp(quality, 1, 100);
-    float scale = (quality < 50) ? (5000.0f / quality) : (200.0f - quality * 2.0f);
+    int scale = (quality < 50) ? (5000 / quality) : (200 - quality * 2);
 
-    uint8_t qLum[64], qChrom[64];
+    // Natural-order quantization tables (Annex K) scaled by quality factor
+    uint8_t qLumNatural[64], qChromNatural[64];
+    uint8_t qLumZigzag[64], qChromZigzag[64];
     for (int i = 0; i < 64; ++i) {
-        int lVal = static_cast<int>(std::round((std_luminance_quant[i] * scale + 50.0f) / 100.0f));
-        int cVal = static_cast<int>(std::round((std_chrominance_quant[i] * scale + 50.0f) / 100.0f));
-        qLum[i] = static_cast<uint8_t>(std::clamp(lVal, 1, 255));
-        qChrom[i] = static_cast<uint8_t>(std::clamp(cVal, 1, 255));
+        int lVal = (static_cast<int>(std_luminance_quant[i]) * scale + 50) / 100;
+        int cVal = (static_cast<int>(std_chrominance_quant[i]) * scale + 50) / 100;
+        qLumNatural[i] = static_cast<uint8_t>(std::clamp(lVal, 1, 255));
+        qChromNatural[i] = static_cast<uint8_t>(std::clamp(cVal, 1, 255));
+    }
+
+    // Build Zigzag-ordered quantization tables for DQT segment (ITU-T T.81 B.2.4.1)
+    for (int i = 0; i < 64; ++i) {
+        qLumZigzag[i] = qLumNatural[zigzag[i]];
+        qChromZigzag[i] = qChromNatural[zigzag[i]];
     }
 
     std::vector<uint8_t>& jpeg = outJpegBytes;
@@ -525,10 +533,12 @@ bool ImageWriter::writeJPEGMemory(const uint8_t* rgbData,
     // Embed Exif APP1 if requested
     if (metadata) {
         std::vector<uint8_t> exif = buildExifPayload(*metadata);
-        jpeg.push_back(0xFF);
-        jpeg.push_back(0xE1); // APP1
-        writeU16BE(jpeg, static_cast<uint16_t>(exif.size() + 2));
-        jpeg.insert(jpeg.end(), exif.begin(), exif.end());
+        if (exif.size() + 2 <= 0xFFFF) {
+            jpeg.push_back(0xFF);
+            jpeg.push_back(0xE1); // APP1
+            writeU16BE(jpeg, static_cast<uint16_t>(exif.size() + 2));
+            jpeg.insert(jpeg.end(), exif.begin(), exif.end());
+        }
     }
 
     // DQT (Define Quantization Table)
@@ -536,9 +546,9 @@ bool ImageWriter::writeJPEGMemory(const uint8_t* rgbData,
     jpeg.push_back(0xDB);
     writeU16BE(jpeg, 2 + 65 * 2);
     jpeg.push_back(0x00); // Table 0 (Lum)
-    for (int i = 0; i < 64; ++i) jpeg.push_back(qLum[zigzag[i]]);
+    for (int i = 0; i < 64; ++i) jpeg.push_back(qLumZigzag[i]);
     jpeg.push_back(0x01); // Table 1 (Chrom)
-    for (int i = 0; i < 64; ++i) jpeg.push_back(qChrom[zigzag[i]]);
+    for (int i = 0; i < 64; ++i) jpeg.push_back(qChromZigzag[i]);
 
     // SOF0 (Baseline DCT)
     jpeg.push_back(0xFF);
@@ -629,19 +639,19 @@ bool ImageWriter::writeJPEGMemory(const uint8_t* rgbData,
                     }
                 }
 
-                auto quantizeAndEncode = [&](const float inBlock[64], const uint8_t qTable[64], int16_t& prevDC, const HuffmanCode* dcT, const HuffmanCode* acT) {
+                auto quantizeAndEncode = [&](const float inBlock[64], const uint8_t qTableNatural[64], int16_t& prevDC, const HuffmanCode* dcT, const HuffmanCode* acT) {
                     float dct[64];
                     int16_t qDct[64];
                     forwardDCT(inBlock, dct);
                     for (int i = 0; i < 64; ++i) {
-                        qDct[i] = static_cast<int16_t>(std::round(dct[i] / qTable[i]));
+                        qDct[i] = static_cast<int16_t>(std::round(dct[i] / qTableNatural[i]));
                     }
                     encodeBlock(writer, qDct, prevDC, dcT, acT);
                 };
 
-                quantizeAndEncode(blockY, qLum, prevDC_Y, dcLumT, acLumT);
-                quantizeAndEncode(blockCb, qChrom, prevDC_Cb, dcChromT, acChromT);
-                quantizeAndEncode(blockCr, qChrom, prevDC_Cr, dcChromT, acChromT);
+                quantizeAndEncode(blockY, qLumNatural, prevDC_Y, dcLumT, acLumT);
+                quantizeAndEncode(blockCb, qChromNatural, prevDC_Cb, dcChromT, acChromT);
+                quantizeAndEncode(blockCr, qChromNatural, prevDC_Cr, dcChromT, acChromT);
             } else {
                 // 4:2:0: 4 Y blocks (8x8) and 1 Cb, 1 Cr block (8x8)
                 float blockY[4][64];
@@ -688,21 +698,21 @@ bool ImageWriter::writeJPEGMemory(const uint8_t* rgbData,
                     }
                 }
 
-                auto quantizeAndEncode = [&](const float inBlock[64], const uint8_t qTable[64], int16_t& prevDC, const HuffmanCode* dcT, const HuffmanCode* acT) {
+                auto quantizeAndEncode = [&](const float inBlock[64], const uint8_t qTableNatural[64], int16_t& prevDC, const HuffmanCode* dcT, const HuffmanCode* acT) {
                     float dct[64];
                     int16_t qDct[64];
                     forwardDCT(inBlock, dct);
                     for (int i = 0; i < 64; ++i) {
-                        qDct[i] = static_cast<int16_t>(std::round(dct[i] / qTable[i]));
+                        qDct[i] = static_cast<int16_t>(std::round(dct[i] / qTableNatural[i]));
                     }
                     encodeBlock(writer, qDct, prevDC, dcT, acT);
                 };
 
                 for (int b = 0; b < 4; ++b) {
-                    quantizeAndEncode(blockY[b], qLum, prevDC_Y, dcLumT, acLumT);
+                    quantizeAndEncode(blockY[b], qLumNatural, prevDC_Y, dcLumT, acLumT);
                 }
-                quantizeAndEncode(blockCb, qChrom, prevDC_Cb, dcChromT, acChromT);
-                quantizeAndEncode(blockCr, qChrom, prevDC_Cr, dcChromT, acChromT);
+                quantizeAndEncode(blockCb, qChromNatural, prevDC_Cb, dcChromT, acChromT);
+                quantizeAndEncode(blockCr, qChromNatural, prevDC_Cr, dcChromT, acChromT);
             }
         }
     }
@@ -879,10 +889,12 @@ bool ImageWriter::writeTIFF16(const std::string& filePath,
         if (ifd0[i].tag == 0x0111) {
             // Offset in ifdBody: 2 + i * 12 + 8
             size_t pos = 2 + i * 12 + 8;
-            ifdBody[pos + 0] = static_cast<uint8_t>(pixelDataOffset & 0xFF);
-            ifdBody[pos + 1] = static_cast<uint8_t>((pixelDataOffset >> 8) & 0xFF);
-            ifdBody[pos + 2] = static_cast<uint8_t>((pixelDataOffset >> 16) & 0xFF);
-            ifdBody[pos + 3] = static_cast<uint8_t>((pixelDataOffset >> 24) & 0xFF);
+            if (pos + 4 <= ifdBody.size()) {
+                ifdBody[pos + 0] = static_cast<uint8_t>(pixelDataOffset & 0xFF);
+                ifdBody[pos + 1] = static_cast<uint8_t>((pixelDataOffset >> 8) & 0xFF);
+                ifdBody[pos + 2] = static_cast<uint8_t>((pixelDataOffset >> 16) & 0xFF);
+                ifdBody[pos + 3] = static_cast<uint8_t>((pixelDataOffset >> 24) & 0xFF);
+            }
             break;
         }
     }
@@ -901,7 +913,6 @@ bool ImageWriter::writeTIFF8(const std::string& filePath,
                              const uint8_t* rgb8Data,
                              int32_t width, int32_t height,
                              const ExifMetadata* metadata) {
-    (void)metadata;
     if (!rgb8Data || width <= 0 || height <= 0) return false;
 
     std::vector<uint8_t> tiff;
@@ -910,6 +921,8 @@ bool ImageWriter::writeTIFF8(const std::string& filePath,
     writeU32LE(tiff, 8);
 
     std::vector<IFDEntry> ifd0;
+    std::vector<IFDEntry> exifSubIFD;
+
     auto addShort = [](std::vector<IFDEntry>& list, uint16_t tag, uint16_t val) {
         IFDEntry e; e.tag = tag; e.type = 3; e.count = 1; e.valueOrOffset = val;
         list.push_back(e);
@@ -926,6 +939,26 @@ bool ImageWriter::writeTIFF8(const std::string& filePath,
         e.data[4] = static_cast<uint8_t>(v2 & 0xFF); e.data[5] = static_cast<uint8_t>((v2 >> 8) & 0xFF);
         list.push_back(e);
     };
+    auto addString = [](std::vector<IFDEntry>& list, uint16_t tag, const std::string& str) {
+        IFDEntry e; e.tag = tag; e.type = 2; e.count = static_cast<uint32_t>(str.length() + 1);
+        if (e.count <= 4) {
+            e.valueOrOffset = 0;
+            std::memcpy(&e.valueOrOffset, str.c_str(), str.length() + 1);
+        } else {
+            e.data.assign(str.c_str(), str.c_str() + str.length() + 1);
+            e.valueOrOffset = 0;
+        }
+        list.push_back(e);
+    };
+    auto addRational = [](std::vector<IFDEntry>& list, uint16_t tag, uint32_t num, uint32_t den) {
+        IFDEntry e; e.tag = tag; e.type = 5; e.count = 1; e.valueOrOffset = 0;
+        e.data.resize(8);
+        e.data[0] = static_cast<uint8_t>(num & 0xFF); e.data[1] = static_cast<uint8_t>((num >> 8) & 0xFF);
+        e.data[2] = static_cast<uint8_t>((num >> 16) & 0xFF); e.data[3] = static_cast<uint8_t>((num >> 24) & 0xFF);
+        e.data[4] = static_cast<uint8_t>(den & 0xFF); e.data[5] = static_cast<uint8_t>((den >> 8) & 0xFF);
+        e.data[6] = static_cast<uint8_t>((den >> 16) & 0xFF); e.data[7] = static_cast<uint8_t>((den >> 24) & 0xFF);
+        list.push_back(e);
+    };
 
     addLong(ifd0, 0x0100, static_cast<uint32_t>(width));
     addLong(ifd0, 0x0101, static_cast<uint32_t>(height));
@@ -939,30 +972,64 @@ bool ImageWriter::writeTIFF8(const std::string& filePath,
     addLong(ifd0, 0x0117, pixelByteCount);
     addShort(ifd0, 0x011C, 1);
 
+    if (metadata) {
+        addString(ifd0, 0x010F, metadata->make);
+        addString(ifd0, 0x0110, metadata->model);
+        addString(ifd0, 0x0131, metadata->software);
+        addString(ifd0, 0x0132, metadata->dateTimeOriginal);
+        addLong(ifd0, 0x8769, 0); // Exif IFD Pointer
+
+        uint32_t expDen = metadata->exposureTime > 0 ? static_cast<uint32_t>(std::round(1.0 / metadata->exposureTime)) : 250;
+        addRational(exifSubIFD, 0x829A, 1, expDen);
+        uint32_t fNum = static_cast<uint32_t>(std::round(metadata->fNumber * 10.0));
+        addRational(exifSubIFD, 0x829D, fNum, 10);
+        addShort(exifSubIFD, 0x8827, static_cast<uint16_t>(metadata->isoSpeed));
+        addString(exifSubIFD, 0x9003, metadata->dateTimeOriginal);
+        uint32_t focalNum = static_cast<uint32_t>(std::round(metadata->focalLength * 10.0));
+        addRational(exifSubIFD, 0x920A, focalNum, 10);
+        addString(exifSubIFD, 0xA434, metadata->lensModel);
+    }
+
     std::sort(ifd0.begin(), ifd0.end(), [](const IFDEntry& a, const IFDEntry& b){ return a.tag < b.tag; });
+    std::sort(exifSubIFD.begin(), exifSubIFD.end(), [](const IFDEntry& a, const IFDEntry& b){ return a.tag < b.tag; });
 
     uint32_t ifd0Offset = 8;
     uint32_t ifd0Size = 2 + static_cast<uint32_t>(ifd0.size()) * 12 + 4;
-    uint32_t dataOffset = ifd0Offset + ifd0Size;
+    uint32_t exifOffset = ifd0Offset + ifd0Size;
+    uint32_t exifSize = metadata ? (2 + static_cast<uint32_t>(exifSubIFD.size()) * 12 + 4) : 0;
+    uint32_t dataOffset = exifOffset + exifSize;
+
+    for (auto& entry : ifd0) {
+        if (entry.tag == 0x8769) {
+            entry.valueOrOffset = exifOffset;
+        }
+    }
 
     std::vector<uint8_t> ifdBody;
     std::vector<uint8_t> dataHeap;
 
-    writeU16LE(ifdBody, static_cast<uint16_t>(ifd0.size()));
-    for (const auto& entry : ifd0) {
-        writeU16LE(ifdBody, entry.tag);
-        writeU16LE(ifdBody, entry.type);
-        writeU32LE(ifdBody, entry.count);
-        if (entry.data.empty()) {
-            writeU32LE(ifdBody, entry.valueOrOffset);
-        } else {
-            uint32_t offset = dataOffset + static_cast<uint32_t>(dataHeap.size());
-            writeU32LE(ifdBody, offset);
-            dataHeap.insert(dataHeap.end(), entry.data.begin(), entry.data.end());
-            if (entry.data.size() % 2 != 0) dataHeap.push_back(0);
+    auto appendIFD = [&](const std::vector<IFDEntry>& list, uint32_t nextOffset) {
+        writeU16LE(ifdBody, static_cast<uint16_t>(list.size()));
+        for (const auto& entry : list) {
+            writeU16LE(ifdBody, entry.tag);
+            writeU16LE(ifdBody, entry.type);
+            writeU32LE(ifdBody, entry.count);
+            if (entry.data.empty()) {
+                writeU32LE(ifdBody, entry.valueOrOffset);
+            } else {
+                uint32_t offset = dataOffset + static_cast<uint32_t>(dataHeap.size());
+                writeU32LE(ifdBody, offset);
+                dataHeap.insert(dataHeap.end(), entry.data.begin(), entry.data.end());
+                if (entry.data.size() % 2 != 0) dataHeap.push_back(0);
+            }
         }
+        writeU32LE(ifdBody, nextOffset);
+    };
+
+    appendIFD(ifd0, 0);
+    if (metadata) {
+        appendIFD(exifSubIFD, 0);
     }
-    writeU32LE(ifdBody, 0);
 
     uint32_t pixelDataOffset = dataOffset + static_cast<uint32_t>(dataHeap.size());
     while (pixelDataOffset % 4 != 0) {
@@ -973,10 +1040,12 @@ bool ImageWriter::writeTIFF8(const std::string& filePath,
     for (size_t i = 0; i < ifd0.size(); ++i) {
         if (ifd0[i].tag == 0x0111) {
             size_t pos = 2 + i * 12 + 8;
-            ifdBody[pos + 0] = static_cast<uint8_t>(pixelDataOffset & 0xFF);
-            ifdBody[pos + 1] = static_cast<uint8_t>((pixelDataOffset >> 8) & 0xFF);
-            ifdBody[pos + 2] = static_cast<uint8_t>((pixelDataOffset >> 16) & 0xFF);
-            ifdBody[pos + 3] = static_cast<uint8_t>((pixelDataOffset >> 24) & 0xFF);
+            if (pos + 4 <= ifdBody.size()) {
+                ifdBody[pos + 0] = static_cast<uint8_t>(pixelDataOffset & 0xFF);
+                ifdBody[pos + 1] = static_cast<uint8_t>((pixelDataOffset >> 8) & 0xFF);
+                ifdBody[pos + 2] = static_cast<uint8_t>((pixelDataOffset >> 16) & 0xFF);
+                ifdBody[pos + 3] = static_cast<uint8_t>((pixelDataOffset >> 24) & 0xFF);
+            }
             break;
         }
     }
@@ -1173,9 +1242,15 @@ bool ImageWriter::renderWatermark8(std::vector<uint8_t>& rgbData,
         auto blendPixel = [&](int px, int py, uint8_t r, uint8_t g, uint8_t b) {
             if (px >= 0 && px < W && py >= 0 && py < H) {
                 size_t idx = (static_cast<size_t>(py) * W + px) * 3;
-                rgbData[idx + 0] = static_cast<uint8_t>((rgbData[idx + 0] * 30 + r * 225) / 255);
-                rgbData[idx + 1] = static_cast<uint8_t>((rgbData[idx + 1] * 30 + g * 225) / 255);
-                rgbData[idx + 2] = static_cast<uint8_t>((rgbData[idx + 2] * 30 + b * 225) / 255);
+                int curR = static_cast<int>(rgbData[idx + 0]);
+                int curG = static_cast<int>(rgbData[idx + 1]);
+                int curB = static_cast<int>(rgbData[idx + 2]);
+                int inR = static_cast<int>(r);
+                int inG = static_cast<int>(g);
+                int inB = static_cast<int>(b);
+                rgbData[idx + 0] = static_cast<uint8_t>((curR * 30 + inR * 225) / 255);
+                rgbData[idx + 1] = static_cast<uint8_t>((curG * 30 + inG * 225) / 255);
+                rgbData[idx + 2] = static_cast<uint8_t>((curB * 30 + inB * 225) / 255);
             }
         };
 
@@ -1209,101 +1284,14 @@ bool ImageWriter::writeWebP(const std::string& filePath,
                             int32_t width, int32_t height,
                             int32_t quality,
                             const ExifMetadata* metadata) {
-    if (!rgbData || width <= 0 || height <= 0) return false;
-
-    // First, encode image payload via ultra-high quality DCT / lossy compression
-    std::vector<uint8_t> jpegBytes;
-    writeJPEGMemory(rgbData, width, height, quality, ChromaSubsampling::YUV444, nullptr, jpegBytes);
-
-    // Build standard WebP container using VP8 / VP8X / EXIF
-    // Prepend RFC 6386 compliant VP8 Keyframe Bitstream Header (10 bytes) before payload:
-    // Frame tag (3 bytes), Start code 0x9D 0x01 0x2A (3 bytes), Width & Scale (2 bytes), Height & Scale (2 bytes)
-    std::vector<uint8_t> vp8Bitstream;
-    vp8Bitstream.reserve(10 + jpegBytes.size());
-
-    uint32_t part1Size = static_cast<uint32_t>(jpegBytes.size());
-    // 3 bytes frame tag: key_frame=0, version=0, show_frame=1, part1_size
-    uint32_t frameTag = (0) | (0 << 1) | (1 << 4) | ((part1Size & 0x7FFFF) << 5);
-    vp8Bitstream.push_back(static_cast<uint8_t>(frameTag & 0xFF));
-    vp8Bitstream.push_back(static_cast<uint8_t>((frameTag >> 8) & 0xFF));
-    vp8Bitstream.push_back(static_cast<uint8_t>((frameTag >> 16) & 0xFF));
-
-    // 3 bytes start code: 0x9D 0x01 0x2A
-    vp8Bitstream.push_back(0x9D);
-    vp8Bitstream.push_back(0x01);
-    vp8Bitstream.push_back(0x2A);
-
-    // 2 bytes width & horizontal scale (14 bits width, 2 bits scale=0)
-    uint16_t wTag = static_cast<uint16_t>(width & 0x3FFF);
-    vp8Bitstream.push_back(static_cast<uint8_t>(wTag & 0xFF));
-    vp8Bitstream.push_back(static_cast<uint8_t>((wTag >> 8) & 0xFF));
-
-    // 2 bytes height & vertical scale (14 bits height, 2 bits scale=0)
-    uint16_t hTag = static_cast<uint16_t>(height & 0x3FFF);
-    vp8Bitstream.push_back(static_cast<uint8_t>(hTag & 0xFF));
-    vp8Bitstream.push_back(static_cast<uint8_t>((hTag >> 8) & 0xFF));
-
-    // Append payload
-    vp8Bitstream.insert(vp8Bitstream.end(), jpegBytes.begin(), jpegBytes.end());
-
-    // Build WebP RIFF container wrapping the image stream and Exif metadata
-    std::vector<uint8_t> webp;
-    webp.reserve(vp8Bitstream.size() + 1024);
-
-    // 1. RIFF Header placeholder
-    webp.push_back('R'); webp.push_back('I'); webp.push_back('F'); webp.push_back('F');
-    writeU32LE(webp, 0); // Will update total file size - 8
-    webp.push_back('W'); webp.push_back('E'); webp.push_back('B'); webp.push_back('P');
-
-    // 2. VP8X Extended header chunk (10 bytes data)
-    webp.push_back('V'); webp.push_back('P'); webp.push_back('8'); webp.push_back('X');
-    writeU32LE(webp, 10);
-    uint32_t flags = (metadata != nullptr) ? (1 << 3) : 0; // Exif flag
-    writeU32LE(webp, flags);
-    // 24-bit canvas width-1 and height-1
-    uint32_t cW = static_cast<uint32_t>(width - 1);
-    uint32_t cH = static_cast<uint32_t>(height - 1);
-    webp.push_back(static_cast<uint8_t>(cW & 0xFF));
-    webp.push_back(static_cast<uint8_t>((cW >> 8) & 0xFF));
-    webp.push_back(static_cast<uint8_t>((cW >> 16) & 0xFF));
-    webp.push_back(static_cast<uint8_t>(cH & 0xFF));
-    webp.push_back(static_cast<uint8_t>((cH >> 8) & 0xFF));
-    webp.push_back(static_cast<uint8_t>((cH >> 16) & 0xFF));
-
-    // 3. EXIF Chunk (if metadata provided)
-    if (metadata) {
-        std::vector<uint8_t> exif = buildExifPayload(*metadata);
-        // Strip 6-byte "Exif\0\0" header for WebP EXIF chunk
-        const uint8_t* tiffPayload = exif.data() + 6;
-        size_t tiffSize = exif.size() - 6;
-
-        webp.push_back('E'); webp.push_back('X'); webp.push_back('I'); webp.push_back('F');
-        writeU32LE(webp, static_cast<uint32_t>(tiffSize));
-        webp.insert(webp.end(), tiffPayload, tiffPayload + tiffSize);
-        if (tiffSize % 2 != 0) {
-            webp.push_back(0); // WebP padding byte
-        }
-    }
-
-    // 4. Image Bitstream Chunk (VP8)
-    webp.push_back('V'); webp.push_back('P'); webp.push_back('8'); webp.push_back(' ');
-    writeU32LE(webp, static_cast<uint32_t>(vp8Bitstream.size()));
-    webp.insert(webp.end(), vp8Bitstream.begin(), vp8Bitstream.end());
-    if (vp8Bitstream.size() % 2 != 0) {
-        webp.push_back(0); // WebP padding byte
-    }
-
-    // Update RIFF total size
-    uint32_t totalRiffSize = static_cast<uint32_t>(webp.size() - 8);
-    webp[4] = static_cast<uint8_t>(totalRiffSize & 0xFF);
-    webp[5] = static_cast<uint8_t>((totalRiffSize >> 8) & 0xFF);
-    webp[6] = static_cast<uint8_t>((totalRiffSize >> 16) & 0xFF);
-    webp[7] = static_cast<uint8_t>((totalRiffSize >> 24) & 0xFF);
-
-    std::ofstream out(filePath, std::ios::binary);
-    if (!out) return false;
-    out.write(reinterpret_cast<const char*>(webp.data()), webp.size());
-    return true;
+    (void)filePath;
+    (void)rgbData;
+    (void)width;
+    (void)height;
+    (void)quality;
+    (void)metadata;
+    std::cerr << "[ImageWriter] WebP export is not supported in this build." << std::endl;
+    return false;
 }
 
 } // namespace lightrumor

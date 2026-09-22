@@ -124,14 +124,30 @@ bool AstroAligner::estimateTransform(const std::vector<StarPoint>& refStars,
                     float d20 = std::hypot(stars[k].x - stars[i].x, stars[k].y - stars[i].y);
                     if (d12 < 4.0f || d20 < 4.0f) continue;
 
-                    std::array<float, 3> sides = {d01, d12, d20};
-                    std::sort(sides.begin(), sides.end(), std::greater<float>());
+                    // Pair each edge with its opposite vertex:
+                    // d12 (j-k) is opposite to vertex i
+                    // d20 (k-i) is opposite to vertex j
+                    // d01 (i-j) is opposite to vertex k
+                    struct EdgeOpp {
+                        float len;
+                        size_t oppVertex;
+                    };
+                    std::array<EdgeOpp, 3> edgeOpps = {{
+                        {d12, i},
+                        {d20, j},
+                        {d01, k}
+                    }};
+                    std::sort(edgeOpps.begin(), edgeOpps.end(), [](const EdgeOpp& a, const EdgeOpp& b) {
+                        return a.len > b.len;
+                    });
 
                     StarTriangle tri;
-                    tri.i0 = i; tri.i1 = j; tri.i2 = k;
-                    tri.sideA = sides[0];
-                    tri.r1 = sides[1] / sides[0];
-                    tri.r2 = sides[2] / sides[0];
+                    tri.i0 = edgeOpps[0].oppVertex;
+                    tri.i1 = edgeOpps[1].oppVertex;
+                    tri.i2 = edgeOpps[2].oppVertex;
+                    tri.sideA = edgeOpps[0].len;
+                    tri.r1 = edgeOpps[1].len / edgeOpps[0].len;
+                    tri.r2 = edgeOpps[2].len / edgeOpps[0].len;
                     tris.push_back(tri);
                 }
             }
@@ -180,6 +196,11 @@ bool AstroAligner::estimateTransform(const std::vector<StarPoint>& refStars,
         size_t idx2 = rng() % pointPairs.size();
         if (idx0 == idx1 || idx1 == idx2 || idx0 == idx2) continue;
 
+        if (pointPairs[idx0].refIdx >= refStars.size() || pointPairs[idx0].tgtIdx >= targetStars.size() ||
+            pointPairs[idx1].refIdx >= refStars.size() || pointPairs[idx1].tgtIdx >= targetStars.size()) {
+            continue;
+        }
+
         const auto& pR0 = refStars[pointPairs[idx0].refIdx];
         const auto& pT0 = targetStars[pointPairs[idx0].tgtIdx];
         const auto& pR1 = refStars[pointPairs[idx1].refIdx];
@@ -206,6 +227,9 @@ bool AstroAligner::estimateTransform(const std::vector<StarPoint>& refStars,
         // Count inliers
         size_t inliers = 0;
         for (const auto& pair : pointPairs) {
+            if (pair.refIdx >= refStars.size() || pair.tgtIdx >= targetStars.size()) {
+                continue;
+            }
             const auto& pR = refStars[pair.refIdx];
             const auto& pT = targetStars[pair.tgtIdx];
             auto mapped = cand.transform(pR.x, pR.y);

@@ -123,6 +123,9 @@ vec3 applyVibrance(vec3 c, float vib) {
     // Skin protection: Hue around 20-40 degrees (0.05 to 0.12 in normalized hue)
     vec3 hsl = rgbToHsl(c);
     float hueDist = abs(hsl.x - 0.08);
+    if (hueDist > 0.5) {
+        hueDist = 1.0 - hueDist;
+    }
     float skinWeight = clamp(1.0 - (hueDist / 0.10), 0.0, 1.0); // 1.0 in skin, 0.0 elsewhere
 
     // Lower boost for already saturated areas and skin tones
@@ -133,6 +136,7 @@ vec3 applyVibrance(vec3 c, float vib) {
 
 // Color space transfer function (OETF)
 vec3 applyOETF(vec3 linearC, int cs) {
+    if (cs == 0) return clamp(linearC, 0.0, 1.0); // Linear output passthrough
     vec3 res;
     if (cs == 2) {
         // AdobeRGB: gamma 2.1992
@@ -158,8 +162,9 @@ void main() {
     }
 
     int paddedW = params.tileSize.x + 2 * params.padding;
-    int padX = localId.x + params.padding;
-    int padY = localId.y + params.padding;
+    int paddedH = params.tileSize.y + 2 * params.padding;
+    int padX = clamp(localId.x + params.padding, 0, paddedW - 1);
+    int padY = clamp(localId.y + params.padding, 0, paddedH - 1);
     int paddedIdx = padY * paddedW + padX;
 
     vec4 pix = inPixels[paddedIdx];
@@ -177,10 +182,12 @@ void main() {
     col = recoverHighlights(col, params.highlights);
     col = liftShadows(col, params.shadows);
 
-    // 4. Contrast around 0.18 middle gray pivot
+    // 4. Contrast (S-curve around 0.18 middle gray pivot)
     if (abs(params.contrast) > 1e-5) {
-        float factor = (1.0 + params.contrast * 0.5);
-        col = pow(max(col / 0.18, vec3(0.0)), vec3(factor)) * 0.18;
+        float factor = params.contrast * 0.5;
+        vec3 colBelow = 0.18 * pow(max(col / 0.18, vec3(0.0)), vec3(1.0 + factor));
+        vec3 colAbove = 1.0 - (1.0 - 0.18) * pow(max((vec3(1.0) - col) / (1.0 - 0.18), vec3(0.0)), vec3(1.0 + factor));
+        col = mix(colBelow, max(vec3(0.18), colAbove), step(vec3(0.18), col));
     }
 
     // 5. White & Black levels
@@ -217,7 +224,7 @@ void main() {
         vec4 adj1 = hslAdjust[b1];
         vec4 adj = mix(adj0, adj1, frac);
 
-        hsl.x = fract(hsl.x + adj.x * (1.0 / 360.0));
+        hsl.x = fract(hsl.x + adj.x * (1.0 / 6.0));
         hsl.y = clamp(hsl.y * (1.0 + adj.y), 0.0, 1.0);
         hsl.z = clamp(hsl.z * (1.0 + adj.z), 0.0, 1.0);
         col = hslToRgb(hsl);

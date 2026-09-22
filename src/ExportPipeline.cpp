@@ -92,7 +92,17 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
                                        const DevelopmentParams& params,
                                        std::vector<FloatRGBA>& outValidTile,
                                        int32_t padLeft,
-                                       int32_t padTop) {
+                                       int32_t padTop,
+                                       int32_t tileOriginX,
+                                       int32_t tileOriginY,
+                                       int32_t fullWidth,
+                                       int32_t fullHeight) {
+    if (validW <= 0 || validH <= 0 || paddedW <= 0 || paddedH <= 0 ||
+        inPaddedTile.size() < static_cast<size_t>(paddedW) * paddedH) {
+        outValidTile.clear();
+        return;
+    }
+
     outValidTile.resize(static_cast<size_t>(validW) * validH);
 
     // 1. Calculate White Balance multipliers (2,000K to 50,000K)
@@ -100,7 +110,7 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
     float kelvinRatio = kelvin / 5500.0f;
     float rGain = std::pow(1.0f / kelvinRatio, 0.65f);
     float bGain = std::pow(kelvinRatio, 0.85f);
-    float gGain = 1.0f - (params.tint * 0.005f);
+    float gGain = std::max(0.01f, 1.0f - (params.tint * 0.005f));
     // Normalize relative to G
     rGain /= gGain;
     bGain /= gGain;
@@ -134,16 +144,24 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
 
         // 3. Atmospheric Dehaze
         if (std::abs(params.dehaze) > 1e-4f) {
-            float darkCh = std::min({p.r, p.g, p.b});
-            float t = std::clamp(1.0f - 0.75f * darkCh, 0.15f, 1.0f);
             float atmos = 0.95f;
-            float factor = std::abs(params.dehaze) * 0.01f;
-            float dehazedR = (p.r - atmos) / std::lerp(1.0f, t, factor * 0.6f) + atmos;
-            float dehazedG = (p.g - atmos) / std::lerp(1.0f, t, factor * 0.6f) + atmos;
-            float dehazedB = (p.b - atmos) / std::lerp(1.0f, t, factor * 0.6f) + atmos;
-            p.r = std::max(0.0f, p.r * (1.0f - factor) + dehazedR * factor);
-            p.g = std::max(0.0f, p.g * (1.0f - factor) + dehazedG * factor);
-            p.b = std::max(0.0f, p.b * (1.0f - factor) + dehazedB * factor);
+            if (params.dehaze > 0.0f) {
+                float darkCh = std::min({p.r, p.g, p.b});
+                float t = std::clamp(1.0f - 0.75f * darkCh, 0.15f, 1.0f);
+                float factor = params.dehaze * 0.01f;
+                float dehazedR = (p.r - atmos) / std::lerp(1.0f, t, factor * 0.6f) + atmos;
+                float dehazedG = (p.g - atmos) / std::lerp(1.0f, t, factor * 0.6f) + atmos;
+                float dehazedB = (p.b - atmos) / std::lerp(1.0f, t, factor * 0.6f) + atmos;
+                p.r = std::max(0.0f, p.r * (1.0f - factor) + dehazedR * factor);
+                p.g = std::max(0.0f, p.g * (1.0f - factor) + dehazedG * factor);
+                p.b = std::max(0.0f, p.b * (1.0f - factor) + dehazedB * factor);
+            } else {
+                // Add atmospheric haze
+                float hazeFactor = (-params.dehaze) * 0.01f;
+                p.r = p.r * (1.0f - hazeFactor * 0.5f) + atmos * (hazeFactor * 0.5f);
+                p.g = p.g * (1.0f - hazeFactor * 0.5f) + atmos * (hazeFactor * 0.5f);
+                p.b = p.b * (1.0f - hazeFactor * 0.5f) + atmos * (hazeFactor * 0.5f);
+            }
         }
 
         // 4. Primary Calibration
@@ -152,19 +170,19 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
             std::abs(params.primaryBlue.hueShift) > 1e-4f || std::abs(params.primaryBlue.saturationShift) > 1e-4f) {
             float h, s, l;
             rgbToHsl(p.r, p.g, p.b, h, s, l);
-            float wR = std::max(0.0f, 1.0f - std::abs(h - 0.0f) / 60.0f) + std::max(0.0f, 1.0f - std::abs(h - 360.0f) / 60.0f);
-            float wG = std::max(0.0f, 1.0f - std::abs(h - 120.0f) / 60.0f);
-            float wB = std::max(0.0f, 1.0f - std::abs(h - 240.0f) / 60.0f);
+            float wR = std::max(0.0f, 1.0f - std::abs(h - 0.0f) / 120.0f) + std::max(0.0f, 1.0f - std::abs(h - 360.0f) / 120.0f);
+            float wG = std::max(0.0f, 1.0f - std::abs(h - 120.0f) / 120.0f);
+            float wB = std::max(0.0f, 1.0f - std::abs(h - 240.0f) / 120.0f);
             float dH = (wR * params.primaryRed.hueShift + wG * params.primaryGreen.hueShift + wB * params.primaryBlue.hueShift) * 0.3f;
             float dS = (wR * params.primaryRed.saturationShift + wG * params.primaryGreen.saturationShift + wB * params.primaryBlue.saturationShift) * 0.01f;
-            h = std::fmod(h + dH + 360.0f, 360.0f);
+            h = std::fmod(std::fmod(h + dH, 360.0f) + 360.0f, 360.0f);
             s = std::clamp(s * (1.0f + dS), 0.0f, 1.0f);
             hslToRgb(h, s, l, p.r, p.g, p.b);
         }
 
-        // 5. Highlight recovery (soft-knee compression for specular/overexposed areas)
-        if (params.highlights > 0.0f) {
-            float hFactor = params.highlights * 0.015f;
+        // 5. Highlight recovery (compress when negative, expand when positive)
+        if (params.highlights < 0.0f) {
+            float hFactor = (-params.highlights) * 0.015f;
             auto recoverC = [hFactor](float c) {
                 if (c > 0.75f) {
                     float excess = c - 0.75f;
@@ -175,6 +193,17 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
             p.r = recoverC(p.r);
             p.g = recoverC(p.g);
             p.b = recoverC(p.b);
+        } else if (params.highlights > 0.0f) {
+            float hBoost = 1.0f + params.highlights * 0.005f;
+            auto boostC = [hBoost](float c) {
+                if (c > 0.75f) {
+                    return 0.75f + (c - 0.75f) * hBoost;
+                }
+                return c;
+            };
+            p.r = boostC(p.r);
+            p.g = boostC(p.g);
+            p.b = boostC(p.b);
         }
 
         // 6. Shadow lift
@@ -188,10 +217,16 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
 
         // 7. Contrast (S-curve around 0.18 middle gray pivot)
         if (std::abs(params.contrast) > 1e-4f) {
-            float cFactor = 1.0f + (params.contrast * 0.006f);
+            float cFactor = params.contrast * 0.006f;
             auto applyContrast = [cFactor](float c) {
                 if (c <= 0.0f) return 0.0f;
-                return 0.18f * std::pow(c / 0.18f, cFactor);
+                float pivot = 0.18f;
+                if (c < pivot) {
+                    return pivot * std::pow(c / pivot, 1.0f + cFactor);
+                } else {
+                    float out = 1.0f - (1.0f - pivot) * std::pow(std::max(0.0f, 1.0f - c) / (1.0f - pivot), 1.0f + cFactor);
+                    return std::max(pivot, out);
+                }
             };
             p.r = applyContrast(p.r);
             p.g = applyContrast(p.g);
@@ -246,7 +281,7 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
                     deltaH /= sumW;
                     deltaS /= sumW;
                     deltaL /= sumW;
-                    h = std::fmod(h + deltaH + 360.0f, 360.0f);
+                    h = std::fmod(std::fmod(h + deltaH, 360.0f) + 360.0f, 360.0f);
                     s = std::clamp(s * (1.0f + deltaS * 0.01f), 0.0f, 1.0f);
                     l = std::clamp(l * (1.0f + deltaL * 0.01f), 0.0f, 1.0f);
                     hslToRgb(h, s, l, p.r, p.g, p.b);
@@ -266,7 +301,12 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
                     skinWeight = std::max(0.0f, 1.0f - (std::abs(h - 25.0f) / 20.0f));
                 }
 
-                float vibBoost = (params.vibrance * 0.01f) * (1.0f - sat) * (1.0f - skinWeight * 0.85f);
+                float vibBoost = params.vibrance * 0.01f;
+                if (vibBoost > 0.0f) {
+                    vibBoost *= (1.0f - sat) * (1.0f - skinWeight * 0.85f);
+                } else {
+                    vibBoost *= sat * (1.0f - skinWeight * 0.85f);
+                }
                 float totalSatScale = (1.0f + vibBoost) * (1.0f + params.saturation * 0.01f);
 
                 p.r = curLum + (p.r - curLum) * totalSatScale;
@@ -292,14 +332,14 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
 
     // 12. Phase 5: Local Mask Layers & Retouch Operations
     if (!params.retouchOps.empty()) {
-        MaskEngine::processRetouchOps(workTile, paddedW, paddedH, params.retouchOps);
+        MaskEngine::processRetouchOps(workTile, paddedW, paddedH, params.retouchOps, tileOriginX, tileOriginY, fullWidth, fullHeight);
     }
     if (!params.maskLayers.empty()) {
-        MaskEngine::processMaskLayers(workTile, paddedW, paddedH, params.maskLayers);
+        MaskEngine::processMaskLayers(workTile, paddedW, paddedH, params.maskLayers, {}, tileOriginX, tileOriginY, fullWidth, fullHeight);
     }
 
     // Pass 2: Spatial Noise Reduction & Sharpening via DenoiseEngine
-    static DenoiseEngine s_denoiseEngine;
+    thread_local DenoiseEngine s_denoiseEngine;
     s_denoiseEngine.processTile(workTile, paddedW, paddedH, validW, validH, padding, params, outValidTile, padLeft, padTop);
 }
 
@@ -313,7 +353,9 @@ void ExportPipeline::quantizeTo8Bit(const std::vector<FloatRGBA>& linearTile,
 
     auto applyOETF = [cs](float val) -> float {
         if (val <= 0.0f) return 0.0f;
-        if (cs == ColorSpace::AdobeRGB) {
+        if (cs == ColorSpace::LinearSRGB || cs == ColorSpace::ACEScg || cs == ColorSpace::LinearRec2020) {
+            return val;
+        } else if (cs == ColorSpace::AdobeRGB) {
             return std::pow(val, 1.0f / 2.19921875f);
         } else {
             // sRGB and Display P3
@@ -354,7 +396,9 @@ void ExportPipeline::quantizeTo16Bit(const std::vector<FloatRGBA>& linearTile,
 
     auto applyOETF = [cs](float val) -> float {
         if (val <= 0.0f) return 0.0f;
-        if (cs == ColorSpace::AdobeRGB) {
+        if (cs == ColorSpace::LinearSRGB || cs == ColorSpace::ACEScg || cs == ColorSpace::LinearRec2020) {
+            return val;
+        } else if (cs == ColorSpace::AdobeRGB) {
             return std::pow(val, 1.0f / 2.19921875f);
         } else {
             if (val <= 0.0031308f) {
@@ -442,7 +486,7 @@ bool ExportPipeline::processImage(RawDecoder& decoder,
             // Execute tile pipeline (OOM-free 32-bit linear processing)
             int32_t padLeft = tileX - paddedRect.x;
             int32_t padTop = tileY - paddedRect.y;
-            processTileLinear(inPaddedTile, paddedRect.width, paddedRect.height, validW, validH, padding, params, outValidTile, padLeft, padTop);
+            processTileLinear(inPaddedTile, paddedRect.width, paddedRect.height, validW, validH, padding, params, outValidTile, padLeft, padTop, paddedRect.x, paddedRect.y, imgW, imgH);
 
             // Quantize with TPDF dithering and color space OETF
             if (is16Bit) {
@@ -469,6 +513,11 @@ bool ExportPipeline::processImage(RawDecoder& decoder,
                 progressCallback(pct, "Processing tile " + std::to_string(processedTiles) + "/" + std::to_string(totalTiles));
             }
         }
+    }
+
+    // Apply watermark if requested for 8-bit outputs
+    if (options.enableWatermark && !options.watermarkText.empty() && !is16Bit) {
+        ImageWriter::renderWatermark8(finalRgb8, imgW, imgH, options.watermarkText, true);
     }
 
     // Write final output file with Exif metadata

@@ -412,9 +412,9 @@ bool testLensfunCorrection() {
     for (int y = 0; y < testH; ++y) {
         for (int x = 0; x < testW; ++x) {
             float edge = (x < testW / 2) ? 0.9f : 0.1f;
-            // 色収差のある高コントラストエッジ
+            // 色収差のある高コントラストエッジ（パープルフリンジ: RとBがGより突出）
             tcaPixels[y * testW + x] = lightrumor::FloatRGBA(
-                edge * 1.02f, edge, edge * 0.98f, 1.0f);
+                edge * 1.05f, edge, edge * 1.05f, 1.0f);
         }
     }
     std::vector<lightrumor::FloatRGBA> defringed(testW * testH);

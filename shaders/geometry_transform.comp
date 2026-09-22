@@ -61,11 +61,11 @@ void main() {
 
     // 2. 90-degree step rotations
     if (params.rotationSteps == 1) { // 90° CW -> inverse is 90° CCW
-        normDst = vec2(normDst.y, -normDst.x);
+        normDst = vec2(-normDst.y, normDst.x);
     } else if (params.rotationSteps == 2) { // 180°
         normDst = -normDst;
-    } else if (params.rotationSteps == 3) { // 270° CW
-        normDst = vec2(-normDst.y, normDst.x);
+    } else if (params.rotationSteps == 3) { // 270° CW -> inverse is 90° CW
+        normDst = vec2(normDst.y, -normDst.x);
     }
 
     // 3. Fine Straighten rotation (-angle inverse)
@@ -97,6 +97,10 @@ void main() {
     // 6. Map to Crop Window in Source Normalized UV [0.0, 1.0]
     vec2 cropOrigin = params.cropRectNorm.xy;
     vec2 cropScale = params.cropRectNorm.zw;
+    // Zero-division and degenerate crop scale guard
+    if (cropScale.x <= 1e-6 || cropScale.y <= 1e-6) {
+        cropScale = vec2(1.0);
+    }
     vec2 srcUV = cropOrigin + (projected + vec2(0.5)) * cropScale;
 
     // Boundary check: Out-of-bounds yields black / border

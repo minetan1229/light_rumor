@@ -136,10 +136,10 @@ void main() {
 
     // 3. Unsharp Masking with Edge Mask
     if (params.sharpenAmount > 0.0) {
-        // High-pass difference
-        float laplacian = (lumLeft + lumRight + lumTop + lumBottom) * 0.25 - centerLum;
-        // Sharpen boost applied only where edgeWeight > 0
-        float sharpBoost = -laplacian * params.sharpenAmount * 1.5 * edgeWeight;
+        // High-pass difference: center luminance minus blurred local average
+        float laplacian = centerLum - (lumLeft + lumRight + lumTop + lumBottom) * 0.25;
+        // Sharpen boost applied only where edgeWeight > 0 (corrected positive boost sign)
+        float sharpBoost = laplacian * params.sharpenAmount * 1.5 * edgeWeight;
         blendedLum = max(0.0, blendedLum + sharpBoost);
     }
 

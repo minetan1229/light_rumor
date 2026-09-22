@@ -9,7 +9,7 @@ import java.util.UUID
 data class HistoryNode(
     val id: String = UUID.randomUUID().toString(),
     val parentId: String? = null,
-    val childrenIds: MutableList<String> = mutableListOf(),
+    val childrenIds: List<String> = emptyList(),
     val timestamp: Long = System.currentTimeMillis(),
     val actionLabel: String,
     val params: DevelopmentParams,
@@ -106,7 +106,7 @@ class HistoryManager(initialParams: DevelopmentParams = DevelopmentParams()) {
             stepIndex = currentStep
         )
 
-        parent.childrenIds.add(newNode.id)
+        nodes[parent.id] = parent.copy(childrenIds = parent.childrenIds + newNode.id)
         nodes[newNode.id] = newNode
         currentNodeId = newNode.id
 

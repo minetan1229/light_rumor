@@ -93,7 +93,7 @@ class HapticManager(context: Context? = null) {
     fun performLimitThud() {
         vibrator?.let { vib ->
             try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
                     vib.areAllPrimitivesSupported(VibrationEffect.Composition.PRIMITIVE_THUD)) {
                     val effect = VibrationEffect.startComposition()
                         .addPrimitive(VibrationEffect.Composition.PRIMITIVE_THUD, 1.0f)

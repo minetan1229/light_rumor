@@ -18,6 +18,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.lightrumor.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Selective Batch Parameter Synchronization Dialog.
@@ -33,46 +36,39 @@ fun BatchSyncDialog(
     onSyncApplied: (BatchSyncOptions) -> Unit
 ) {
     var options by remember { mutableStateOf(BatchSyncOptions()) }
-
-    val bgDark = Color(0xFF141414)
-    val cardDark = Color(0xFF1C1C1C)
-    val borderDark = Color(0xFF2C2C2C)
-    val textPrimary = Color(0xFFEDEDED)
-    val textSecondary = Color(0xFF8E8E8E)
-    val accentAmber = Color(0xFFD4A373)
+    val colors = LightRumorTheme.colors
+    val coroutineScope = rememberCoroutineScope()
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(4.dp),
-            colors = CardDefaults.cardColors(containerColor = bgDark),
-            border = androidx.compose.foundation.BorderStroke(1.dp, borderDark),
+            colors = CardDefaults.cardColors(containerColor = colors.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, colors.borderStrong),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(8.dp)
         ) {
             Column(
                 modifier = Modifier
-                    .padding(20.dp)
+                    .padding(18.dp)
                     .verticalScroll(rememberScrollState())
             ) {
                 // Header
                 Text(
                     text = "一括パラメータ同期",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 1.5.sp,
-                    color = textPrimary
+                    style = LightRumorTheme.typography.Header,
+                    fontSize = 15.sp,
+                    color = colors.textPrimary
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "同期元: ${sourceItem.fileName.ifEmpty { "Current Photo" }} → ${targetItems.size}枚の対象写真",
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
-                    color = accentAmber
+                    text = "同期元: ${sourceItem.fileName.ifEmpty { "現在の写真" }} → ${targetItems.size}枚の対象写真",
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 12.sp,
+                    color = colors.accentAmber
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Quick Preset Row
                 Row(
@@ -111,52 +107,52 @@ fun BatchSyncDialog(
                     })
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Category Checkboxes
                 SyncCheckboxRow(
                     title = "ホワイトバランス & 色かぶり",
-                    description = "Temperature (${sourceItem.developParams.kelvin.toInt()}K), Tint (${"%.1f".format(sourceItem.developParams.tint)})",
+                    description = "色温度 (${sourceItem.developParams.kelvin.toInt()}K), 色かぶり補正 (${"%.1f".format(sourceItem.developParams.tint)})",
                     checked = options.syncWhiteBalance,
                     onCheckedChange = { options = options.copy(syncWhiteBalance = it) }
                 )
 
                 SyncCheckboxRow(
                     title = "基本トーン & コントラスト",
-                    description = "Exposure (${"%+.2f".format(sourceItem.developParams.exposureEV)} EV), Highlights, Shadows, Whites, Blacks",
+                    description = "露出 (${"%+.2f".format(sourceItem.developParams.exposureEV)} EV), ハイライト, シャドウ, 白レベル, 黒レベル",
                     checked = options.syncBasicTone,
                     onCheckedChange = { options = options.copy(syncBasicTone = it) }
                 )
 
                 SyncCheckboxRow(
                     title = "カラー & 彩度",
-                    description = "Vibrance, Global Saturation, Monochrome state",
+                    description = "自然な彩度, 彩度, モノクロ状態",
                     checked = options.syncColorMixer,
                     onCheckedChange = { options = options.copy(syncColorMixer = it) }
                 )
 
                 SyncCheckboxRow(
                     title = "ディテール & ノイズ低減",
-                    description = "Luminance NR, Chroma NR, Edge Sharpening",
+                    description = "輝度NR, カラーNR, 輪郭強調",
                     checked = options.syncDetailNR,
                     onCheckedChange = { options = options.copy(syncDetailNR = it) }
                 )
 
                 SyncCheckboxRow(
                     title = "トーンカーブ",
-                    description = "1D スプラインパラメトリックトーンカーブ",
+                    description = "パラメトリックトーンカーブ",
                     checked = options.syncToneCurve,
                     onCheckedChange = { options = options.copy(syncToneCurve = it) }
                 )
 
                 SyncCheckboxRow(
                     title = "レーティング & 選別フラグ",
-                    description = "Rating (${sourceItem.metadata.rating}/5), Flag (${sourceItem.metadata.pickStatus}), Label (${sourceItem.metadata.colorLabel.labelName})",
+                    description = "レーティング (${sourceItem.metadata.rating}/5), フラグ, カラーラベル",
                     checked = options.syncRatingAndLabel,
                     onCheckedChange = { options = options.copy(syncRatingAndLabel = it) }
                 )
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
                 // Actions: Cancel & Execute
                 Row(
@@ -164,41 +160,53 @@ fun BatchSyncDialog(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = onDismiss) {
+                    Box(
+                        modifier = Modifier
+                            .background(colors.surfaceElevated, RoundedCornerShape(2.dp))
+                            .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
+                            .clickable { onDismiss() }
+                            .padding(horizontal = 14.dp, vertical = 7.dp)
+                    ) {
                         Text(
                             text = "キャンセル",
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
-                            color = textSecondary
+                            fontFamily = FontFamily.SansSerif,
+                            fontSize = 12.sp,
+                            color = colors.textSecondary
                         )
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    Button(
-                        onClick = {
-                            // Apply to all target items in memory and asynchronously write to XMP
-                            targetItems.forEach { target ->
-                                options.merge(sourceItem.developParams, target.developParams)
-                                if (options.syncRatingAndLabel) {
-                                    target.metadata.rating = sourceItem.metadata.rating
-                                    target.metadata.pickStatus = sourceItem.metadata.pickStatus
-                                    target.metadata.colorLabel = sourceItem.metadata.colorLabel
+                    Box(
+                        modifier = Modifier
+                            .background(colors.accentAmber, RoundedCornerShape(2.dp))
+                            .clickable {
+                                // Apply to all target items in memory and asynchronously write to XMP
+                                val currentOptions = options
+                                coroutineScope.launch {
+                                    withContext(Dispatchers.IO) {
+                                        targetItems.forEach { target ->
+                                            currentOptions.merge(sourceItem.developParams, target.developParams)
+                                            if (currentOptions.syncRatingAndLabel) {
+                                                target.metadata.rating = sourceItem.metadata.rating
+                                                target.metadata.pickStatus = sourceItem.metadata.pickStatus
+                                                target.metadata.colorLabel = sourceItem.metadata.colorLabel
+                                            }
+                                            XmpSidecarManager.scheduleSaveSidecar(target.filePath, target.metadata, target.developParams)
+                                        }
+                                    }
                                 }
-                                XmpSidecarManager.scheduleSaveSidecar(target.filePath, target.metadata, target.developParams)
+                                onSyncApplied(options)
+                                onDismiss()
                             }
-                            onSyncApplied(options)
-                            onDismiss()
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = accentAmber),
-                        shape = RoundedCornerShape(2.dp)
+                            .padding(horizontal = 16.dp, vertical = 7.dp)
                     ) {
                         Text(
                             text = "同期実行",
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
+                            fontFamily = FontFamily.SansSerif,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color.Black
+                            color = colors.background
                         )
                     }
                 }
@@ -209,18 +217,20 @@ fun BatchSyncDialog(
 
 @Composable
 private fun PresetButton(label: String, onClick: () -> Unit) {
+    val colors = LightRumorTheme.colors
     Box(
         modifier = Modifier
-            .background(Color(0xFF222222), RoundedCornerShape(2.dp))
-            .border(1.dp, Color(0xFF333333), RoundedCornerShape(2.dp))
+            .background(colors.surfaceElevated, RoundedCornerShape(2.dp))
+            .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
             .clickable { onClick() }
-            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
         Text(
             text = label,
-            fontSize = 9.sp,
-            fontFamily = FontFamily.Monospace,
-            color = Color(0xFFCCCCCC)
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            fontFamily = FontFamily.SansSerif,
+            color = colors.textPrimary
         )
     }
 }
@@ -232,36 +242,59 @@ private fun SyncCheckboxRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
+    val colors = LightRumorTheme.colors
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onCheckedChange(!checked) }
-            .padding(vertical = 6.dp),
+            .padding(vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Checkbox(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = CheckboxDefaults.colors(
-                checkedColor = Color(0xFFD4A373),
-                uncheckedColor = Color(0xFF555555),
-                checkmarkColor = Color.Black
-            )
-        )
-        Spacer(modifier = Modifier.width(8.dp))
+        // Square precision checkbox
+        Box(
+            modifier = Modifier
+                .size(18.dp)
+                .background(if (checked) colors.accentAmber else colors.surfaceElevated, RoundedCornerShape(2.dp))
+                .border(1.dp, if (checked) colors.accentAmber else colors.borderStrong, RoundedCornerShape(2.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (checked) {
+                androidx.compose.foundation.Canvas(modifier = Modifier.size(10.dp)) {
+                    val strokeW = 1.8.dp.toPx()
+                    val path = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(size.width * 0.15f, size.height * 0.5f)
+                        lineTo(size.width * 0.42f, size.height * 0.8f)
+                        lineTo(size.width * 0.85f, size.height * 0.2f)
+                    }
+                    drawPath(
+                        path = path,
+                        color = colors.background,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(
+                            width = strokeW,
+                            cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                            join = androidx.compose.ui.graphics.StrokeJoin.Round
+                        )
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.width(10.dp))
+
         Column {
             Text(
                 text = title,
-                fontSize = 11.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
-                fontFamily = FontFamily.Monospace,
-                color = Color(0xFFE0E0E0)
+                fontFamily = FontFamily.SansSerif,
+                color = colors.textPrimary
             )
             Text(
                 text = description,
-                fontSize = 9.sp,
-                fontFamily = FontFamily.Monospace,
-                color = Color(0xFF777777)
+                fontSize = 11.sp,
+                fontFamily = FontFamily.SansSerif,
+                color = colors.textSecondary
             )
         }
     }

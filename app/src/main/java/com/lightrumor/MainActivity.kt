@@ -32,7 +32,7 @@ class MainActivity : ComponentActivity() {
     private val _photoItems = mutableStateOf<List<PhotoItem>>(emptyList())
     private val _currentIndex = mutableStateOf(0)
 
-    private fun resolvePhotoItem(uri: Uri): PhotoItem {
+    private suspend fun resolvePhotoItem(uri: Uri): PhotoItem {
         var fileName = ""
         if (uri.scheme == "content") {
             try {
@@ -55,7 +55,9 @@ class MainActivity : ComponentActivity() {
         if (resolvedPath.isEmpty() && ThumbnailLoader.isRawFile(fileName)) {
             try {
                 val tempDir = File(cacheDir, "raw_cache").apply { if (!exists()) mkdirs() }
-                val tempFile = File(tempDir, fileName)
+                trimRawCache(tempDir)
+                val safeRawName = "${uri.toString().hashCode()}_$fileName"
+                val tempFile = File(tempDir, safeRawName)
                 if (!tempFile.exists() || tempFile.length() == 0L) {
                     contentResolver.openInputStream(uri)?.use { input ->
                         tempFile.outputStream().use { output ->
@@ -71,13 +73,82 @@ class MainActivity : ComponentActivity() {
 
         val existingParams = editHistoryCatalog.getParamsForUri(uri.toString()) ?: DevelopmentParams()
 
-        return PhotoItem(
+        val item = PhotoItem(
             uri = uri,
             filePath = resolvedPath,
             fileName = fileName,
             isRaw = ThumbnailLoader.isRawFile(fileName),
             developParams = existingParams
         )
+        editHistoryCatalog.applyMetadataFromCatalog(uri.toString(), item.metadata)
+        if (item.metadata.cameraModel.isEmpty() && item.metadata.fNumber.isEmpty() && item.metadata.isoSpeed.isEmpty()) {
+            ThumbnailLoader.extractExif(this, item)
+        }
+        return item
+    }
+
+    private fun trimRawCache(cacheDir: File, maxSizeBytes: Long = 500L * 1024 * 1024) {
+        try {
+            val files = cacheDir.listFiles()?.filter { it.isFile } ?: return
+            var totalSize = files.sumOf { it.length() }
+            if (totalSize > maxSizeBytes) {
+                val sortedFiles = files.sortedBy { it.lastModified() }
+                for (f in sortedFiles) {
+                    val len = f.length()
+                    if (f.delete()) {
+                        totalSize -= len
+                        if (totalSize <= (maxSizeBytes * 0.8).toLong()) {
+                            break
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun handleIncomingIntent(intent: android.content.Intent?) {
+        if (intent == null) return
+        val uris = mutableListOf<Uri>()
+
+        @Suppress("DEPRECATION")
+        val intentUris = intent.getParcelableArrayListExtra<Uri>(IntentHandlerActivity.EXTRA_PHOTO_URIS)
+        if (intentUris != null) {
+            uris.addAll(intentUris)
+        }
+
+        intent.data?.let { dataUri ->
+            if (!uris.contains(dataUri)) uris.add(dataUri)
+        }
+
+        if (intent.action == android.content.Intent.ACTION_SEND) {
+            @Suppress("DEPRECATION")
+            (intent.getParcelableExtra<Uri>(android.content.Intent.EXTRA_STREAM))?.let {
+                if (!uris.contains(it)) uris.add(it)
+            }
+        } else if (intent.action == android.content.Intent.ACTION_SEND_MULTIPLE) {
+            @Suppress("DEPRECATION")
+            intent.getParcelableArrayListExtra<Uri>(android.content.Intent.EXTRA_STREAM)?.let { list ->
+                for (u in list) {
+                    if (!uris.contains(u)) uris.add(u)
+                }
+            }
+        }
+
+        if (uris.isNotEmpty()) {
+            lifecycleScope.launch {
+                val newItems = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    uris.map { resolvePhotoItem(it) }
+                }
+                _photoItems.value = newItems
+                _currentIndex.value = 0
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingIntent(intent)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -91,23 +162,19 @@ class MainActivity : ComponentActivity() {
                 val newItems = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                     selectedUris.map { resolvePhotoItem(it) }
                 }
-                _photoItems.value = newItems
-                _currentIndex.value = 0
+                if (_photoItems.value.isEmpty()) {
+                    _photoItems.value = newItems
+                    _currentIndex.value = 0
+                } else {
+                    val existingUris = _photoItems.value.map { it.uri.toString() }.toSet()
+                    val toAppend = newItems.filter { !existingUris.contains(it.uri.toString()) }
+                    _photoItems.value = _photoItems.value + toAppend
+                }
             }
         }
 
-        // Handle incoming URIs from IntentHandlerActivity
-        @Suppress("DEPRECATION")
-        val intentUris = intent.getParcelableArrayListExtra<Uri>(IntentHandlerActivity.EXTRA_PHOTO_URIS)
-        if (intentUris != null && intentUris.isNotEmpty()) {
-            lifecycleScope.launch {
-                val newItems = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    intentUris.map { resolvePhotoItem(it) }
-                }
-                _photoItems.value = newItems
-                _currentIndex.value = 0
-            }
-        }
+        // Handle incoming URIs from IntentHandlerActivity or external share
+        handleIncomingIntent(intent)
 
         enableEdgeToEdge()
         setContent {
@@ -149,11 +216,15 @@ class MainActivity : ComponentActivity() {
                         val recentItems = recentEntries.map { entry ->
                             PhotoItem(
                                 uri = Uri.parse(entry.uri),
+                                filePath = entry.filePath,
                                 fileName = entry.fileName,
-                                isRaw = ThumbnailLoader.isRawFile(entry.fileName),
+                                isRaw = ThumbnailLoader.isRawFile(entry.fileName.ifEmpty { entry.filePath }),
                                 developParams = editHistoryCatalog.getParamsForUri(entry.uri) ?: DevelopmentParams()
                             ).apply {
-                                metadata.captureDate = java.text.SimpleDateFormat("yyyy/MM/dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(entry.lastEditedAt))
+                                editHistoryCatalog.applyMetadataFromCatalog(entry.uri, metadata)
+                                if (entry.lastEditedAt > 0) {
+                                    metadata.captureDate = java.text.SimpleDateFormat("yyyy/MM/dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(entry.lastEditedAt))
+                                }
                             }
                         }
 
@@ -167,8 +238,15 @@ class MainActivity : ComponentActivity() {
                             devicePhotos = devicePhotos,
                             recentItems = recentItems,
                             onOpenBatch = { selectedList ->
-                                _photoItems.value = selectedList
-                                _currentIndex.value = 0
+                                coroutineScope.launch {
+                                    val resolvedList = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                        selectedList.map { item ->
+                                            resolvePhotoItem(item.uri)
+                                        }
+                                    }
+                                    _photoItems.value = resolvedList
+                                    _currentIndex.value = 0
+                                }
                             }
                         )
                     }
@@ -184,7 +262,9 @@ class MainActivity : ComponentActivity() {
                                     editHistoryCatalog.saveEntry(
                                         uri = item.uri.toString(),
                                         fileName = item.fileName,
-                                        params = updatedParams
+                                        params = updatedParams,
+                                        filePath = item.filePath,
+                                        metadata = item.metadata
                                     )
                                 }
                                 activeDevelopItem = null
@@ -216,6 +296,8 @@ class MainActivity : ComponentActivity() {
                             onOpenMultiCompare = { isCompareMode = true },
                             onOpenBatchSync = { isBatchSyncOpen = true },
                             onOpenDevelop = { item -> activeDevelopItem = item },
+                            onAddPhotos = { pickerLauncher.openMultiplePhotos() },
+                            editHistoryCatalog = editHistoryCatalog,
                             onBackToLauncher = { _photoItems.value = emptyList() }
                         )
 
@@ -230,6 +312,16 @@ class MainActivity : ComponentActivity() {
                                 onDismiss = { isBatchSyncOpen = false },
                                 onSyncApplied = {
                                     isBatchSyncOpen = false
+                                    targetItems.forEach { target ->
+                                        editHistoryCatalog.saveEntry(
+                                            uri = target.uri.toString(),
+                                            fileName = target.fileName,
+                                            params = target.developParams,
+                                            filePath = target.filePath,
+                                            metadata = target.metadata
+                                        )
+                                    }
+                                    _photoItems.value = _photoItems.value.map { it.copy() }
                                 }
                             )
                         }

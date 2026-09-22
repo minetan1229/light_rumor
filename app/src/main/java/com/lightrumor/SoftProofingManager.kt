@@ -82,7 +82,7 @@ object SoftProofingManager {
     ): IntArray {
         if (!_state.value.isEnabled) return rgbaPixels
         // Direct invocation via native JNI or engine
-        return LightRumorNativeEngine.nativeApplySoftProof(
+        return LightRumorNativeEngine.applySoftProof(
             pixels = rgbaPixels,
             width = width,
             height = height,

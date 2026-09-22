@@ -196,10 +196,10 @@ bool testColorToneAndDithering() {
     lightrumor::FloatRGBA blownPixel(2.0f, 2.0f, 2.0f);
     std::vector<lightrumor::FloatRGBA> blownTile(9, blownPixel);
     lightrumor::DevelopmentParams hlParams;
-    hlParams.highlights = 80.0f;
+    hlParams.highlights = -80.0f;
     lightrumor::ExportPipeline::processTileLinear(blownTile, 3, 3, 1, 1, 1, hlParams, outTile);
     LR_TEST_ASSERT(outTile[0].r < 2.0f, "Highlights recovery should compress values above knee threshold");
-    std::cout << "  ✓ Highlight Recovery (Amount 80): Blown 2.0 compressed to " << outTile[0].r << "\n";
+    std::cout << "  ✓ Highlight Recovery (Amount -80): Blown 2.0 compressed to " << outTile[0].r << "\n";
 
     // Test Vibrance with Skin-Tone Protection
     // Skin tone pixel (R=0.62, G=0.42, B=0.32) vs Saturated cyan pixel (R=0.1, G=0.6, B=0.6)

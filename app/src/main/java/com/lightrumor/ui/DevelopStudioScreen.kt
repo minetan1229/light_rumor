@@ -1,6 +1,7 @@
 package com.lightrumor.ui
 
 import android.graphics.Bitmap
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -39,6 +40,10 @@ fun DevelopStudioScreen(
 ) {
     var isDarkTheme by remember { mutableStateOf(true) }
     var devParams by remember(photoItem.uri) { mutableStateOf(photoItem.developParams.deepCopy()) }
+
+    BackHandler {
+        onBack(devParams)
+    }
     var hoverPreviewParams by remember { mutableStateOf<DevelopmentParams?>(null) }
     var compareMode by remember { mutableStateOf(CompareMode.Off) }
     var waveformSize by remember { mutableStateOf(WaveformSize.NORMAL) }
@@ -65,7 +70,7 @@ fun DevelopStudioScreen(
         mutableStateOf(cacheManager.getFromMemory(photoItem.filePath.ifEmpty { photoItem.uri.toString() }))
     }
 
-    LaunchedEffect(photoItem) {
+    LaunchedEffect(photoItem.uri) {
         cacheManager.loadBitmap(photoItem) { bmp ->
             originalBitmap = bmp
         }
@@ -83,115 +88,136 @@ fun DevelopStudioScreen(
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // -------------------------------------------------------------
-                // 1. TOP STATUS & EXIF BAR (5% height)
+                // 1. TOP STATUS & EXIF BAR (Header HUD)
                 // -------------------------------------------------------------
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(44.dp)
+                        .height(48.dp)
                         .background(colors.surface)
                         .border(1.dp, colors.borderStrong)
-                        .padding(horizontal = 12.dp),
+                        .padding(horizontal = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Back & Photo Metadata
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "< 選別",
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = colors.accentAmber,
-                            modifier = Modifier
-                                .clickable { onBack(devParams) }
-                                .padding(end = 12.dp, top = 4.dp, bottom = 4.dp)
-                        )
-
-                        Text(
-                            text = photoItem.fileName,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 12.sp,
-                            color = colors.textPrimary,
-                            maxLines = 1
-                        )
-                    }
-
-                    // Camera EXIF Readout & Theme Switcher
+                    // Back Button & Photo Metadata HUD
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier.weight(1f, fill = false)
                     ) {
-                        // Camera EXIF Readout
-                        val meta = photoItem.metadata
-                        val exifParts = listOfNotNull(
-                            meta.cameraModel.takeIf { it.isNotBlank() },
-                            meta.isoSpeed.takeIf { it.isNotBlank() },
-                            meta.exposureTime.takeIf { it.isNotBlank() },
-                            meta.fNumber.takeIf { it.isNotBlank() },
-                            meta.focalLength.takeIf { it.isNotBlank() }
-                        )
-                        if (exifParts.isNotEmpty()) {
+                        // Minimalist Vector Chevron Back Button
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clickable { onBack(devParams) }
+                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            androidx.compose.foundation.Canvas(modifier = Modifier.size(10.dp, 14.dp)) {
+                                val path = androidx.compose.ui.graphics.Path().apply {
+                                    moveTo(size.width, 0f)
+                                    lineTo(0f, size.height / 2f)
+                                    lineTo(size.width, size.height)
+                                }
+                                drawPath(
+                                    path = path,
+                                    color = colors.accentAmber,
+                                    style = androidx.compose.ui.graphics.drawscope.Stroke(
+                                        width = 2.dp.toPx(),
+                                        cap = androidx.compose.ui.graphics.StrokeCap.Square,
+                                        join = androidx.compose.ui.graphics.StrokeJoin.Miter
+                                    )
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = exifParts.joinToString(" "),
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 10.sp,
-                                color = colors.textSecondary
+                                text = "選別",
+                                style = LightRumorTheme.typography.Button,
+                                color = colors.accentAmber
                             )
                         }
 
+                        Box(
+                            modifier = Modifier
+                                .padding(horizontal = 8.dp)
+                                .height(20.dp)
+                                .width(1.dp)
+                                .background(colors.borderSubtle)
+                        )
+
+                        // 2-Line Filename & EXIF Readout
+                        val meta = photoItem.metadata
+                        val exifParts = listOfNotNull(
+                            meta.fNumber.takeIf { it.isNotBlank() },
+                            meta.exposureTime.takeIf { it.isNotBlank() },
+                            meta.isoSpeed.takeIf { it.isNotBlank() },
+                            meta.focalLength.takeIf { it.isNotBlank() }
+                        )
+
+                        Column(verticalArrangement = Arrangement.Center) {
+                            Text(
+                                text = photoItem.fileName,
+                                style = LightRumorTheme.typography.Header,
+                                color = colors.textPrimary,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                            if (exifParts.isNotEmpty()) {
+                                Text(
+                                    text = exifParts.joinToString("  "),
+                                    style = LightRumorTheme.typography.MicroIndex,
+                                    color = colors.textSecondary
+                                )
+                            }
+                        }
+                    }
+
+                    // Studio Mode Selector Chips & Theme Toggle
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
                         // Studio Mode Selector Chips
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            StudioMode.values().forEach { mode ->
-                                val isSel = (studioMode == mode)
-                                val modeLabel = when (mode) {
-                                    StudioMode.Develop -> "現像"
-                                    StudioMode.Masks -> "マスク(${maskLayers.size})"
-                                    StudioMode.Presets -> "プリセット"
-                                    StudioMode.Reel -> "リール"
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .background(if (isSel) colors.accentAmber.copy(alpha = 0.2f) else colors.surfaceElevated, RoundedCornerShape(3.dp))
-                                        .border(1.dp, if (isSel) colors.accentAmber else colors.borderSubtle, RoundedCornerShape(3.dp))
-                                        .clickable {
-                                            hapticManager.performDialTick()
-                                            studioMode = mode
-                                        }
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = modeLabel,
-                                        fontFamily = FontFamily.Monospace,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp,
-                                        color = if (isSel) colors.accentAmber else colors.textSecondary
-                                    )
-                                }
+                        StudioMode.entries.forEach { mode ->
+                            val isSel = (studioMode == mode)
+                            val modeLabel = when (mode) {
+                                StudioMode.Develop -> "現像"
+                                StudioMode.Masks -> if (maskLayers.isNotEmpty()) "マスク(${maskLayers.size})" else "マスク"
+                                StudioMode.Presets -> "プリセット"
+                                StudioMode.Reel -> "履歴"
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .background(if (isSel) colors.accentAmber.copy(alpha = 0.15f) else colors.surfaceElevated, LightRumorShapes.Panel)
+                                    .border(1.dp, if (isSel) colors.accentAmber else colors.borderSubtle, LightRumorShapes.Panel)
+                                    .clickable {
+                                        hapticManager.performDialTick()
+                                        studioMode = mode
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 5.dp)
+                            ) {
+                                Text(
+                                    text = modeLabel,
+                                    style = LightRumorTheme.typography.Button,
+                                    color = if (isSel) colors.accentAmber else colors.textSecondary
+                                )
                             }
                         }
 
-                        // Theme Toggle: Obsidian / Arctic
+                        // Compact Theme Toggle Icon
                         Box(
                             modifier = Modifier
-                                .background(colors.surfaceElevated, RoundedCornerShape(3.dp))
-                                .border(1.dp, colors.borderSubtle, RoundedCornerShape(3.dp))
+                                .background(colors.surfaceElevated, LightRumorShapes.Panel)
+                                .border(1.dp, colors.borderSubtle, LightRumorShapes.Panel)
                                 .clickable {
                                     hapticManager.performDialTick()
                                     isDarkTheme = !isDarkTheme
                                 }
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                                .padding(horizontal = 7.dp, vertical = 5.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = if (isDarkTheme) "OBSIDIAN" else "ARCTIC",
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 10.sp,
+                                text = if (isDarkTheme) "DARK" else "LIGHT",
+                                style = LightRumorTheme.typography.Badge,
                                 color = colors.accentAmber
                             )
                         }
@@ -318,7 +344,7 @@ fun DevelopStudioScreen(
                     label = cfg.label,
                     value = cfg.value,
                     onValueChange = { newVal ->
-                        cfg.value = newVal
+                        dialState = cfg.copy(value = newVal)
                         cfg.onUpdate(newVal)
                     },
                     range = cfg.range,
@@ -338,9 +364,9 @@ enum class StudioMode {
     Reel
 }
 
-private class DialConfig(
+private data class DialConfig(
     val label: String,
-    var value: Float,
+    val value: Float,
     val range: ClosedFloatingPointRange<Float>,
     val unit: String,
     val onUpdate: (Float) -> Unit

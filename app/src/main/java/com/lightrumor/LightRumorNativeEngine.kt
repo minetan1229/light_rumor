@@ -5,15 +5,31 @@ interface ProgressCallback {
 }
 
 object LightRumorNativeEngine {
+    val isAvailable: Boolean
+
     init {
+        var loaded = false
         try {
             System.loadLibrary("light_rumor_engine")
+            loaded = true
         } catch (e: UnsatisfiedLinkError) {
             System.err.println("LightRumorNativeEngine: Native library light_rumor_engine not found or loaded in desktop test: " + e.message)
+        } catch (e: Throwable) {
+            System.err.println("LightRumorNativeEngine: Failed to load native library: " + e.message)
         }
+        isAvailable = loaded
     }
 
     external fun nativeInit(): Boolean
+
+    fun initNative(): Boolean {
+        if (!isAvailable) return false
+        return try {
+            nativeInit()
+        } catch (e: Throwable) {
+            false
+        }
+    }
 
     external fun nativeExtractThumbnail(filePath: String): ByteArray?
 
@@ -49,33 +65,39 @@ object LightRumorNativeEngine {
         params: DevelopmentParams,
         callback: ProgressCallback?
     ): Boolean {
-        return nativeProcessRaw(
-            inputPath = inputPath,
-            outputPath = outputPath,
-            format = config.format.id,
-            jpegQuality = config.jpegQuality,
-            chromaSubsampling = config.chromaSubsampling.id,
-            kelvin = params.kelvin,
-            tint = params.tint,
-            exposureEV = params.exposureEV,
-            contrast = params.contrast,
-            highlights = params.highlights,
-            shadows = params.shadows,
-            whites = params.whites,
-            blacks = params.blacks,
-            vibrance = params.vibrance,
-            saturation = params.saturation,
-            isMonochrome = params.isMonochrome,
-            luminanceNR = params.luminanceNR,
-            chromaNR = params.chromaNR,
-            sharpeningAmount = params.sharpeningAmount,
-            outputColorSpace = params.outputColorSpace.id,
-            enableDithering = params.enableDithering,
-            callback = callback
-        )
+        if (!isAvailable) return false
+        return try {
+            nativeProcessRaw(
+                inputPath = inputPath,
+                outputPath = outputPath,
+                format = config.format.id,
+                jpegQuality = config.jpegQuality,
+                chromaSubsampling = config.chromaSubsampling.id,
+                kelvin = params.kelvin,
+                tint = params.tint,
+                exposureEV = params.exposureEV,
+                contrast = params.contrast,
+                highlights = params.highlights,
+                shadows = params.shadows,
+                whites = params.whites,
+                blacks = params.blacks,
+                vibrance = params.vibrance,
+                saturation = params.saturation,
+                isMonochrome = params.isMonochrome,
+                luminanceNR = params.luminanceNR,
+                chromaNR = params.chromaNR,
+                sharpeningAmount = params.sharpeningAmount,
+                outputColorSpace = params.outputColorSpace.id,
+                enableDithering = params.enableDithering,
+                callback = callback
+            )
+        } catch (e: Throwable) {
+            false
+        }
     }
 
     fun extractThumbnailBytes(filePath: String): ByteArray? {
+        if (!isAvailable) return null
         return try {
             nativeExtractThumbnail(filePath)
         } catch (e: Throwable) {
@@ -100,11 +122,13 @@ object LightRumorNativeEngine {
         waveW: Int = 512,
         waveH: Int = 256
     ): IntArray {
-        try {
-            val result = nativeComputeWaveform(rgbaBytes, width, height, mode, waveW, waveH)
-            if (result != null && result.isNotEmpty()) return result
-        } catch (e: Throwable) {
-            // Fall through to Kotlin fallback
+        if (isAvailable) {
+            try {
+                val result = nativeComputeWaveform(rgbaBytes, width, height, mode, waveW, waveH)
+                if (result != null && result.isNotEmpty()) return result
+            } catch (e: Throwable) {
+                // Fall through to Kotlin fallback
+            }
         }
 
         // Pure Kotlin SIMD-like fast fallback for preview / testing
@@ -144,6 +168,13 @@ object LightRumorNativeEngine {
                         countG[yG * waveW + (subW + subCol)]++
                         countB[yB * waveW + (2 * subW + subCol)]++
                     }
+                } else if (mode == 2) { // Histogram
+                    val colR = (r * (waveW - 1)) / 255
+                    val colG = (g * (waveW - 1)) / 255
+                    val colB = (b * (waveW - 1)) / 255
+                    countR[colR]++
+                    countG[colG]++
+                    countB[colB]++
                 }
             }
         }
@@ -151,6 +182,33 @@ object LightRumorNativeEngine {
         // Colorize
         val bg = 0xFF0C0A0A.toInt()
         val divColor = 0xFF2D2F33.toInt()
+
+        if (mode == 2) {
+            val maxCount = (0 until waveW).maxOfOrNull {
+                maxOf(countR[it], countG[it], countB[it])
+            }?.coerceAtLeast(1) ?: 1
+
+            for (x in 0 until waveW) {
+                val hR = (countR[x].toLong() * waveH / maxCount).toInt().coerceIn(0, waveH)
+                val hG = (countG[x].toLong() * waveH / maxCount).toInt().coerceIn(0, waveH)
+                val hB = (countB[x].toLong() * waveH / maxCount).toInt().coerceIn(0, waveH)
+
+                for (y in 0 until waveH) {
+                    val pIdx = y * waveW + x
+                    val fromBottom = (waveH - 1) - y
+                    val r = if (fromBottom < hR) 220 else 0
+                    val g = if (fromBottom < hG) 220 else 0
+                    val b = if (fromBottom < hB) 220 else 0
+
+                    if (r == 0 && g == 0 && b == 0) {
+                        outPixels[pIdx] = bg
+                    } else {
+                        outPixels[pIdx] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+                    }
+                }
+            }
+            return outPixels
+        }
 
         for (y in 0 until waveH) {
             for (x in 0 until waveW) {
@@ -212,11 +270,13 @@ object LightRumorNativeEngine {
         feather: Float = 0.5f,
         invert: Boolean = false
     ): FloatArray {
-        try {
-            val res = nativeEvaluateRadialMask(width, height, centerX, centerY, radiusX, radiusY, angleRad, feather, invert)
-            if (res != null) return res
-        } catch (e: Throwable) {
-            // Fallback
+        if (isAvailable) {
+            try {
+                val res = nativeEvaluateRadialMask(width, height, centerX, centerY, radiusX, radiusY, angleRad, feather, invert)
+                if (res != null) return res
+            } catch (e: Throwable) {
+                // Fallback
+            }
         }
 
         val out = FloatArray(width * height)
@@ -246,6 +306,26 @@ object LightRumorNativeEngine {
         return out
     }
 
+    fun applyPoissonHeal(
+        pixels: IntArray,
+        width: Int,
+        height: Int,
+        srcX: Float,
+        srcY: Float,
+        dstX: Float,
+        dstY: Float,
+        radius: Float,
+        feather: Float,
+        iterations: Int
+    ): IntArray? {
+        if (!isAvailable) return null
+        return try {
+            nativeApplyPoissonHeal(pixels, width, height, srcX, srcY, dstX, dstY, radius, feather, iterations)
+        } catch (e: Throwable) {
+            null
+        }
+    }
+
     external fun nativeComputeFieldScope(
         pixels: IntArray,
         width: Int,
@@ -255,6 +335,23 @@ object LightRumorNativeEngine {
         peakingColor: Int,
         peakingThreshold: Float
     ): IntArray?
+
+    fun computeFieldScope(
+        pixels: IntArray,
+        width: Int,
+        height: Int,
+        mode: Int,
+        zebraThresholdIRE: Float,
+        peakingColor: Int,
+        peakingThreshold: Float
+    ): IntArray? {
+        if (!isAvailable) return null
+        return try {
+            nativeComputeFieldScope(pixels, width, height, mode, zebraThresholdIRE, peakingColor, peakingThreshold)
+        } catch (e: Throwable) {
+            null
+        }
+    }
 
     external fun nativeApplySoftProof(
         pixels: IntArray,
@@ -268,6 +365,25 @@ object LightRumorNativeEngine {
         gamutWarningColor: Int
     ): IntArray?
 
+    fun applySoftProof(
+        pixels: IntArray,
+        width: Int,
+        height: Int,
+        profilePath: String,
+        intent: Int,
+        simulatePaperWhite: Boolean,
+        simulateBlackInk: Boolean,
+        showGamutWarning: Boolean,
+        gamutWarningColor: Int
+    ): IntArray? {
+        if (!isAvailable) return null
+        return try {
+            nativeApplySoftProof(pixels, width, height, profilePath, intent, simulatePaperWhite, simulateBlackInk, showGamutWarning, gamutWarningColor)
+        } catch (e: Throwable) {
+            null
+        }
+    }
+
     external fun nativeProcessRawMultiRecipe(
         inputPath: String,
         outputPath: String,
@@ -280,5 +396,25 @@ object LightRumorNativeEngine {
         enableWatermark: Boolean,
         watermarkText: String
     ): Boolean
+
+    fun processRawMultiRecipe(
+        inputPath: String,
+        outputPath: String,
+        format: Int,
+        colorSpace: Int,
+        quality: Int,
+        maxDimension: Int,
+        applySharpening: Boolean,
+        sharpeningAmount: Float,
+        enableWatermark: Boolean,
+        watermarkText: String
+    ): Boolean {
+        if (!isAvailable) return false
+        return try {
+            nativeProcessRawMultiRecipe(inputPath, outputPath, format, colorSpace, quality, maxDimension, applySharpening, sharpeningAmount, enableWatermark, watermarkText)
+        } catch (e: Throwable) {
+            false
+        }
+    }
 }
 

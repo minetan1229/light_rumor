@@ -48,7 +48,7 @@ class ExportService : Service() {
 
     private var wakeLock: PowerManager.WakeLock? = null
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
-    private var isExporting = false
+    private val activeTasks = java.util.concurrent.atomic.AtomicInteger(0)
 
     override fun onCreate() {
         super.onCreate()
@@ -57,6 +57,8 @@ class ExportService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        startForegroundNotification()
+
         when (intent?.action) {
             ACTION_START_EXPORT -> {
                 val inputPath = intent.getStringExtra(EXTRA_INPUT_PATH) ?: ""
@@ -68,13 +70,18 @@ class ExportService : Service() {
                     DevelopmentParams()
                 }
                 if (inputPath.isNotEmpty() && outputPath.isNotEmpty()) {
-                    startForegroundNotification()
                     executeExport(inputPath, outputPath, params)
                 } else {
+                    stopForegroundCompat()
                     stopSelf()
                 }
             }
             ACTION_CANCEL_EXPORT -> {
+                stopForegroundCompat()
+                stopSelf()
+            }
+            else -> {
+                stopForegroundCompat()
                 stopSelf()
             }
         }
@@ -110,7 +117,13 @@ class ExportService : Service() {
 
     private fun startForegroundNotification() {
         val notification = buildProgressNotification(0, "RAW 現像パイプライン準備中...")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (Build.VERSION.SDK_INT >= 35) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
+            )
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 NOTIFICATION_ID,
                 notification,
@@ -138,13 +151,18 @@ class ExportService : Service() {
     }
 
     private fun executeExport(inputPath: String, outputPath: String, params: DevelopmentParams) {
-        if (isExporting) return
-        isExporting = true
+        activeTasks.incrementAndGet()
 
         executor.execute {
             try {
+                val format = when {
+                    outputPath.endsWith(".tif", ignoreCase = true) || outputPath.endsWith(".tiff", ignoreCase = true) -> ExportFormat.TIFF16
+                    outputPath.endsWith(".dng", ignoreCase = true) -> ExportFormat.LinearDNG
+                    outputPath.endsWith(".webp", ignoreCase = true) -> ExportFormat.WebP
+                    else -> ExportFormat.JPEG
+                }
                 val config = ExportConfig(
-                    format = if (outputPath.endsWith(".tif", ignoreCase = true) || outputPath.endsWith(".tiff", ignoreCase = true)) ExportFormat.TIFF16 else ExportFormat.JPEG,
+                    format = format,
                     jpegQuality = 98,
                     chromaSubsampling = ChromaSubsampling.YUV444,
                     tileSize = 2048,
@@ -164,16 +182,60 @@ class ExportService : Service() {
                 )
 
                 if (success) {
+                    try {
+                        val mimeType = when {
+                            outputPath.endsWith(".jpg", ignoreCase = true) || outputPath.endsWith(".jpeg", ignoreCase = true) -> "image/jpeg"
+                            outputPath.endsWith(".tif", ignoreCase = true) || outputPath.endsWith(".tiff", ignoreCase = true) -> "image/tiff"
+                            outputPath.endsWith(".dng", ignoreCase = true) -> "image/x-adobe-dng"
+                            outputPath.endsWith(".webp", ignoreCase = true) -> "image/webp"
+                            else -> null
+                        }
+                        android.media.MediaScannerConnection.scanFile(
+                            this@ExportService,
+                            arrayOf(outputPath),
+                            if (mimeType != null) arrayOf(mimeType) else null,
+                            null
+                        )
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
                     showCompletionNotification(outputPath)
+                } else {
+                    try {
+                        val file = File(outputPath)
+                        if (file.exists()) {
+                            file.delete()
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
+                try {
+                    val file = File(outputPath)
+                    if (file.exists()) {
+                        file.delete()
+                    }
+                } catch (ex: Exception) {
+                    ex.printStackTrace()
+                }
             } finally {
-                isExporting = false
-                releaseWakeLock()
-                stopForeground(true)
-                stopSelf()
+                if (activeTasks.decrementAndGet() <= 0) {
+                    releaseWakeLock()
+                    stopForegroundCompat()
+                    stopSelf()
+                }
             }
+        }
+    }
+
+    private fun stopForegroundCompat() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
         }
     }
 

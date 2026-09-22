@@ -46,7 +46,7 @@ class IntentHandlerActivity : Activity() {
                 action = incomingIntent.action
                 putParcelableArrayListExtra(EXTRA_PHOTO_URIS, ArrayList<Parcelable>(resolvedUris))
                 putExtra(EXTRA_LAUNCH_ACTION, incomingIntent.action)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_GRANT_READ_URI_PERMISSION
             }
             startActivity(targetIntent)
         }
@@ -68,8 +68,8 @@ class IntentHandlerActivity : Activity() {
                 }
                 if (uri != null) {
                     uris.add(uri)
-                } else if (intent.data != null) {
-                    uris.add(intent.data!!)
+                } else {
+                    intent.data?.let { uris.add(it) }
                 }
             }
 
@@ -99,9 +99,7 @@ class IntentHandlerActivity : Activity() {
 
             Intent.ACTION_EDIT, Intent.ACTION_VIEW -> {
                 // Direct edit or view from Camera app
-                if (intent.data != null) {
-                    uris.add(intent.data!!)
-                }
+                intent.data?.let { uris.add(it) }
             }
         }
 

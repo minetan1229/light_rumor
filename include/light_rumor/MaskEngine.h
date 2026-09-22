@@ -26,14 +26,18 @@ public:
                                    const std::vector<FloatRGBA>& inPixels,
                                    int32_t width, int32_t height,
                                    const std::vector<float>& depthBuffer,
-                                   std::vector<float>& outMask);
+                                   std::vector<float>& outMask,
+                                   int32_t offsetX = 0, int32_t offsetY = 0,
+                                   int32_t fullWidth = -1, int32_t fullHeight = -1);
 
     // Evaluate multiple mask layers using their Boolean combination operations
     static void evaluateCompositeMask(const std::vector<MaskLayer>& layers,
                                       const std::vector<FloatRGBA>& inPixels,
                                       int32_t width, int32_t height,
                                       const std::vector<float>& depthBuffer,
-                                      std::vector<float>& outCompositeMask);
+                                      std::vector<float>& outCompositeMask,
+                                      int32_t offsetX = 0, int32_t offsetY = 0,
+                                      int32_t fullWidth = -1, int32_t fullHeight = -1);
 
     // Apply local photographic adjustments modulated by mask weights
     static void applyLocalAdjustments(std::vector<FloatRGBA>& pixels,
@@ -45,23 +49,31 @@ public:
     static void processMaskLayers(std::vector<FloatRGBA>& pixels,
                                   int32_t width, int32_t height,
                                   const std::vector<MaskLayer>& layers,
-                                  const std::vector<float>& depthBuffer = {});
+                                  const std::vector<float>& depthBuffer = {},
+                                  int32_t offsetX = 0, int32_t offsetY = 0,
+                                  int32_t fullWidth = -1, int32_t fullHeight = -1);
 
     // Retouch: Clone Stamp (direct pixel copy with soft feather)
     static void applyCloneStamp(std::vector<FloatRGBA>& pixels,
                                 int32_t width, int32_t height,
-                                const RetouchOperation& op);
+                                const RetouchOperation& op,
+                                int32_t offsetX = 0, int32_t offsetY = 0,
+                                int32_t fullWidth = -1, int32_t fullHeight = -1);
 
     // Retouch: Poisson Image Editing (seamless gradient membrane solver for dust/blemish healing)
     static void applyPoissonHeal(std::vector<FloatRGBA>& pixels,
                                  int32_t width, int32_t height,
                                  const RetouchOperation& op,
-                                 int32_t maxIterations = 40);
+                                 int32_t maxIterations = 40,
+                                 int32_t offsetX = 0, int32_t offsetY = 0,
+                                 int32_t fullWidth = -1, int32_t fullHeight = -1);
 
     // Process all retouch operations
     static void processRetouchOps(std::vector<FloatRGBA>& pixels,
                                   int32_t width, int32_t height,
-                                  const std::vector<RetouchOperation>& ops);
+                                  const std::vector<RetouchOperation>& ops,
+                                  int32_t offsetX = 0, int32_t offsetY = 0,
+                                  int32_t fullWidth = -1, int32_t fullHeight = -1);
 
     // Helper functions for mask math
     static float evaluateLinearAt(float x, float y, const Point2D& start, const Point2D& end,
@@ -77,7 +89,9 @@ public:
     static void rasterizeBrushStrokes(const std::vector<BrushStrokePoint>& strokes,
                                       float baseRadius, float feather,
                                       int32_t width, int32_t height,
-                                      std::vector<float>& outMask);
+                                      std::vector<float>& outMask,
+                                      int32_t offsetX = 0, int32_t offsetY = 0,
+                                      int32_t fullWidth = -1, int32_t fullHeight = -1);
 
     static float evaluateLuminanceAt(const FloatRGBA& p, float lumaMin, float lumaMax,
                                      float fLow, float fHigh, bool invert);

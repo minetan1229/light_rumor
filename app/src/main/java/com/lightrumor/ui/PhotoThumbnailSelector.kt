@@ -59,7 +59,7 @@ fun PhotoThumbnailSelector(
             val isSelected = item.id == selectedId
             Column(
                 modifier = Modifier
-                    .width(76.dp)
+                    .width(88.dp)
                     .clip(RoundedCornerShape(4.dp))
                     .background(if (isSelected) colors.surfaceElevated else colors.surface)
                     .border(
@@ -68,14 +68,14 @@ fun PhotoThumbnailSelector(
                         shape = RoundedCornerShape(4.dp)
                     )
                     .clickable { onItemSelected(item) }
-                    .padding(3.dp),
+                    .padding(4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Real Photographic Preview Thumbnail
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
+                        .height(58.dp)
                         .background(Color(0xFF1E2024), RoundedCornerShape(2.dp))
                         .clip(RoundedCornerShape(2.dp)),
                     contentAlignment = Alignment.Center
@@ -91,9 +91,9 @@ fun PhotoThumbnailSelector(
                         // High-contrast fallback visual test plate
                         Text(
                             text = item.title.take(3).uppercase(),
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = FontFamily.SansSerif,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
+                            fontSize = 14.sp,
                             color = if (isSelected) colors.accentAmber else colors.textSecondary
                         )
                     }
@@ -104,17 +104,17 @@ fun PhotoThumbnailSelector(
                 // Label & Technical Subtitle
                 Text(
                     text = item.title.uppercase(),
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = FontFamily.SansSerif,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 9.sp,
+                    fontSize = 12.sp,
                     color = if (isSelected) colors.textPrimary else colors.textSecondary,
                     maxLines = 1
                 )
                 Text(
                     text = item.subtitle,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 7.sp,
-                    color = colors.textTertiary,
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 11.sp,
+                    color = colors.textSecondary,
                     maxLines = 1
                 )
             }

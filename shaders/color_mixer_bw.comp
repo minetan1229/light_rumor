@@ -7,6 +7,7 @@ layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 layout(push_constant) uniform ColorMixerParams {
     int isMonochrome;           // 0: Color HSL, 1: 8-Channel Monochrome
+    int _pad0;                  // 8-byte alignment padding for ivec2 tileSize
     ivec2 tileSize;             // (width, height)
     int padding;                // padding pixels
 
@@ -32,7 +33,7 @@ layout(std430, set = 0, binding = 2) readonly buffer HslMixerBuffer {
     vec4 hslBands[8];           // x: hueShift (-1..1), y: satShift (-1..1), z: lumShift (-1..1), w: unused
     vec4 monoWeights0;          // weights for bands 0..3
     vec4 monoWeights1;          // weights for bands 4..7
-};
+} hslMixer;
 
 // 8 band center angles in normalized hue [0.0, 1.0]
 const float bandCenters[8] = float[8](
@@ -136,7 +137,7 @@ void main() {
             float dist = hueDistance(hsl.x, bandCenters[b]);
             // Cosine bell with half-width ~45 degrees (0.125 normalized)
             float w = max(0.0, cos(clamp(dist / 0.125, 0.0, 1.0) * 1.570796));
-            float weightB = (b < 4) ? monoWeights0[b] : monoWeights1[b - 4];
+            float weightB = (b < 4) ? hslMixer.monoWeights0[b] : hslMixer.monoWeights1[b - 4];
             totalWeight += w;
             filteredWeight += w * weightB;
         }
@@ -159,7 +160,7 @@ void main() {
                 float dist = hueDistance(hsl.x, bandCenters[b]);
                 float w = max(0.0, cos(clamp(dist / 0.125, 0.0, 1.0) * 1.570796));
                 sumW += w;
-                deltaHSL += w * hslBands[b].xyz;
+                deltaHSL += w * hslMixer.hslBands[b].xyz;
             }
 
             if (sumW > 1e-5) {

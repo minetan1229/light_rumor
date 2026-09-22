@@ -2,6 +2,7 @@ package com.lightrumor
 
 import kotlinx.coroutines.*
 import java.io.File
+import java.util.Locale
 
 data class ExportRecipeConfig(
     val id: String,
@@ -32,7 +33,7 @@ data class ExifWatermarkConfig(
         } else {
             "${shutterSpeed}s"
         }
-        val fStr = String.format("f/%.1f", aperture)
+        val fStr = String.format(Locale.ROOT, "f/%.1f", aperture)
         val flStr = "${focalLength.toInt()}mm"
         return "$cameraModel  |  $lensModel  |  $flStr  $fStr  $shutterStr  ISO $iso  |  $copyright"
     }
@@ -108,6 +109,7 @@ class MultiExportRecipeManager(
         params: DevelopmentParams,
         recipes: List<ExportRecipeConfig> = STANDARD_MASTER_RECIPES,
         watermark: ExifWatermarkConfig = ExifWatermarkConfig(),
+        context: android.content.Context? = null,
         progressListener: (MultiExportProgress) -> Unit
     ): Job {
         return coroutineScope.launch {
@@ -116,6 +118,7 @@ class MultiExportRecipeManager(
 
             // Run recipes sequentially to prevent LMK (Low Memory Killer) kill on mobile
             for (recipe in recipes) {
+                if (!coroutineScope.isActive) break
                 val ext = when (recipe.format) {
                     ExportFormat.TIFF16, ExportFormat.TIFF8 -> "tif"
                     ExportFormat.WebP -> "webp"
@@ -125,41 +128,94 @@ class MultiExportRecipeManager(
                 val outName = "${baseFilename}_${recipe.id}.${ext}"
                 val outFile = File(outDirectory, outName).absolutePath
 
-                progressListener(
-                    MultiExportProgress(
-                        recipeId = recipe.id,
-                        recipeName = recipe.name,
-                        progressPercent = 0.0f,
-                        statusMessage = "Starting ${recipe.name}..."
+                withContext(Dispatchers.Main) {
+                    progressListener(
+                        MultiExportProgress(
+                            recipeId = recipe.id,
+                            recipeName = recipe.name,
+                            progressPercent = 0.0f,
+                            statusMessage = "Starting ${recipe.name}..."
+                        )
                     )
+                }
+
+                val recipeParams = params.deepCopy().apply {
+                    outputColorSpace = recipe.colorSpace
+                    if (recipe.applyEdgeSharpening) {
+                        sharpeningAmount = recipe.sharpeningAmount
+                    }
+                }
+                val config = ExportConfig(
+                    format = recipe.format,
+                    jpegQuality = recipe.quality,
+                    chromaSubsampling = ChromaSubsampling.YUV444,
+                    tileSize = 2048,
+                    tilePadding = 16
                 )
 
-                // Execute export
-                val success = LightRumorNativeEngine.nativeProcessRawMultiRecipe(
+                // Execute export with full development parameters
+                val success = LightRumorNativeEngine.exportPhoto(
                     inputPath = inputRawPath,
                     outputPath = outFile,
-                    format = recipe.format.id,
-                    colorSpace = recipe.colorSpace.id,
-                    quality = recipe.quality,
-                    maxDimension = recipe.maxDimension,
-                    applySharpening = recipe.applyEdgeSharpening,
-                    sharpeningAmount = recipe.sharpeningAmount,
-                    enableWatermark = recipe.enableWatermark,
-                    watermarkText = if (recipe.enableWatermark) watermark.formatExposureLine() else ""
+                    config = config,
+                    params = recipeParams,
+                    callback = object : ProgressCallback {
+                        override fun onProgress(progressPercent: Float, statusMessage: String) {
+                            if (!coroutineScope.isActive) return
+                            coroutineScope.launch(Dispatchers.Main) {
+                                progressListener(
+                                    MultiExportProgress(
+                                        recipeId = recipe.id,
+                                        recipeName = recipe.name,
+                                        progressPercent = progressPercent,
+                                        statusMessage = statusMessage
+                                    )
+                                )
+                            }
+                        }
+                    }
                 )
 
-                progressListener(
-                    MultiExportProgress(
-                        recipeId = recipe.id,
-                        recipeName = recipe.name,
-                        progressPercent = 100.0f,
-                        statusMessage = if (success) "Completed" else "Export Failed",
-                        isFinished = true,
-                        outputFilePath = if (success) outFile else null
+                if (success && context != null) {
+                    try {
+                        val mimeType = when (recipe.format) {
+                            ExportFormat.TIFF16, ExportFormat.TIFF8 -> "image/tiff"
+                            ExportFormat.JPEG -> "image/jpeg"
+                            ExportFormat.WebP -> "image/webp"
+                            ExportFormat.LinearDNG -> "image/x-adobe-dng"
+                        }
+                        android.media.MediaScannerConnection.scanFile(
+                            context,
+                            arrayOf(outFile),
+                            arrayOf(mimeType),
+                            null
+                        )
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+
+                withContext(Dispatchers.Main) {
+                    progressListener(
+                        MultiExportProgress(
+                            recipeId = recipe.id,
+                            recipeName = recipe.name,
+                            progressPercent = 100.0f,
+                            statusMessage = if (success) "Completed" else "Export Failed",
+                            isFinished = true,
+                            outputFilePath = if (success) outFile else null
+                        )
                     )
-                )
+                }
             }
         }
+    }
+
+    /**
+     * Cancels any running multi-export jobs and releases coroutine resources.
+     */
+    fun cancel() {
+        coroutineScope.cancel()
     }
 }
 

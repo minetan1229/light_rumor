@@ -152,6 +152,30 @@ void main() {
         atomicAdd(scopeBins[vy * scopeDim + vx], 1u);
         outPixels[idx] = px;
     }
+    // 5. Waveform Monitor Mode (Luma waveform accumulation across image width)
+    else if (u_params.scopeMode == SCOPE_MODE_WAVEFORM) {
+        const int scopeDim = 256;
+        int wx = clamp(int((float(pos.x) / float(max(1, u_params.imageWidth))) * float(scopeDim)), 0, scopeDim - 1);
+        int wy = clamp(scopeDim - 1 - int(clamp(luma, 0.0, 1.0) * float(scopeDim - 1)), 0, scopeDim - 1);
+
+        atomicAdd(scopeBins[wy * scopeDim + wx], 1u);
+        outPixels[idx] = px;
+    }
+    // 6. RGB Parade Mode (Separate R, G, B channels side-by-side)
+    else if (u_params.scopeMode == SCOPE_MODE_RGB_PARADE) {
+        const int scopeDim = 256;
+        int subDim = scopeDim / 3;
+        int subCol = clamp(int((float(pos.x) / float(max(1, u_params.imageWidth))) * float(subDim)), 0, subDim - 1);
+
+        int ry = clamp(scopeDim - 1 - int(clamp(px.r, 0.0, 1.0) * float(scopeDim - 1)), 0, scopeDim - 1);
+        int gy = clamp(scopeDim - 1 - int(clamp(px.g, 0.0, 1.0) * float(scopeDim - 1)), 0, scopeDim - 1);
+        int by = clamp(scopeDim - 1 - int(clamp(px.b, 0.0, 1.0) * float(scopeDim - 1)), 0, scopeDim - 1);
+
+        atomicAdd(scopeBins[ry * scopeDim + subCol], 1u);
+        atomicAdd(scopeBins[gy * scopeDim + (subDim + subCol)], 1u);
+        atomicAdd(scopeBins[by * scopeDim + (2 * subDim + subCol)], 1u);
+        outPixels[idx] = px;
+    }
     else {
         outPixels[idx] = px;
     }

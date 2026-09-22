@@ -166,6 +166,9 @@ bool FocusStacker::stackMedian(const std::vector<std::vector<FloatRGBA>>& frames
     if (frames.empty() || width <= 0 || height <= 0) return false;
     const size_t numFrames = frames.size();
     const size_t total = static_cast<size_t>(width) * height;
+    for (size_t i = 0; i < numFrames; ++i) {
+        if (frames[i].size() < total) return false;
+    }
     outComposite.assign(total, FloatRGBA(0.0f, 0.0f, 0.0f, 1.0f));
 
     const size_t midIdx = numFrames / 2;
@@ -202,7 +205,7 @@ bool FocusStacker::stackMedian(const std::vector<std::vector<FloatRGBA>>& frames
 
             outComposite[idx] = FloatRGBA(rVals[midIdx], gVals[midIdx], bVals[midIdx], 1.0f);
         } else {
-            int tid = omp_get_thread_num();
+            int tid = std::clamp(omp_get_thread_num(), 0, static_cast<int>(threadRVals.size()) - 1);
             auto& rVals = threadRVals[tid];
             auto& gVals = threadGVals[tid];
             auto& bVals = threadBVals[tid];
@@ -231,6 +234,9 @@ bool FocusStacker::stackMean(const std::vector<std::vector<FloatRGBA>>& frames,
     if (frames.empty() || width <= 0 || height <= 0) return false;
     const size_t numFrames = frames.size();
     const size_t total = static_cast<size_t>(width) * height;
+    for (size_t i = 0; i < numFrames; ++i) {
+        if (frames[i].size() < total) return false;
+    }
     outComposite.assign(total, FloatRGBA(0.0f, 0.0f, 0.0f, 1.0f));
 
     const float invN = 1.0f / static_cast<float>(numFrames);
@@ -258,6 +264,9 @@ bool FocusStacker::stackMultipleExposure(const std::vector<std::vector<FloatRGBA
     if (frames.empty() || width <= 0 || height <= 0) return false;
     const size_t numFrames = frames.size();
     const size_t total = static_cast<size_t>(width) * height;
+    for (size_t i = 0; i < numFrames; ++i) {
+        if (frames[i].size() < total) return false;
+    }
 
     outComposite = frames[0];
 
@@ -283,11 +292,18 @@ bool FocusStacker::stackMultipleExposure(const std::vector<std::vector<FloatRGBA
                     g = (g * (1.0f - opacity * 0.5f)) + (blend.g * opacity * 0.5f);
                     b = (b * (1.0f - opacity * 0.5f)) + (blend.b * opacity * 0.5f);
                     break;
-                case MultiExposureBlendMode::Screen:
-                    r = 1.0f - (1.0f - r) * (1.0f - blend.r * opacity);
-                    g = 1.0f - (1.0f - g) * (1.0f - blend.g * opacity);
-                    b = 1.0f - (1.0f - b) * (1.0f - blend.b * opacity);
+                case MultiExposureBlendMode::Screen: {
+                    float cr = std::clamp(r, 0.0f, 1.0f);
+                    float cg = std::clamp(g, 0.0f, 1.0f);
+                    float cb = std::clamp(b, 0.0f, 1.0f);
+                    float cbr = std::clamp(blend.r * opacity, 0.0f, 1.0f);
+                    float cbg = std::clamp(blend.g * opacity, 0.0f, 1.0f);
+                    float cbb = std::clamp(blend.b * opacity, 0.0f, 1.0f);
+                    r = 1.0f - (1.0f - cr) * (1.0f - cbr);
+                    g = 1.0f - (1.0f - cg) * (1.0f - cbg);
+                    b = 1.0f - (1.0f - cb) * (1.0f - cbb);
                     break;
+                }
                 case MultiExposureBlendMode::Lighten:
                     r = std::max(r, blend.r * opacity);
                     g = std::max(g, blend.g * opacity);
@@ -314,6 +330,9 @@ bool FocusStacker::stackPixelShift4Shot(const std::vector<std::vector<FloatRGBA>
                                         std::vector<FloatRGBA>& outSuperRes) {
     if (fourShots.size() < 4 || width <= 0 || height <= 0) return false;
     const size_t total = static_cast<size_t>(width) * height;
+    for (size_t i = 0; i < 4; ++i) {
+        if (fourShots[i].size() < total) return false;
+    }
     outSuperRes.assign(total, FloatRGBA(0.0f, 0.0f, 0.0f, 1.0f));
 
     // Shot 0: (0, 0)
@@ -326,11 +345,18 @@ bool FocusStacker::stackPixelShift4Shot(const std::vector<std::vector<FloatRGBA>
         for (int32_t x = 0; x < width; ++x) {
             size_t idx = static_cast<size_t>(y) * width + x;
 
-            // Sample each shot taking shift into consideration
-            const auto& s0 = fourShots[0][idx];
-            const auto& s1 = fourShots[1][idx];
-            const auto& s2 = fourShots[2][idx];
-            const auto& s3 = fourShots[3][idx];
+            auto sampleAt = [&](const std::vector<FloatRGBA>& shot, int32_t sx, int32_t sy) -> const FloatRGBA& {
+                sx = std::clamp(sx, 0, width - 1);
+                sy = std::clamp(sy, 0, height - 1);
+                return shot[static_cast<size_t>(sy) * width + sx];
+            };
+
+            // Sample each shot taking shift into consideration:
+            // When sensor shifts right/down (+1), optical scene on sensor moves left/up (-1)
+            const auto& s0 = sampleAt(fourShots[0], x, y);
+            const auto& s1 = sampleAt(fourShots[1], x - 1, y);
+            const auto& s2 = sampleAt(fourShots[2], x - 1, y - 1);
+            const auto& s3 = sampleAt(fourShots[3], x, y - 1);
 
             // Reconstruct full RGB without interpolation
             // using exact Bayer phase alignment for each shift.

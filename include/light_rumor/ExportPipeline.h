@@ -31,7 +31,11 @@ public:
                                   const DevelopmentParams& params,
                                   std::vector<FloatRGBA>& outValidTile,
                                   int32_t padLeft = -1,
-                                  int32_t padTop = -1);
+                                  int32_t padTop = -1,
+                                  int32_t tileOriginX = 0,
+                                  int32_t tileOriginY = 0,
+                                  int32_t fullWidth = -1,
+                                  int32_t fullHeight = -1);
 
     // Apply color space transfer function (OETF) and TPDF dithering to 8-bit RGBA
     static void quantizeTo8Bit(const std::vector<FloatRGBA>& linearTile,

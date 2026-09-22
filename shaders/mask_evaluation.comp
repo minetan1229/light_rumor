@@ -197,17 +197,27 @@ float evaluateLuminance(vec3 col) {
 
 // 6. Color Range Mask
 float evaluateColorRange(vec3 col) {
-    vec3 hsl = rgbToHsl(col);
+    vec3 hsl = rgbToHsl(col); // hsl.x is in [0, 360] degrees
 
-    // Circular hue difference in [0, 180]
-    float dH = abs(hsl.x - u_params.colorTarget.x);
+    // Safe hue evaluation: harmonizes both normalized [0, 1] and degree [0, 360] inputs
+    float targetH = u_params.colorTarget.x;
+    float tolH = u_params.colorTolerance.x;
+    if (tolH > 0.0 && tolH <= 1.0 && targetH <= 1.0) {
+        targetH *= 360.0;
+        tolH *= 360.0;
+    }
+    targetH = mod(targetH, 360.0);
+    if (targetH < 0.0) targetH += 360.0;
+
+    // Circular hue difference in [0, 180] degrees
+    float dH = abs(hsl.x - targetH);
     if (dH > 180.0) dH = 360.0 - dH;
 
     float dS = abs(hsl.y - u_params.colorTarget.y);
     float dL = abs(hsl.z - u_params.colorTarget.z);
 
     float f = max(1e-4, u_params.colorFeather);
-    float wH = 1.0 - smoothstep(u_params.colorTolerance.x, u_params.colorTolerance.x + f * 45.0, dH);
+    float wH = 1.0 - smoothstep(tolH, tolH + f * 45.0, dH);
     float wS = 1.0 - smoothstep(u_params.colorTolerance.y, u_params.colorTolerance.y + f * 0.3, dS);
     float wL = 1.0 - smoothstep(u_params.colorTolerance.z, u_params.colorTolerance.z + f * 0.3, dL);
 
@@ -291,6 +301,9 @@ void main() {
         case MASK_TYPE_SOBEL:
             rawWeight = evaluateSobel(pos);
             break;
+        case MASK_TYPE_COMPOSITE:
+            rawWeight = maskAccum[idx];
+            break;
         default:
             rawWeight = 1.0;
             break;
@@ -305,7 +318,7 @@ void main() {
     float newWeight = clamp(rawWeight * u_params.opacity, 0.0, 1.0);
 
     // Boolean Operation with existing accumulated mask
-    float baseWeight = maskAccum[idx];
+    float baseWeight = (u_params.maskType == MASK_TYPE_BRUSH) ? 0.0 : maskAccum[idx];
     float finalWeight = newWeight;
 
     switch (u_params.booleanOp) {

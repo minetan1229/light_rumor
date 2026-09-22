@@ -63,8 +63,9 @@ void FieldScopesEngine::generateZebra(const FloatRGBA* inPixels,
             float ire = calculateIRE(inPixels[idx].r, inPixels[idx].g, inPixels[idx].b);
 
             if (ire >= thresholdIRE) {
-                // 45-degree diagonal hazard stripes with phase shift
-                int32_t stripe = (static_cast<int32_t>(x + y + animPhase)) % 16;
+                // 45-degree diagonal hazard stripes with phase shift (normalized for negative phase)
+                int32_t rawStripe = static_cast<int32_t>(x + y + animPhase);
+                int32_t stripe = ((rawStripe % 16) + 16) % 16;
                 if (stripe < 8) {
                     outPixels[idx] = FloatRGBA(0.0f, 0.0f, 0.0f, 1.0f); // Black stripe
                 } else {
@@ -194,15 +195,15 @@ void FieldScopesEngine::generateVectorscope(const FloatRGBA* inPixels,
                 uint8_t r = static_cast<uint8_t>(val * 0.2f);
                 uint8_t g = static_cast<uint8_t>(val);
                 uint8_t b = static_cast<uint8_t>(val * 0.7f);
-                outScopeRgba[idx] = 0xFF000000 | (b << 16) | (g << 8) | r;
+                outScopeRgba[idx] = 0xFF000000 | (r << 16) | (g << 8) | b;
             }
         }
     }
 
-    drawVectorscopeGraticule(outScopeRgba, scopeDim);
+    drawVectorscopeGraticule(outScopeRgba, scopeDim, gain);
 }
 
-void FieldScopesEngine::drawVectorscopeGraticule(std::vector<uint32_t>& scopePixels, int32_t dim) {
+void FieldScopesEngine::drawVectorscopeGraticule(std::vector<uint32_t>& scopePixels, int32_t dim, float gain) {
     if (dim <= 0 || scopePixels.size() < static_cast<size_t>(dim) * dim) return;
 
     float center = dim * 0.5f;
@@ -272,8 +273,8 @@ void FieldScopesEngine::drawVectorscopeGraticule(std::vector<uint32_t>& scopePix
         float cb = -0.168736f * t.r - 0.331264f * t.g + 0.5f * t.b;
         float cr =  0.500000f * t.r - 0.418688f * t.g - 0.081312f * t.b;
 
-        int tx = static_cast<int>((cb * 2.0f + 0.5f) * dim);
-        int ty = static_cast<int>((-cr * 2.0f + 0.5f) * dim);
+        int tx = static_cast<int>((cb * gain + 0.5f) * dim);
+        int ty = static_cast<int>((-cr * gain + 0.5f) * dim);
 
         // Draw 5x5 square
         for (int dy = -2; dy <= 2; ++dy) {

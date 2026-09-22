@@ -1,6 +1,7 @@
 package com.lightrumor.ui
 
 import android.graphics.Bitmap
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -56,6 +58,10 @@ fun MultiCompareView(
     onCloseCompare: () -> Unit,
     onSelectWinner: (PhotoItem) -> Unit
 ) {
+    BackHandler {
+        onCloseCompare()
+    }
+
     var isFourScreenMode by remember { mutableStateOf(items.size >= 4) }
     val displayedItems = remember(items, isFourScreenMode) {
         if (isFourScreenMode) items.take(4) else items.take(2)
@@ -63,77 +69,105 @@ fun MultiCompareView(
 
     val syncZoomState = remember { SynchronizedZoomState() }
 
-    val bgDark = Color(0xFF060606)
-    val panelDark = Color(0xFF141414)
-    val borderDark = Color(0xFF262626)
-    val textPrimary = Color(0xFFE5E5E5)
-    val textSecondary = Color(0xFF888888)
-    val accentAmber = Color(0xFFD4A373)
+    val colors = LightRumorTheme.colors
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(bgDark)
+            .background(colors.background)
     ) {
         // Top HUD Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(panelDark)
-                .border(1.dp, borderDark)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .background(colors.surfaceElevated)
+                .border(1.dp, colors.borderStrong)
+                .padding(horizontal = 14.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Vector Back Chevron
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .background(colors.surface, RoundedCornerShape(2.dp))
+                        .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
+                        .clickable { onCloseCompare() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    androidx.compose.foundation.Canvas(modifier = Modifier.size(14.dp)) {
+                        val strokeW = 2.dp.toPx()
+                        val path = androidx.compose.ui.graphics.Path().apply {
+                            moveTo(size.width * 0.65f, size.height * 0.15f)
+                            lineTo(size.width * 0.25f, size.height * 0.5f)
+                            lineTo(size.width * 0.65f, size.height * 0.85f)
+                        }
+                        drawPath(
+                            path = path,
+                            color = colors.textPrimary,
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                                width = strokeW,
+                                cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                                join = androidx.compose.ui.graphics.StrokeJoin.Round
+                            )
+                        )
+                    }
+                }
+
                 Text(
-                    text = "< EXIT COMPARE",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 11.sp,
-                    color = textSecondary,
-                    modifier = Modifier.clickable { onCloseCompare() }
-                )
-                Spacer(modifier = Modifier.width(16.dp))
-                Text(
-                    text = "SYNC ZOOM: ${"%.1f".format(syncZoomState.scale)}x ${if (syncZoomState.scale > 1.5f) "(100% LOCK)" else "(FIT)"}",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 11.sp,
+                    text = "比較ズーム",
+                    fontFamily = FontFamily.SansSerif,
                     fontWeight = FontWeight.Bold,
-                    color = accentAmber
+                    fontSize = 13.sp,
+                    color = colors.textPrimary
+                )
+
+                Text(
+                    text = "${"%.1f".format(syncZoomState.scale)}x ${if (syncZoomState.scale > 1.5f) "(等倍固定)" else "(全体表示)"}",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.accentAmber
                 )
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // 100% Zoom Toggle
-                OutlinedButton(
-                    onClick = { syncZoomState.zoomTo100() },
-                    shape = RoundedCornerShape(2.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, accentAmber),
-                    colors = ButtonDefaults.outlinedButtonColors(containerColor = panelDark),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                Box(
+                    modifier = Modifier
+                        .background(colors.surface, RoundedCornerShape(2.dp))
+                        .border(1.dp, if (syncZoomState.scale > 1.5f) colors.accentAmber else colors.borderSubtle, RoundedCornerShape(2.dp))
+                        .clickable { syncZoomState.zoomTo100() }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = if (syncZoomState.scale > 1.5f) "RESET FIT" else "100% ZOOM",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 10.sp,
-                        color = accentAmber
+                        text = if (syncZoomState.scale > 1.5f) "全体表示" else "100% 等倍",
+                        fontFamily = FontFamily.SansSerif,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (syncZoomState.scale > 1.5f) colors.accentAmber else colors.textPrimary
                     )
                 }
 
                 // 2-Screen vs 4-Screen Toggle
                 if (items.size >= 4) {
-                    OutlinedButton(
-                        onClick = { isFourScreenMode = !isFourScreenMode },
-                        shape = RoundedCornerShape(2.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, borderDark),
-                        colors = ButtonDefaults.outlinedButtonColors(containerColor = panelDark),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    Box(
+                        modifier = Modifier
+                            .background(colors.surface, RoundedCornerShape(2.dp))
+                            .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
+                            .clickable { isFourScreenMode = !isFourScreenMode }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = if (isFourScreenMode) "2-SPLIT" else "4-SPLIT",
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp,
-                            color = textPrimary
+                            text = if (isFourScreenMode) "2分割" else "4分割",
+                            fontFamily = FontFamily.SansSerif,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.textPrimary
                         )
                     }
                 }
@@ -168,14 +202,14 @@ fun MultiCompareView(
                             item = displayedItems[0],
                             syncState = syncZoomState,
                             cacheManager = cacheManager,
-                            modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, borderDark),
+                            modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, colors.borderSubtle),
                             onFlag = { onSelectWinner(displayedItems[0]) }
                         )
                         ComparePane(
                             item = displayedItems[1],
                             syncState = syncZoomState,
                             cacheManager = cacheManager,
-                            modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, borderDark),
+                            modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, colors.borderSubtle),
                             onFlag = { onSelectWinner(displayedItems[1]) }
                         )
                     }
@@ -184,14 +218,14 @@ fun MultiCompareView(
                             item = displayedItems[2],
                             syncState = syncZoomState,
                             cacheManager = cacheManager,
-                            modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, borderDark),
+                            modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, colors.borderSubtle),
                             onFlag = { onSelectWinner(displayedItems[2]) }
                         )
                         ComparePane(
                             item = displayedItems[3],
                             syncState = syncZoomState,
                             cacheManager = cacheManager,
-                            modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, borderDark),
+                            modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, colors.borderSubtle),
                             onFlag = { onSelectWinner(displayedItems[3]) }
                         )
                     }
@@ -204,7 +238,7 @@ fun MultiCompareView(
                             item = item,
                             syncState = syncZoomState,
                             cacheManager = cacheManager,
-                            modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, borderDark),
+                            modifier = Modifier.weight(1f).fillMaxHeight().border(0.5.dp, colors.borderSubtle),
                             onFlag = { onSelectWinner(item) }
                         )
                     }
@@ -222,6 +256,7 @@ private fun ComparePane(
     modifier: Modifier = Modifier,
     onFlag: () -> Unit
 ) {
+    val colors = LightRumorTheme.colors
     var bitmap by remember(item.uri) {
         mutableStateOf<Bitmap?>(cacheManager.getFromMemory(item.filePath.ifEmpty { item.uri.toString() }))
     }
@@ -237,7 +272,8 @@ private fun ComparePane(
 
     Box(
         modifier = modifier
-            .background(Color(0xFF090909))
+            .clipToBounds()
+            .background(colors.background)
             .padding(2.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -257,10 +293,10 @@ private fun ComparePane(
             )
         } else {
             Text(
-                text = "SYNCING...",
-                fontFamily = FontFamily.Monospace,
-                fontSize = 10.sp,
-                color = Color.Gray
+                text = "同期中...",
+                fontFamily = FontFamily.SansSerif,
+                fontSize = 12.sp,
+                color = colors.textSecondary
             )
         }
 
@@ -268,33 +304,34 @@ private fun ComparePane(
         Row(
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .background(Color(0xCC111111), RoundedCornerShape(2.dp))
-                .padding(horizontal = 6.dp, vertical = 3.dp),
+                .background(colors.surface.copy(alpha = 0.85f), RoundedCornerShape(2.dp))
+                .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = item.fileName.ifEmpty { "PHOTO" }.takeLast(10),
+                text = item.fileName.ifEmpty { "PHOTO" }.takeLast(12),
                 fontFamily = FontFamily.Monospace,
-                fontSize = 9.sp,
-                color = Color(0xFFD0D0D0)
+                fontSize = 11.sp,
+                color = colors.textPrimary
             )
             if (isPicked) {
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "[FLAG]",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 8.sp,
+                    text = "採用",
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF4CAF50)
+                    color = colors.statusPick
                 )
             } else if (isRejected) {
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "[REJECT]",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 8.sp,
+                    text = "不採用",
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFFEF5350)
+                    color = colors.statusReject
                 )
             }
         }
@@ -304,21 +341,21 @@ private fun ComparePane(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(6.dp)
-                .background(if (isPicked) Color(0xFF2E7D32) else Color(0xCC202020), RoundedCornerShape(2.dp))
-                .border(1.dp, if (isPicked) Color(0xFF4CAF50) else Color(0xFF404040), RoundedCornerShape(2.dp))
+                .background(if (isPicked) colors.statusPick else colors.surfaceElevated, RoundedCornerShape(2.dp))
+                .border(1.dp, if (isPicked) colors.statusPick else colors.borderStrong, RoundedCornerShape(2.dp))
                 .clickable {
                     item.metadata.pickStatus = if (isPicked) PickStatus.NONE else PickStatus.PICKED
                     XmpSidecarManager.scheduleSaveSidecar(item.filePath, item.metadata, item.developParams)
                     if (item.metadata.pickStatus == PickStatus.PICKED) onFlag()
                 }
-                .padding(horizontal = 8.dp, vertical = 4.dp)
+                .padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
             Text(
-                text = if (isPicked) "WINNER" else "SELECT",
-                fontFamily = FontFamily.Monospace,
-                fontSize = 9.sp,
+                text = if (isPicked) "採用中" else "採用",
+                fontFamily = FontFamily.SansSerif,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                color = if (isPicked) Color.White else Color(0xFFB0B0B0)
+                color = if (isPicked) colors.background else colors.textPrimary
             )
         }
     }

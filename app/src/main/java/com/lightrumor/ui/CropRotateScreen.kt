@@ -39,6 +39,7 @@ import kotlin.math.atan2
 fun CropRotateScreen(
     params: DevelopmentParams,
     onParamsChange: (DevelopmentParams) -> Unit,
+    onParamsChangeFinished: (() -> Unit)? = null,
     hapticManager: HapticManager? = null,
     modifier: Modifier = Modifier
 ) {
@@ -64,7 +65,6 @@ fun CropRotateScreen(
             text = "アスペクト比",
             style = LightRumorTheme.typography.Header,
             color = colors.accentAmber,
-            fontSize = 11.sp,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
         )
 
@@ -75,7 +75,7 @@ fun CropRotateScreen(
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            AspectRatioMode.values().forEach { mode ->
+            AspectRatioMode.entries.forEach { mode ->
                 val isSelected = geom.aspectRatio == mode
                 Box(
                     modifier = Modifier
@@ -92,14 +92,15 @@ fun CropRotateScreen(
                             hapticManager?.performDialTick()
                             onParamsChange(params.copy(geometry = geom.copy(aspectRatio = mode)))
                         }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = mode.label.uppercase(),
-                        style = LightRumorTheme.typography.Tab,
+                        fontFamily = FontFamily.SansSerif,
                         color = if (isSelected) colors.accentAmber else colors.textSecondary,
-                        fontSize = 10.sp
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        fontSize = 12.sp
                     )
                 }
             }
@@ -114,7 +115,6 @@ fun CropRotateScreen(
             text = "構図ガイド",
             style = LightRumorTheme.typography.Header,
             color = colors.accentAmber,
-            fontSize = 11.sp,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
         )
 
@@ -125,7 +125,7 @@ fun CropRotateScreen(
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            CompositionGuide.values().forEach { guide ->
+            CompositionGuide.entries.forEach { guide ->
                 val isSelected = geom.guide == guide
                 Box(
                     modifier = Modifier
@@ -142,14 +142,15 @@ fun CropRotateScreen(
                             hapticManager?.performDialTick()
                             onParamsChange(params.copy(geometry = geom.copy(guide = guide)))
                         }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = guide.label.uppercase(),
-                        style = LightRumorTheme.typography.Tab,
+                        fontFamily = FontFamily.SansSerif,
                         color = if (isSelected) colors.accentCyan else colors.textSecondary,
-                        fontSize = 10.sp
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        fontSize = 12.sp
                     )
                 }
             }
@@ -164,7 +165,6 @@ fun CropRotateScreen(
             text = "回転・反転",
             style = LightRumorTheme.typography.Header,
             color = colors.accentAmber,
-            fontSize = 11.sp,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
         )
 
@@ -185,14 +185,15 @@ fun CropRotateScreen(
                         val newSteps = (geom.rotationSteps + 3) % 4
                         onParamsChange(params.copy(geometry = geom.copy(rotationSteps = newSteps)))
                     }
-                    .padding(vertical = 8.dp),
+                    .padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "-90° 回転",
-                    style = LightRumorTheme.typography.Tab,
+                    text = "-90°",
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
                     color = colors.textPrimary,
-                    fontSize = 10.sp
+                    fontSize = 13.sp
                 )
             }
 
@@ -207,14 +208,15 @@ fun CropRotateScreen(
                         val newSteps = (geom.rotationSteps + 1) % 4
                         onParamsChange(params.copy(geometry = geom.copy(rotationSteps = newSteps)))
                     }
-                    .padding(vertical = 8.dp),
+                    .padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "+90° 回転",
-                    style = LightRumorTheme.typography.Tab,
+                    text = "+90°",
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
                     color = colors.textPrimary,
-                    fontSize = 10.sp
+                    fontSize = 13.sp
                 )
             }
 
@@ -239,12 +241,21 @@ fun CropRotateScreen(
                     .padding(vertical = 8.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = if (isFlipH) "左右反転 [有効]" else "左右反転",
-                    style = LightRumorTheme.typography.Tab,
-                    color = if (isFlipH) colors.accentAmber else colors.textPrimary,
-                    fontSize = 10.sp
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "水平反転",
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isFlipH) colors.accentAmber else colors.textPrimary,
+                        fontSize = 11.sp
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(width = 16.dp, height = 2.dp)
+                            .background(if (isFlipH) colors.accentAmber else Color.Transparent)
+                    )
+                }
             }
 
             // Flip V
@@ -268,12 +279,21 @@ fun CropRotateScreen(
                     .padding(vertical = 8.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = if (isFlipV) "上下反転 [有効]" else "上下反転",
-                    style = LightRumorTheme.typography.Tab,
-                    color = if (isFlipV) colors.accentAmber else colors.textPrimary,
-                    fontSize = 10.sp
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "垂直反転",
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isFlipV) colors.accentAmber else colors.textPrimary,
+                        fontSize = 11.sp
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(width = 16.dp, height = 2.dp)
+                            .background(if (isFlipV) colors.accentAmber else Color.Transparent)
+                    )
+                }
             }
         }
 
@@ -292,8 +312,7 @@ fun CropRotateScreen(
             Text(
                 text = "傾き補正 & 自動水平",
                 style = LightRumorTheme.typography.Header,
-                color = colors.accentAmber,
-                fontSize = 11.sp
+                color = colors.accentAmber
             )
 
             // Horizon Ruler Drag Tool Button
@@ -301,25 +320,25 @@ fun CropRotateScreen(
                 modifier = Modifier
                     .background(
                         if (isRulerActive) colors.accentAmber else colors.surfaceElevated,
-                        RoundedCornerShape(2.dp)
+                        RoundedCornerShape(3.dp)
                     )
                     .border(
                         1.dp,
                         if (isRulerActive) colors.accentAmber else colors.borderStrong,
-                        RoundedCornerShape(2.dp)
+                        RoundedCornerShape(3.dp)
                     )
                     .clickable {
                         hapticManager?.performDialTick()
                         isRulerActive = !isRulerActive
                     }
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = if (isRulerActive) "ルーラー有効 [水平線をドラッグ]" else "水平ルーラー",
-                    fontFamily = FontFamily.Monospace,
+                    text = if (isRulerActive) "ルーラー待機中" else "水平ルーラー",
+                    fontFamily = FontFamily.SansSerif,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 9.sp,
+                    fontSize = 12.sp,
                     color = if (isRulerActive) Color.Black else colors.textPrimary
                 )
             }
@@ -329,6 +348,7 @@ fun CropRotateScreen(
             label = "傾き角度",
             value = geom.rotationDegrees,
             onValueChange = { onParamsChange(params.copy(geometry = geom.copy(rotationDegrees = it))) },
+            onValueChangeFinished = onParamsChangeFinished,
             range = -45.0f..45.0f,
             defaultValue = 0f,
             unit = "deg",
@@ -357,13 +377,18 @@ fun CropRotateScreen(
                                 rulerCurrent += dragAmount
                             },
                             onDragEnd = {
-                                val dx = rulerCurrent.x - rulerStart.x
-                                val dy = rulerCurrent.y - rulerStart.y
-                                if (dx * dx + dy * dy > 400f) { // Min drag length 20px
-                                    val measuredTilt = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
-                                    val counterAngle = -measuredTilt
+                                var normDx = rulerCurrent.x - rulerStart.x
+                                var normDy = rulerCurrent.y - rulerStart.y
+                                if (normDx < 0f) {
+                                    normDx = -normDx
+                                    normDy = -normDy
+                                }
+                                if (normDx * normDx + normDy * normDy > 400f) { // Min drag length 20px
+                                    val measuredTilt = Math.toDegrees(atan2(normDy.toDouble(), normDx.toDouble())).toFloat()
+                                    val counterAngle = (-measuredTilt).coerceIn(-45.0f, 45.0f)
                                     hapticManager?.performZeroSnap()
                                     onParamsChange(params.copy(geometry = geom.copy(rotationDegrees = counterAngle)))
+                                    onParamsChangeFinished?.invoke()
                                 }
                                 isRulerActive = false
                             }
@@ -374,15 +399,15 @@ fun CropRotateScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = "傾いた水平線に沿ってドラッグ",
-                        fontFamily = FontFamily.Monospace,
+                        fontFamily = FontFamily.SansSerif,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 10.sp,
+                        fontSize = 13.sp,
                         color = colors.accentAmber
                     )
                     Text(
-                        text = "離すと自動で水平に補正されます",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 9.sp,
+                        text = "指を離すと自動で水平角度に補正されます",
+                        fontFamily = FontFamily.SansSerif,
+                        fontSize = 11.sp,
                         color = colors.textSecondary
                     )
                 }
@@ -398,7 +423,6 @@ fun CropRotateScreen(
             text = "パース補正 & 歪み",
             style = LightRumorTheme.typography.Header,
             color = colors.accentAmber,
-            fontSize = 11.sp,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
         )
 
@@ -406,6 +430,7 @@ fun CropRotateScreen(
             label = "垂直台形補正",
             value = geom.perspectiveVertical,
             onValueChange = { onParamsChange(params.copy(geometry = geom.copy(perspectiveVertical = it))) },
+            onValueChangeFinished = onParamsChangeFinished,
             range = -100f..100f,
             defaultValue = 0f,
             unit = "",
@@ -418,6 +443,7 @@ fun CropRotateScreen(
             label = "水平台形補正",
             value = geom.perspectiveHorizontal,
             onValueChange = { onParamsChange(params.copy(geometry = geom.copy(perspectiveHorizontal = it))) },
+            onValueChangeFinished = onParamsChangeFinished,
             range = -100f..100f,
             defaultValue = 0f,
             unit = "",
@@ -430,6 +456,7 @@ fun CropRotateScreen(
             label = "レンズ歪み",
             value = geom.distortion,
             onValueChange = { onParamsChange(params.copy(geometry = geom.copy(distortion = it))) },
+            onValueChangeFinished = onParamsChangeFinished,
             range = -100f..100f,
             defaultValue = 0f,
             unit = "",
@@ -450,15 +477,17 @@ fun CropRotateScreen(
                 .clickable {
                     hapticManager?.performZeroSnap()
                     onParamsChange(params.copy(geometry = CropTransformParams()))
+                    onParamsChangeFinished?.invoke()
                 }
-                .padding(vertical = 10.dp),
+                .padding(vertical = 12.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = "クロップ & 変形をリセット",
-                style = LightRumorTheme.typography.Tab,
+                fontFamily = FontFamily.SansSerif,
+                fontWeight = FontWeight.Bold,
                 color = colors.textSecondary,
-                fontSize = 10.sp
+                fontSize = 13.sp
             )
         }
     }

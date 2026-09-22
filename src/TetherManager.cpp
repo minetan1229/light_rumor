@@ -21,27 +21,27 @@ struct PtpContainerHeader {
 
 // PTP Standard Codes
 namespace ptp {
-    constexpr uint16_t TYPE_COMMAND  = 1;
-    constexpr uint16_t TYPE_DATA     = 2;
-    constexpr uint16_t TYPE_RESPONSE = 3;
-    constexpr uint16_t TYPE_EVENT    = 4;
+    [[maybe_unused]] constexpr uint16_t TYPE_COMMAND  = 1;
+    [[maybe_unused]] constexpr uint16_t TYPE_DATA     = 2;
+    [[maybe_unused]] constexpr uint16_t TYPE_RESPONSE = 3;
+    [[maybe_unused]] constexpr uint16_t TYPE_EVENT    = 4;
 
-    constexpr uint16_t OP_GET_DEVICE_INFO   = 0x1001;
-    constexpr uint16_t OP_OPEN_SESSION      = 0x1002;
-    constexpr uint16_t OP_CLOSE_SESSION     = 0x1003;
-    constexpr uint16_t OP_GET_STORAGE_IDS   = 0x1004;
-    constexpr uint16_t OP_GET_OBJECT_HANDLES= 0x1007;
-    constexpr uint16_t OP_GET_OBJECT_INFO   = 0x1008;
-    constexpr uint16_t OP_GET_OBJECT        = 0x1009;
-    constexpr uint16_t OP_INITIATE_CAPTURE  = 0x100E;
+    [[maybe_unused]] constexpr uint16_t OP_GET_DEVICE_INFO   = 0x1001;
+    [[maybe_unused]] constexpr uint16_t OP_OPEN_SESSION      = 0x1002;
+    [[maybe_unused]] constexpr uint16_t OP_CLOSE_SESSION     = 0x1003;
+    [[maybe_unused]] constexpr uint16_t OP_GET_STORAGE_IDS   = 0x1004;
+    [[maybe_unused]] constexpr uint16_t OP_GET_OBJECT_HANDLES= 0x1007;
+    [[maybe_unused]] constexpr uint16_t OP_GET_OBJECT_INFO   = 0x1008;
+    [[maybe_unused]] constexpr uint16_t OP_GET_OBJECT        = 0x1009;
+    [[maybe_unused]] constexpr uint16_t OP_INITIATE_CAPTURE  = 0x100E;
 
-    constexpr uint16_t RESP_OK              = 0x2001;
-    constexpr uint16_t RESP_GENERAL_ERROR   = 0x2002;
-    constexpr uint16_t RESP_SESSION_OPEN    = 0x201E;
+    [[maybe_unused]] constexpr uint16_t RESP_OK              = 0x2001;
+    [[maybe_unused]] constexpr uint16_t RESP_GENERAL_ERROR   = 0x2002;
+    [[maybe_unused]] constexpr uint16_t RESP_SESSION_OPEN    = 0x201E;
 
-    constexpr uint16_t EVENT_OBJECT_ADDED   = 0x4002;
-    constexpr uint16_t EVENT_DEVICE_PROP_CHG= 0x4006;
-    constexpr uint16_t EVENT_CAPTURE_COMPL  = 0x400D;
+    [[maybe_unused]] constexpr uint16_t EVENT_OBJECT_ADDED   = 0x4002;
+    [[maybe_unused]] constexpr uint16_t EVENT_DEVICE_PROP_CHG= 0x4006;
+    [[maybe_unused]] constexpr uint16_t EVENT_CAPTURE_COMPL  = 0x400D;
 }
 
 struct TetherManager::Impl {
@@ -158,6 +158,7 @@ TetherState TetherManager::getState() const {
 }
 
 TetherCameraBrand TetherManager::getBrand() const {
+    std::lock_guard<std::mutex> lock(m_impl->mutex);
     return m_impl->brand;
 }
 
@@ -263,8 +264,14 @@ bool TetherManager::simulateCameraShutterRelease(const std::string& filename, co
     std::vector<FloatRGBA> dummyTile(previewW * previewH, FloatRGBA(0.45f, 0.45f, 0.48f, 1.0f));
     std::vector<FloatRGBA> outTile;
 
+    DevelopmentParams autoParams;
+    {
+        std::lock_guard<std::mutex> lock(m_impl->mutex);
+        autoParams = m_impl->autoDevelopParams;
+    }
+
     ExportPipeline::processTileLinear(dummyTile, previewW, previewH, previewW, previewH, 0,
-                                     m_impl->autoDevelopParams, outTile);
+                                     autoParams, outTile);
 
     auto tDeveloped = std::chrono::high_resolution_clock::now();
     double developTimeMs = std::chrono::duration<double, std::milli>(tDeveloped - tTransferred).count();

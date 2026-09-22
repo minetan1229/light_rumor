@@ -1,11 +1,13 @@
 package com.lightrumor.ui
 
 import android.graphics.Bitmap
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -25,6 +27,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lightrumor.*
@@ -102,8 +105,14 @@ fun CullingScreen(
     onOpenMultiCompare: () -> Unit,
     onOpenBatchSync: () -> Unit,
     onOpenDevelop: (PhotoItem) -> Unit,
+    onAddPhotos: () -> Unit = {},
+    editHistoryCatalog: EditHistoryCatalog? = null,
     onBackToLauncher: () -> Unit
 ) {
+    BackHandler {
+        onBackToLauncher()
+    }
+
     if (items.isEmpty()) {
         Box(
             modifier = Modifier.fillMaxSize().background(Color(0xFF0A0A0A)),
@@ -134,166 +143,199 @@ fun CullingScreen(
         }
     }
 
-    val bgDark = Color(0xFF050505)
-    val panelDark = Color(0xFF121212)
-    val borderDark = Color(0xFF242424)
-    val textPrimary = Color(0xFFE5E5E5)
-    val textSecondary = Color(0xFF8A8A8A)
-    val accentAmber = Color(0xFFD4A373)
+    LightRumorTheme(isDark = true) {
+        val colors = LightRumorTheme.colors
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(bgDark)
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .pointerInput(currentIndex) {
-                var totalDrag = 0f
-                detectHorizontalDragGestures(
-                    onDragStart = { totalDrag = 0f },
-                    onDragEnd = {
-                        if (totalDrag < -60f && currentIndex < items.size - 1) {
-                            onIndexChanged(currentIndex + 1)
-                        } else if (totalDrag > 60f && currentIndex > 0) {
-                            onIndexChanged(currentIndex - 1)
-                        }
-                    },
-                    onHorizontalDrag = { _, dragAmount ->
-                        totalDrag += dragAmount
-                    }
-                )
-            }
-    ) {
-        // 1. Center Photo Viewport
         Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            if (currentBitmap != null) {
-                Image(
-                    bitmap = currentBitmap!!.asImageBitmap(),
-                    contentDescription = "選別写真",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit
-                )
-            } else {
-                Text(
-                    text = "ストリーム先読み中...",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 11.sp,
-                    color = textSecondary
-                )
-            }
-        }
-
-        // 2. Top Header HUD: Filename, Counter, Mode Switchers
-        Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .background(panelDark.copy(alpha = 0.92f))
-                .border(1.dp, borderDark)
-                .padding(horizontal = 16.dp, vertical = 10.dp)
-                .align(Alignment.TopCenter),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
+                .background(colors.background)
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .pointerInput(currentIndex) {
+                    var totalDrag = 0f
+                    detectHorizontalDragGestures(
+                        onDragStart = { totalDrag = 0f },
+                        onDragEnd = {
+                            if (totalDrag < -60f && currentIndex < items.size - 1) {
+                                onIndexChanged(currentIndex + 1)
+                            } else if (totalDrag > 60f && currentIndex > 0) {
+                                onIndexChanged(currentIndex - 1)
+                            }
+                        },
+                        onHorizontalDrag = { _, dragAmount ->
+                            totalDrag += dragAmount
+                        }
+                    )
+                }
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "< コレクション",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = accentAmber,
+            // 1. Center Photo Viewport
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                val bmp = currentBitmap
+                if (bmp != null) {
+                    Image(
+                        bitmap = bmp.asImageBitmap(),
+                        contentDescription = "選別写真",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    Text(
+                        text = "写真読み込み中...",
+                        style = LightRumorTheme.typography.Body,
+                        color = colors.textSecondary
+                    )
+                }
+            }
+
+            // 2. Top Header HUD: Filename, Counter, Mode Switchers
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .background(colors.surface.copy(alpha = 0.95f))
+                    .border(1.dp, colors.borderStrong)
+                    .padding(horizontal = 8.dp)
+                    .align(Alignment.TopCenter),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Left: Back button & Photo info
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .clickable { onBackToLauncher() }
-                        .padding(vertical = 4.dp, horizontal = 4.dp)
-                )
-                Spacer(modifier = Modifier.width(14.dp))
-                Text(
-                    text = "[${currentIndex + 1}/${items.size}] ${currentItem.fileName.ifEmpty { "IMG_${currentIndex + 1}" }}",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = textPrimary
-                )
-                if (currentItem.isRaw) {
-                    Spacer(modifier = Modifier.width(8.dp))
+                        .weight(1f, fill = false)
+                        .padding(end = 8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clickable { onBackToLauncher() }
+                            .padding(horizontal = 6.dp, vertical = 6.dp)
+                    ) {
+                        androidx.compose.foundation.Canvas(modifier = Modifier.size(8.dp, 12.dp)) {
+                            val path = androidx.compose.ui.graphics.Path().apply {
+                                moveTo(size.width, 0f)
+                                lineTo(0f, size.height / 2f)
+                                lineTo(size.width, size.height)
+                            }
+                            drawPath(
+                                path = path,
+                                color = colors.accentAmber,
+                                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                                    width = 1.8.dp.toPx(),
+                                    cap = androidx.compose.ui.graphics.StrokeCap.Square
+                                )
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "一覧",
+                            style = LightRumorTheme.typography.Button,
+                            color = colors.accentAmber
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "[${currentIndex + 1}/${items.size}] ${currentItem.fileName.ifEmpty { "IMG_${currentIndex + 1}" }}",
+                        style = LightRumorTheme.typography.Header,
+                        color = colors.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (currentItem.isRaw) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .background(colors.accentAmber.copy(alpha = 0.15f), LightRumorShapes.SharpSquare)
+                                .border(1.dp, colors.accentAmber, LightRumorShapes.SharpSquare)
+                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = "RAW",
+                                style = LightRumorTheme.typography.Badge,
+                                color = colors.accentAmber
+                            )
+                        }
+                    }
+                }
+
+                // Right Action triggers: MultiCompare & Batch Sync & Load Photo & Develop
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.horizontalScroll(rememberScrollState())
+                ) {
                     Box(
                         modifier = Modifier
-                            .background(Color(0xFF2C2210), RoundedCornerShape(2.dp))
-                            .border(1.dp, accentAmber, RoundedCornerShape(2.dp))
-                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                            .background(colors.surfaceElevated, LightRumorShapes.Panel)
+                            .border(1.dp, colors.borderSubtle, LightRumorShapes.Panel)
+                            .clickable { onOpenMultiCompare() }
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = "RAW",
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp,
-                            color = accentAmber,
-                            fontWeight = FontWeight.Bold
+                            text = "比較",
+                            style = LightRumorTheme.typography.Button,
+                            color = colors.textPrimary
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .background(colors.surfaceElevated, LightRumorShapes.Panel)
+                            .border(1.dp, colors.borderSubtle, LightRumorShapes.Panel)
+                            .clickable { onOpenBatchSync() }
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "同期",
+                            style = LightRumorTheme.typography.Button,
+                            color = colors.textPrimary
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .background(colors.surfaceElevated, LightRumorShapes.Panel)
+                            .border(1.dp, colors.accentAmber, LightRumorShapes.Panel)
+                            .clickable { onAddPhotos() }
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "+ 追加",
+                            style = LightRumorTheme.typography.Button,
+                            color = colors.accentAmber
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .background(colors.accentAmber, LightRumorShapes.Button)
+                            .clickable { onOpenDevelop(currentItem) }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "現像スタジオ",
+                            style = LightRumorTheme.typography.Button,
+                            color = Color.Black
                         )
                     }
                 }
             }
 
-            // Action triggers: Compare & Batch Sync & Develop
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
-                    onClick = onOpenMultiCompare,
-                    shape = RoundedCornerShape(3.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF48484A)),
-                    colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFF1B1D22)),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = "同期ズーム",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = textPrimary
-                    )
-                }
-
-                OutlinedButton(
-                    onClick = onOpenBatchSync,
-                    shape = RoundedCornerShape(3.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF48484A)),
-                    colors = ButtonDefaults.outlinedButtonColors(containerColor = Color(0xFF1B1D22)),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = "一括同期",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = textPrimary
-                    )
-                }
-
-                Button(
-                    onClick = { onOpenDevelop(currentItem) },
-                    shape = RoundedCornerShape(3.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = accentAmber),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = "現像",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
-                }
-            }
-        }
-
         // 3. Bottom Instrument Bar: Metadata Strip & Rating Controls
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(panelDark.copy(alpha = 0.92f))
-                .border(1.dp, borderDark)
+                .background(colors.surface.copy(alpha = 0.95f))
+                .border(1.dp, colors.borderStrong)
                 .align(Alignment.BottomCenter)
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = 14.dp, vertical = 8.dp)
         ) {
             // Metadata EXIF telemetry strip
             val meta = currentItem.metadata
@@ -301,11 +343,10 @@ fun CullingScreen(
             var editValue by remember { mutableStateOf("") }
             
             var modifiedMetaFields by remember(currentItem.uri) {
-                mutableStateOf(mutableSetOf<String>())
+                mutableStateOf<Set<String>>(emptySet())
             }
 
-            if (editingField != null) {
-                val currentField = editingField!!
+            editingField?.let { currentField ->
                 val currentFieldDef = CULLING_META_FIELDS.find { it.key == currentField }
                     ?: MetaFieldConfig(currentField, currentField)
 
@@ -320,23 +361,19 @@ fun CullingScreen(
                             ) {
                                 Text(
                                     text = "メタデータ編集",
-                                    color = textPrimary,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace
+                                    style = LightRumorTheme.typography.Header,
+                                    color = colors.textPrimary
                                 )
                                 Text(
                                     text = currentFieldDef.label,
-                                    color = accentAmber,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    fontFamily = FontFamily.Monospace
+                                    style = LightRumorTheme.typography.Badge,
+                                    color = colors.accentAmber
                                 )
                             }
-                            Spacer(modifier = Modifier.height(10.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
                             // タブ切り替えバー (LazyRow)
                             LazyRow(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 items(CULLING_META_FIELDS) { fieldConfig ->
@@ -344,13 +381,13 @@ fun CullingScreen(
                                     Box(
                                         modifier = Modifier
                                             .background(
-                                                if (isSelected) accentAmber.copy(alpha = 0.2f) else borderDark.copy(alpha = 0.6f),
-                                                RoundedCornerShape(4.dp)
+                                                if (isSelected) colors.accentAmber.copy(alpha = 0.15f) else colors.surfaceElevated,
+                                                LightRumorShapes.Panel
                                             )
                                             .border(
                                                 1.dp,
-                                                if (isSelected) accentAmber else borderDark,
-                                                RoundedCornerShape(4.dp)
+                                                if (isSelected) colors.accentAmber else colors.borderSubtle,
+                                                LightRumorShapes.Panel
                                             )
                                             .clickable {
                                                 editingField = fieldConfig.key
@@ -369,10 +406,8 @@ fun CullingScreen(
                                     ) {
                                         Text(
                                             text = fieldConfig.label,
-                                            fontSize = 11.sp,
-                                            fontFamily = FontFamily.Monospace,
-                                            color = if (isSelected) accentAmber else textSecondary,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                            style = LightRumorTheme.typography.Tab,
+                                            color = if (isSelected) colors.accentAmber else colors.textSecondary
                                         )
                                     }
                                 }
@@ -388,73 +423,66 @@ fun CullingScreen(
                             if (currentFieldDef.candidates.isNotEmpty()) {
                                 Text(
                                     text = "候補一覧（タップで選択）:",
-                                    fontSize = 10.sp,
-                                    color = textSecondary,
-                                    fontFamily = FontFamily.Monospace
+                                    style = LightRumorTheme.typography.Caption,
+                                    color = colors.textSecondary
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
                                 
                                 @OptIn(ExperimentalLayoutApi::class)
                                 FlowRow(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     currentFieldDef.candidates.forEach { candidate ->
                                         val isChosen = editValue == candidate
                                         Box(
                                             modifier = Modifier
                                                 .background(
-                                                if (isChosen) accentAmber else panelDark,
-                                                RoundedCornerShape(4.dp)
-                                            )
-                                            .border(
-                                                1.dp,
-                                                if (isChosen) accentAmber else borderDark,
-                                                RoundedCornerShape(4.dp)
-                                            )
-                                            .clickable {
-                                                editValue = candidate
-                                            }
-                                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                                                    if (isChosen) colors.accentAmber.copy(alpha = 0.2f) else colors.surfaceElevated,
+                                                    LightRumorShapes.Panel
+                                                )
+                                                .border(
+                                                    1.dp,
+                                                    if (isChosen) colors.accentAmber else colors.borderSubtle,
+                                                    LightRumorShapes.Panel
+                                                )
+                                                .clickable {
+                                                    editValue = candidate
+                                                }
+                                                .padding(horizontal = 8.dp, vertical = 5.dp)
                                         ) {
                                             Text(
                                                 text = candidate,
-                                                fontSize = 11.sp,
-                                                fontFamily = FontFamily.Monospace,
-                                                color = if (isChosen) Color(0xFF121212) else textPrimary,
-                                                fontWeight = if (isChosen) FontWeight.Bold else FontWeight.Normal
+                                                style = LightRumorTheme.typography.MicroIndex,
+                                                color = if (isChosen) colors.accentAmber else colors.textPrimary
                                             )
                                         }
                                     }
                                 }
-                                Spacer(modifier = Modifier.height(14.dp))
+                                Spacer(modifier = Modifier.height(10.dp))
                             }
 
                             OutlinedTextField(
                                 value = editValue,
                                 onValueChange = { editValue = it },
-                                label = { Text("${currentFieldDef.label} (自由入力・微調整)", fontSize = 11.sp) },
-                                textStyle = LocalTextStyle.current.copy(
-                                    color = textPrimary,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 13.sp
-                                ),
+                                label = { Text("${currentFieldDef.label} (直接入力)", style = LightRumorTheme.typography.Caption) },
+                                textStyle = LightRumorTheme.typography.ValueReadout.copy(color = colors.textPrimary),
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = accentAmber,
-                                    unfocusedBorderColor = borderDark,
-                                    focusedLabelColor = accentAmber,
-                                    unfocusedLabelColor = textSecondary,
-                                    cursorColor = accentAmber
+                                    focusedBorderColor = colors.accentAmber,
+                                    unfocusedBorderColor = colors.borderSubtle,
+                                    focusedLabelColor = colors.accentAmber,
+                                    unfocusedLabelColor = colors.textSecondary,
+                                    cursorColor = colors.accentAmber
                                 ),
                                 trailingIcon = {
                                     if (editValue.isNotEmpty()) {
                                         Text(
                                             text = "✕",
-                                            color = textSecondary,
-                                            fontSize = 12.sp,
+                                            color = colors.textSecondary,
+                                            style = LightRumorTheme.typography.Button,
                                             modifier = Modifier
                                                 .clickable { editValue = "" }
                                                 .padding(8.dp)
@@ -471,52 +499,60 @@ fun CullingScreen(
                             newSet.add(field)
                             modifiedMetaFields = newSet
                             
-                            when(field) {
-                                "captureDate" -> meta.captureDate = editValue
-                                "cameraModel" -> {
-                                    meta.cameraModel = editValue
-                                    meta.cameraMake = editValue.split(" ").firstOrNull() ?: ""
-                                }
-                                "lensModel" -> meta.lensModel = editValue
-                                "focalLength" -> meta.focalLength = editValue
-                                "fNumber" -> meta.fNumber = editValue
-                                "exposureTime" -> meta.exposureTime = editValue
-                                "isoSpeed" -> meta.isoSpeed = editValue
+                            val updatedMeta = when(field) {
+                                "captureDate" -> meta.copy(captureDate = editValue)
+                                "cameraModel" -> meta.copy(
+                                    cameraModel = editValue,
+                                    cameraMake = editValue.split(" ").firstOrNull() ?: ""
+                                )
+                                "lensModel" -> meta.copy(lensModel = editValue)
+                                "focalLength" -> meta.copy(focalLength = editValue)
+                                "fNumber" -> meta.copy(fNumber = editValue)
+                                "exposureTime" -> meta.copy(exposureTime = editValue)
+                                "isoSpeed" -> meta.copy(isoSpeed = editValue)
+                                else -> meta
                             }
+                            currentItem.metadata = updatedMeta
 
-                            // 実際の画像ファイルEXIFおよびXMPサイドカーへ直接書き込み保存
                             metaUpdateTrigger++
                             coroutineScope.launch {
-                                val success = DirectExifWriter.writeMetadata(context, currentItem, meta)
+                                editHistoryCatalog?.saveMetadataOnly(
+                                    uri = currentItem.uri.toString(),
+                                    fileName = currentItem.fileName,
+                                    filePath = currentItem.filePath,
+                                    metadata = updatedMeta,
+                                    params = currentItem.developParams
+                                )
+                                val success = DirectExifWriter.writeMetadata(context, currentItem, updatedMeta)
                                 if (success) {
-                                    android.widget.Toast.makeText(context, "端末情報・EXIFをファイルに書き込み保存しました", android.widget.Toast.LENGTH_SHORT).show()
+                                    android.widget.Toast.makeText(context, "EXIFをファイルに書き込み保存しました", android.widget.Toast.LENGTH_SHORT).show()
                                 }
                             }
 
                             editingField = null
                         }) {
-                            Text("Save", color = accentAmber, fontWeight = FontWeight.Bold)
+                            Text("保存", color = colors.accentAmber, style = LightRumorTheme.typography.Button)
                         }
                     },
                     dismissButton = {
                         TextButton(onClick = { editingField = null }) {
-                            Text("Cancel", color = textSecondary)
+                            Text("キャンセル", color = colors.textSecondary, style = LightRumorTheme.typography.Button)
                         }
                     },
-                    containerColor = panelDark
+                    containerColor = colors.surface
                 )
             }
 
+            // 1. EXIF Metadata Badges Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val _bottomTrigger = metaUpdateTrigger
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.weight(1f, fill = false)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.horizontalScroll(rememberScrollState())
                 ) {
                     val openEdit = { field: String, value: String -> 
                         editingField = field
@@ -524,157 +560,190 @@ fun CullingScreen(
                     }
                     
                     val presentFields = buildList {
-                        if (meta.captureDate.isNotBlank()) add("captureDate" to meta.captureDate)
-                        if (meta.cameraModel.isNotBlank()) add("cameraModel" to meta.cameraModel)
-                        if (meta.lensModel.isNotBlank()) add("lensModel" to meta.lensModel)
-                        if (meta.focalLength.isNotBlank()) add("focalLength" to meta.focalLength)
                         if (meta.fNumber.isNotBlank()) add("fNumber" to meta.fNumber)
                         if (meta.exposureTime.isNotBlank()) add("exposureTime" to meta.exposureTime)
                         if (meta.isoSpeed.isNotBlank()) add("isoSpeed" to meta.isoSpeed)
+                        if (meta.focalLength.isNotBlank()) add("focalLength" to meta.focalLength)
+                        if (meta.cameraModel.isNotBlank()) add("cameraModel" to meta.cameraModel)
+                        if (meta.lensModel.isNotBlank()) add("lensModel" to meta.lensModel)
                     }
 
-                    presentFields.forEachIndexed { index, (field, value) ->
-                        Text(
-                            text = value,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp,
-                            color = textSecondary,
-                            modifier = Modifier.clickable { openEdit(field, value) }
-                        )
-                        if (index < presentFields.lastIndex) {
-                            Text("|", color = borderDark, fontSize = 10.sp)
+                    presentFields.forEach { (field, value) ->
+                        Box(
+                            modifier = Modifier
+                                .background(colors.surfaceElevated, LightRumorShapes.SharpSquare)
+                                .border(1.dp, colors.borderSubtle, LightRumorShapes.SharpSquare)
+                                .clickable { openEdit(field, value) }
+                                .padding(horizontal = 6.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = value,
+                                style = LightRumorTheme.typography.MicroIndex,
+                                color = colors.textPrimary
+                            )
                         }
                     }
                     
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "+ ADD",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 9.sp,
-                        color = accentAmber,
+                    Box(
                         modifier = Modifier
-                            .clickable { openEdit("fNumber", meta.fNumber) }
-                            .border(1.dp, borderDark)
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
+                            .background(colors.surfaceElevated, LightRumorShapes.SharpSquare)
+                            .border(1.dp, colors.accentAmber.copy(alpha = 0.5f), LightRumorShapes.SharpSquare)
+                            .clickable { openEdit("cameraModel", meta.cameraModel) }
+                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = "+ EXIF編集",
+                            style = LightRumorTheme.typography.MicroIndex,
+                            color = colors.accentAmber
+                        )
+                    }
                 }
-                
-                Text(
-                    text = "0ms 先読み有効",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 9.sp,
-                    letterSpacing = 1.sp,
-                    color = accentAmber
-                )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Rating & Flagging control panel
-            val _trigger = metaUpdateTrigger
+            // 2. Rating & Flagging control panel (LED Flags, 5-Star Bar, Color Chips)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Pick / Reject Flags
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     // Pick Flag
                     val isPicked = meta.pickStatus == PickStatus.PICKED
                     Box(
                         modifier = Modifier
-                            .background(if (isPicked) Color(0xFF2E7D32) else Color(0xFF1E1E1E), RoundedCornerShape(3.dp))
-                            .border(1.dp, if (isPicked) Color(0xFF4CAF50) else Color(0xFF48484A), RoundedCornerShape(3.dp))
+                            .background(
+                                if (isPicked) Color(0xFF1B3820) else colors.surfaceElevated,
+                                LightRumorShapes.Panel
+                            )
+                            .border(
+                                1.dp,
+                                if (isPicked) Color(0xFF4CAF50) else colors.borderSubtle,
+                                LightRumorShapes.Panel
+                            )
                             .clickable {
-                                meta.pickStatus = if (isPicked) PickStatus.NONE else PickStatus.PICKED
+                                val newStatus = if (isPicked) PickStatus.NONE else PickStatus.PICKED
+                                val updated = currentItem.metadata.copy(pickStatus = newStatus)
+                                currentItem.metadata = updated
                                 metaUpdateTrigger++
-                                XmpSidecarManager.scheduleSaveSidecar(currentItem.filePath, meta, currentItem.developParams)
+                                editHistoryCatalog?.saveMetadataOnly(currentItem.uri.toString(), currentItem.fileName, currentItem.filePath, updated, currentItem.developParams)
+                                XmpSidecarManager.scheduleSaveSidecar(currentItem.filePath, updated, currentItem.developParams)
                             }
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
-                        Text(
-                            text = "採用",
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isPicked) Color.White else textPrimary
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .background(if (isPicked) Color(0xFF4CAF50) else colors.borderStrong, LightRumorShapes.SharpSquare)
+                            )
+                            Text(
+                                text = "採用",
+                                style = LightRumorTheme.typography.Button,
+                                color = if (isPicked) Color(0xFF4CAF50) else colors.textSecondary
+                            )
+                        }
                     }
 
                     // Reject Flag
                     val isRejected = meta.pickStatus == PickStatus.REJECTED
                     Box(
                         modifier = Modifier
-                            .background(if (isRejected) Color(0xFFC62828) else Color(0xFF1E1E1E), RoundedCornerShape(3.dp))
-                            .border(1.dp, if (isRejected) Color(0xFFEF5350) else Color(0xFF48484A), RoundedCornerShape(3.dp))
+                            .background(
+                                if (isRejected) Color(0xFF381B1B) else colors.surfaceElevated,
+                                LightRumorShapes.Panel
+                            )
+                            .border(
+                                1.dp,
+                                if (isRejected) colors.accentRed else colors.borderSubtle,
+                                LightRumorShapes.Panel
+                            )
                             .clickable {
-                                meta.pickStatus = if (isRejected) PickStatus.NONE else PickStatus.REJECTED
+                                val newStatus = if (isRejected) PickStatus.NONE else PickStatus.REJECTED
+                                val updated = currentItem.metadata.copy(pickStatus = newStatus)
+                                currentItem.metadata = updated
                                 metaUpdateTrigger++
-                                XmpSidecarManager.scheduleSaveSidecar(currentItem.filePath, meta, currentItem.developParams)
+                                editHistoryCatalog?.saveMetadataOnly(currentItem.uri.toString(), currentItem.fileName, currentItem.filePath, updated, currentItem.developParams)
+                                XmpSidecarManager.scheduleSaveSidecar(currentItem.filePath, updated, currentItem.developParams)
                             }
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
-                        Text(
-                            text = "不採用",
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isRejected) Color.White else textPrimary
-                        )
-                    }
-                }
-
-                // 1-5 Star Rating Controls
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    for (star in 1..5) {
-                        val isSelected = star <= meta.rating
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .background(if (isSelected) Color(0xFF332714) else Color(0xFF1B1D22), RoundedCornerShape(3.dp))
-                                .border(1.dp, if (isSelected) accentAmber else Color(0xFF48484A), RoundedCornerShape(3.dp))
-                            .clickable {
-                                meta.rating = if (meta.rating == star) 0 else star
-                                metaUpdateTrigger++
-                                XmpSidecarManager.scheduleSaveSidecar(currentItem.filePath, meta, currentItem.developParams)
-                            },
-                            contentAlignment = Alignment.Center
-                        ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .background(if (isRejected) colors.accentRed else colors.borderStrong, LightRumorShapes.SharpSquare)
+                            )
                             Text(
-                                text = "★$star",
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isSelected) accentAmber else textSecondary
+                                text = "不採用",
+                                style = LightRumorTheme.typography.Button,
+                                color = if (isRejected) colors.accentRed else colors.textSecondary
                             )
                         }
                     }
                 }
 
-                // 5 Color Labels
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    val colors = listOf(
+                // 1-5 Star Rating Bar
+                Row(
+                    modifier = Modifier
+                        .background(colors.surfaceElevated, LightRumorShapes.Panel)
+                        .border(1.dp, colors.borderSubtle, LightRumorShapes.Panel)
+                        .padding(horizontal = 4.dp, vertical = 3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    for (star in 1..5) {
+                        val isSelected = star <= meta.rating
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clickable {
+                                    val newRating = if (meta.rating == star) 0 else star
+                                    val updated = currentItem.metadata.copy(rating = newRating)
+                                    currentItem.metadata = updated
+                                    metaUpdateTrigger++
+                                    editHistoryCatalog?.saveMetadataOnly(currentItem.uri.toString(), currentItem.fileName, currentItem.filePath, updated, currentItem.developParams)
+                                    XmpSidecarManager.scheduleSaveSidecar(currentItem.filePath, updated, currentItem.developParams)
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "★",
+                                style = LightRumorTheme.typography.Header,
+                                color = if (isSelected) colors.accentAmber else colors.borderStrong
+                            )
+                        }
+                    }
+                }
+
+                // 5 Color Labels (Optical Chips)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    val colorList = listOf(
                         ColorLabel.RED to Color(0xFFE53935),
                         ColorLabel.YELLOW to Color(0xFFFDD835),
                         ColorLabel.GREEN to Color(0xFF43A047),
                         ColorLabel.BLUE to Color(0xFF1E88E5),
                         ColorLabel.PURPLE to Color(0xFF8E24AA)
                     )
-                    colors.forEach { (labelEnum, clr) ->
+                    colorList.forEach { (labelEnum, clr) ->
                         val isSelected = meta.colorLabel == labelEnum
                         Box(
                             modifier = Modifier
-                                .size(22.dp)
-                                .background(clr, CircleShape)
+                                .size(20.dp)
+                                .background(clr, LightRumorShapes.SharpSquare)
                                 .border(
                                     if (isSelected) 2.dp else 1.dp,
-                                    if (isSelected) Color.White else Color.Black,
-                                    CircleShape
+                                    if (isSelected) colors.textPrimary else Color.Transparent,
+                                    LightRumorShapes.SharpSquare
                                 )
                                 .clickable {
-                                    meta.colorLabel = if (isSelected) ColorLabel.NONE else labelEnum
+                                    val newColor = if (isSelected) ColorLabel.NONE else labelEnum
+                                    val updated = currentItem.metadata.copy(colorLabel = newColor)
+                                    currentItem.metadata = updated
                                     metaUpdateTrigger++
-                                    XmpSidecarManager.scheduleSaveSidecar(currentItem.filePath, meta, currentItem.developParams)
+                                    editHistoryCatalog?.saveMetadataOnly(currentItem.uri.toString(), currentItem.fileName, currentItem.filePath, updated, currentItem.developParams)
+                                    XmpSidecarManager.scheduleSaveSidecar(currentItem.filePath, updated, currentItem.developParams)
                                 }
                         )
                     }
@@ -683,4 +752,7 @@ fun CullingScreen(
         }
     }
 }
+}
+
+
 

@@ -55,12 +55,20 @@ fun ThumbZoneBottomBar(
     var activeTab by remember { mutableStateOf(ThumbTab.Light) }
 
     // 現在の写真の縮小サムネイルを元にしたカラープロファイルアイテムの生成
-    val profileItems = remember(previewBitmap) {
-        createLiveProfileItems(previewBitmap)
-    }
+    var profileItems by remember { mutableStateOf(createLiveProfileItems(null)) }
+    var filterItems by remember { mutableStateOf(createLiveFilterItems(null)) }
 
-    val filterItems = remember(previewBitmap) {
-        createLiveFilterItems(previewBitmap)
+    LaunchedEffect(previewBitmap) {
+        if (previewBitmap != null) {
+            val (profiles, filters) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                createLiveProfileItems(previewBitmap) to createLiveFilterItems(previewBitmap)
+            }
+            profileItems = profiles
+            filterItems = filters
+        } else {
+            profileItems = createLiveProfileItems(null)
+            filterItems = createLiveFilterItems(null)
+        }
     }
 
     Column(
@@ -74,24 +82,24 @@ fun ThumbZoneBottomBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(colors.background)
-                .padding(vertical = 6.dp, horizontal = 8.dp)
+                .background(colors.surface)
+                .padding(vertical = 4.dp, horizontal = 8.dp)
                 .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            ThumbTab.values().forEach { tab ->
+            ThumbTab.entries.forEach { tab ->
                 val isSelected = tab == activeTab
                 Box(
                     modifier = Modifier
-                        .height(36.dp)
+                        .height(34.dp)
                         .background(
-                            if (isSelected) colors.surfaceElevated else Color.Transparent,
-                            RoundedCornerShape(3.dp)
+                            if (isSelected) colors.accentAmber.copy(alpha = 0.12f) else colors.surfaceElevated,
+                            LightRumorShapes.Panel
                         )
                         .border(
                             1.dp,
                             if (isSelected) colors.accentAmber else colors.borderSubtle,
-                            RoundedCornerShape(3.dp)
+                            LightRumorShapes.Panel
                         )
                         .clickable {
                             if (activeTab != tab) {
@@ -99,15 +107,13 @@ fun ThumbZoneBottomBar(
                                 activeTab = tab
                             }
                         }
-                        .padding(horizontal = 14.dp),
+                        .padding(horizontal = 12.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = tab.title,
                         style = LightRumorTheme.typography.Tab,
-                        color = if (isSelected) colors.accentAmber else colors.textSecondary,
-                        fontSize = 12.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                        color = if (isSelected) colors.accentAmber else colors.textSecondary
                     )
                 }
             }
@@ -231,13 +237,13 @@ fun ThumbZoneBottomBar(
                     }
 
                     ThumbTab.Color -> {
-                        // モノクロ / カラー 切替トグル
+                        // モノクロ / カラー セグメントスイッチ
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                                .background(colors.surfaceElevated, RoundedCornerShape(3.dp))
-                                .border(1.dp, colors.borderSubtle, RoundedCornerShape(3.dp))
+                                .padding(horizontal = 14.dp, vertical = 6.dp)
+                                .background(colors.surfaceElevated, LightRumorShapes.Panel)
+                                .border(1.dp, colors.borderSubtle, LightRumorShapes.Panel)
                                 .padding(2.dp),
                             horizontalArrangement = Arrangement.Center
                         ) {
@@ -247,8 +253,8 @@ fun ThumbZoneBottomBar(
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(28.dp)
-                                    .background(if (!isMono) colors.accentAmber else Color.Transparent, RoundedCornerShape(2.dp))
+                                    .height(30.dp)
+                                    .background(if (!isMono) colors.accentAmber.copy(alpha = 0.2f) else Color.Transparent, LightRumorShapes.SharpSquare)
                                     .clickable {
                                         hapticManager?.performDialTick()
                                         val newProfile = if (params.colorProfile == "monochrome") "cinetone" else params.colorProfile
@@ -259,10 +265,8 @@ fun ThumbZoneBottomBar(
                             ) {
                                 Text(
                                     text = "カラー現像",
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
-                                    color = if (!isMono) Color.Black else colors.textSecondary
+                                    style = LightRumorTheme.typography.Button,
+                                    color = if (!isMono) colors.accentAmber else colors.textSecondary
                                 )
                             }
 
@@ -270,8 +274,8 @@ fun ThumbZoneBottomBar(
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(28.dp)
-                                    .background(if (isMono) colors.accentAmber else Color.Transparent, RoundedCornerShape(2.dp))
+                                    .height(30.dp)
+                                    .background(if (isMono) colors.accentAmber.copy(alpha = 0.2f) else Color.Transparent, LightRumorShapes.SharpSquare)
                                     .clickable {
                                         hapticManager?.performDialTick()
                                         onParamsChange(params.copy(isMonochrome = true, colorProfile = "monochrome"))
@@ -281,10 +285,8 @@ fun ThumbZoneBottomBar(
                             ) {
                                 Text(
                                     text = "モノクロ現像",
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp,
-                                    color = if (isMono) Color.Black else colors.textSecondary
+                                    style = LightRumorTheme.typography.Button,
+                                    color = if (isMono) colors.accentAmber else colors.textSecondary
                                 )
                             }
                         }
@@ -294,10 +296,10 @@ fun ThumbZoneBottomBar(
                         if (!isMono) {
                             // --- カラー現像モード ---
                             Text(
-                                text = "カラープロファイル (タップして適用)",
-                                style = LightRumorTheme.typography.Label,
+                                text = "COLOR PROFILE",
+                                style = LightRumorTheme.typography.Header,
                                 color = colors.accentAmber,
-                                modifier = Modifier.padding(start = 12.dp, top = 6.dp)
+                                modifier = Modifier.padding(start = 14.dp, top = 4.dp, bottom = 2.dp)
                             )
                             PhotoThumbnailSelector(
                                 items = profileItems,
@@ -393,10 +395,10 @@ fun ThumbZoneBottomBar(
                         } else {
                             // --- モノクロ現像モード ---
                             Text(
-                                text = "白黒光学フィルター (コントラスト調子)",
-                                style = LightRumorTheme.typography.Label,
+                                text = "OPTICAL FILTERS",
+                                style = LightRumorTheme.typography.Header,
                                 color = colors.accentAmber,
-                                modifier = Modifier.padding(start = 12.dp, top = 6.dp)
+                                modifier = Modifier.padding(start = 14.dp, top = 4.dp, bottom = 2.dp)
                             )
                             PhotoThumbnailSelector(
                                 items = filterItems,
@@ -479,6 +481,7 @@ fun ThumbZoneBottomBar(
                         ColorMixerScreen(
                             params = params,
                             onParamsChange = onParamsChange,
+                            onParamsChangeFinished = onParamsChangeFinished,
                             hapticManager = hapticManager
                         )
                     }
@@ -487,6 +490,7 @@ fun ThumbZoneBottomBar(
                         DetailDenoiseScreen(
                             params = params,
                             onParamsChange = onParamsChange,
+                            onParamsChangeFinished = onParamsChangeFinished,
                             hapticManager = hapticManager
                         )
                     }
@@ -534,6 +538,7 @@ fun ThumbZoneBottomBar(
                         CropRotateScreen(
                             params = params,
                             onParamsChange = onParamsChange,
+                            onParamsChangeFinished = onParamsChangeFinished,
                             hapticManager = hapticManager
                         )
                     }
@@ -608,7 +613,8 @@ private fun applyFilterToBitmap(src: Bitmap, weights: List<Float>): Bitmap {
         val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
         val canvas = android.graphics.Canvas(out)
         val paint = Paint()
-        val dummyParams = DevelopmentParams(isMonochrome = true, monochromeWeights = weights.toFloatArray())
+        val eightWeights = FloatArray(8) { idx -> weights.getOrElse(idx) { 0.125f } }
+        val dummyParams = DevelopmentParams(isMonochrome = true, monochromeWeights = eightWeights)
         val cm = buildPhotoDevelopColorMatrix(dummyParams)
         paint.colorFilter = android.graphics.ColorMatrixColorFilter(cm.values)
         canvas.drawBitmap(src, 0f, 0f, paint)

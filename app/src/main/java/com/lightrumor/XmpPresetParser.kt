@@ -96,13 +96,19 @@ object XmpPresetParser {
     fun parseXmpString(xmpContent: String, defaultName: String = "Imported Preset"): XmpPreset {
         val params = DevelopmentParams()
 
-        // Name tag or title
+        // Name tag or title (element format or attribute format)
         val titleMatch = Regex("<(crs:PresetName|dc:title|xmp:Name)[^>]*>([^<]+)</(crs:PresetName|dc:title|xmp:Name)>").find(xmpContent)
-        val name = titleMatch?.groupValues?.get(2)?.trim() ?: defaultName
+        val attrTitleMatch = Regex("""crs:PresetName="([^"]+)"""").find(xmpContent)
+        val name = titleMatch?.groupValues?.get(2)?.trim()
+            ?: attrTitleMatch?.groupValues?.get(1)?.trim()
+            ?: defaultName
 
         // Category or Group
         val groupMatch = Regex("<(crs:Group|crs:Cluster)[^>]*>([^<]+)</(crs:Group|crs:Cluster)>").find(xmpContent)
-        val category = groupMatch?.groupValues?.get(2)?.trim() ?: "USER"
+        val attrGroupMatch = Regex("""crs:Group="([^"]+)"""").find(xmpContent)
+        val category = groupMatch?.groupValues?.get(2)?.trim()
+            ?: attrGroupMatch?.groupValues?.get(1)?.trim()
+            ?: "USER"
 
         // Helper regex extractor
         fun extractFloat(attrName: String): Float? {
@@ -155,11 +161,11 @@ object XmpPresetParser {
             append("  <rdf:Description rdf:about=\"\"\n")
             append("    xmlns:crs=\"http://ns.adobe.com/camera-raw-settings/1.0/\"\n")
             append("   crs:PresetType=\"Normal\"\n")
-            append("   crs:PresetName=\"${preset.name}\"\n")
-            append("   crs:Group=\"${preset.category}\"\n")
+            append("   crs:PresetName=\"${escapeXml(preset.name)}\"\n")
+            append("   crs:Group=\"${escapeXml(preset.category)}\"\n")
             append("   crs:Temperature=\"${p.kelvin.toInt()}\"\n")
-            append("   crs:Tint=\"${"%.1f".format(p.tint)}\"\n")
-            append("   crs:Exposure2012=\"${"%+.2f".format(p.exposureEV)}\"\n")
+            append("   crs:Tint=\"${String.format(java.util.Locale.US, "%.1f", p.tint)}\"\n")
+            append("   crs:Exposure2012=\"${String.format(java.util.Locale.US, "%+.2f", p.exposureEV)}\"\n")
             append("   crs:Contrast2012=\"${p.contrast.toInt()}\"\n")
             append("   crs:Highlights2012=\"${p.highlights.toInt()}\"\n")
             append("   crs:Shadows2012=\"${p.shadows.toInt()}\"\n")
@@ -419,5 +425,11 @@ object XmpPresetParser {
             )
         )
     )
-}
 
+    private fun escapeXml(str: String): String = str
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&apos;")
+}

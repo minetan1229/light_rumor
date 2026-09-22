@@ -44,8 +44,13 @@ add_library(light_rumor_engine SHARED
     src/JniBridge.cpp
 )
 
+target_include_directories(light_rumor_engine PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/light_rumor
+)
+
 if(ANDROID)
-    target_link_libraries(light_rumor_engine log ${CMAKE_DL_LIBS} -fopenmp -static-openmp)
+    target_link_libraries(light_rumor_engine android log ${CMAKE_DL_LIBS} -fopenmp -static-openmp)
 endif()
 
 

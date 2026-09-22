@@ -43,12 +43,13 @@ public:
                                     std::vector<uint32_t>& outScopeRgba);
 
     // Draw vectorscope graticule (circle, crosshairs, I-line / skin tone angle, 75% target boxes)
-    static void drawVectorscopeGraticule(std::vector<uint32_t>& scopePixels, int32_t dim);
+    static void drawVectorscopeGraticule(std::vector<uint32_t>& scopePixels, int32_t dim, float gain = 2.0f);
 
     // Evaluate IRE from RGB (0..100)
     static inline float calculateIRE(float r, float g, float b) {
         float luma = 0.2126f * r + 0.7152f * g + 0.0722f * b;
-        return luma * 100.0f;
+        if (std::isnan(luma) || luma <= 0.0f) return 0.0f;
+        return std::clamp(luma, 0.0f, 1.0f) * 100.0f;
     }
 
     // Map IRE to False Color RGB

@@ -68,6 +68,7 @@ val OPTICAL_FILTERS = listOf(
 fun ColorMixerScreen(
     params: DevelopmentParams,
     onParamsChange: (DevelopmentParams) -> Unit,
+    onParamsChangeFinished: (() -> Unit)? = null,
     hapticManager: HapticManager? = null,
     modifier: Modifier = Modifier
 ) {
@@ -79,66 +80,60 @@ fun ColorMixerScreen(
         modifier = modifier
             .fillMaxWidth()
             .background(colors.background)
+            .verticalScroll(rememberScrollState())
             .padding(vertical = 6.dp)
     ) {
         // 1. Mode Switcher: HSL COLOR vs MONOCHROME MIXER
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 14.dp, vertical = 4.dp)
+                .background(colors.surfaceElevated, LightRumorShapes.Panel)
+                .border(1.dp, colors.borderSubtle, LightRumorShapes.Panel)
+                .padding(2.dp),
+            horizontalArrangement = Arrangement.Center
         ) {
             Box(
                 modifier = Modifier
                     .weight(1f)
+                    .height(30.dp)
                     .background(
-                        if (!params.isMonochrome) colors.surfaceElevated else colors.surface,
-                        RoundedCornerShape(3.dp)
-                    )
-                    .border(
-                        1.dp,
-                        if (!params.isMonochrome) colors.accentAmber else colors.borderSubtle,
-                        RoundedCornerShape(3.dp)
+                        if (!params.isMonochrome) colors.accentAmber.copy(alpha = 0.2f) else Color.Transparent,
+                        LightRumorShapes.SharpSquare
                     )
                     .clickable {
                         hapticManager?.performDialTick()
                         onParamsChange(params.copy(isMonochrome = false))
-                    }
-                    .padding(vertical = 8.dp),
+                        onParamsChangeFinished?.invoke()
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "8色 HSL ミキサー",
-                    style = LightRumorTheme.typography.Tab,
-                    color = if (!params.isMonochrome) colors.accentAmber else colors.textSecondary,
-                    fontSize = 11.sp
+                    text = "HSL カラー",
+                    style = LightRumorTheme.typography.Button,
+                    color = if (!params.isMonochrome) colors.accentAmber else colors.textSecondary
                 )
             }
 
             Box(
                 modifier = Modifier
                     .weight(1f)
+                    .height(30.dp)
                     .background(
-                        if (params.isMonochrome) colors.surfaceElevated else colors.surface,
-                        RoundedCornerShape(3.dp)
-                    )
-                    .border(
-                        1.dp,
-                        if (params.isMonochrome) colors.accentAmber else colors.borderSubtle,
-                        RoundedCornerShape(3.dp)
+                        if (params.isMonochrome) colors.accentAmber.copy(alpha = 0.2f) else Color.Transparent,
+                        LightRumorShapes.SharpSquare
                     )
                     .clickable {
                         hapticManager?.performDialTick()
                         onParamsChange(params.copy(isMonochrome = true))
-                    }
-                    .padding(vertical = 8.dp),
+                        onParamsChangeFinished?.invoke()
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "B&W モノクロミキサー",
-                    style = LightRumorTheme.typography.Tab,
-                    color = if (params.isMonochrome) colors.accentAmber else colors.textSecondary,
-                    fontSize = 11.sp
+                    text = "モノクロ ミキサー",
+                    style = LightRumorTheme.typography.Button,
+                    color = if (params.isMonochrome) colors.accentAmber else colors.textSecondary
                 )
             }
         }
@@ -153,42 +148,45 @@ fun ColorMixerScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                    .padding(horizontal = 14.dp, vertical = 4.dp)
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 COLOR_BANDS.forEach { band ->
                     val isSelected = band.index == selectedBandIndex
-                    Row(
+                    Box(
                         modifier = Modifier
                             .background(
-                                if (isSelected) colors.surfaceElevated else colors.surface,
-                                RoundedCornerShape(3.dp)
+                                if (isSelected) colors.accentAmber.copy(alpha = 0.15f) else colors.surfaceElevated,
+                                LightRumorShapes.Panel
                             )
                             .border(
                                 1.dp,
                                 if (isSelected) colors.accentAmber else colors.borderSubtle,
-                                RoundedCornerShape(3.dp)
+                                LightRumorShapes.Panel
                             )
                             .clickable {
                                 hapticManager?.performDialTick()
                                 selectedBandIndex = band.index
                             }
                             .padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .background(band.previewColor, CircleShape)
-                        )
-                        Text(
-                            text = band.code,
-                            style = LightRumorTheme.typography.Header,
-                            color = if (isSelected) colors.textPrimary else colors.textSecondary,
-                            fontSize = 10.sp
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(band.previewColor, LightRumorShapes.SharpSquare)
+                            )
+                            Text(
+                                text = band.name,
+                                style = LightRumorTheme.typography.Tab,
+                                color = if (isSelected) colors.accentAmber else colors.textSecondary
+                            )
+                        }
                     }
                 }
             }
@@ -200,16 +198,13 @@ fun ColorMixerScreen(
             val currentBandInfo = COLOR_BANDS[selectedBandIndex]
 
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
                     text = "${currentBandInfo.name} バンド調整",
-                    style = LightRumorTheme.typography.Label,
+                    style = LightRumorTheme.typography.Header,
                     color = colors.accentAmber,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
-                    fontSize = 10.sp
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
                 )
 
                 LightroomSlider(
@@ -220,6 +215,7 @@ fun ColorMixerScreen(
                         updated[selectedBandIndex] = updated[selectedBandIndex].copy(hueShift = newVal)
                         onParamsChange(params.copy(hslBands = updated))
                     },
+                    onValueChangeFinished = onParamsChangeFinished,
                     range = -100f..100f,
                     defaultValue = 0f,
                     displayDecimals = 0,
@@ -235,6 +231,7 @@ fun ColorMixerScreen(
                         updated[selectedBandIndex] = updated[selectedBandIndex].copy(saturation = newVal)
                         onParamsChange(params.copy(hslBands = updated))
                     },
+                    onValueChangeFinished = onParamsChangeFinished,
                     range = -100f..100f,
                     defaultValue = 0f,
                     displayDecimals = 0,
@@ -250,6 +247,7 @@ fun ColorMixerScreen(
                         updated[selectedBandIndex] = updated[selectedBandIndex].copy(luminance = newVal)
                         onParamsChange(params.copy(hslBands = updated))
                     },
+                    onValueChangeFinished = onParamsChangeFinished,
                     range = -100f..100f,
                     defaultValue = 0f,
                     displayDecimals = 0,
@@ -261,16 +259,16 @@ fun ColorMixerScreen(
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     text = "カメラプライマリキャリブレーション",
-                    style = LightRumorTheme.typography.Label,
-                    color = colors.textSecondary,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
-                    fontSize = 10.sp
+                    style = LightRumorTheme.typography.Header,
+                    color = colors.accentAmber,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
                 )
 
                 LightroomSlider(
-                    label = "レッド プライマリ 色相",
+                    label = "レッド 色相",
                     value = params.primaryRed.hueShift,
                     onValueChange = { onParamsChange(params.copy(primaryRed = params.primaryRed.copy(hueShift = it))) },
+                    onValueChangeFinished = onParamsChangeFinished,
                     range = -100f..100f,
                     defaultValue = 0f,
                     displayDecimals = 0,
@@ -279,9 +277,10 @@ fun ColorMixerScreen(
                 )
 
                 LightroomSlider(
-                    label = "レッド プライマリ 彩度",
+                    label = "レッド 彩度",
                     value = params.primaryRed.saturationShift,
                     onValueChange = { onParamsChange(params.copy(primaryRed = params.primaryRed.copy(saturationShift = it))) },
+                    onValueChangeFinished = onParamsChangeFinished,
                     range = -100f..100f,
                     defaultValue = 0f,
                     displayDecimals = 0,
@@ -290,9 +289,10 @@ fun ColorMixerScreen(
                 )
 
                 LightroomSlider(
-                    label = "グリーン プライマリ 色相",
+                    label = "グリーン 色相",
                     value = params.primaryGreen.hueShift,
                     onValueChange = { onParamsChange(params.copy(primaryGreen = params.primaryGreen.copy(hueShift = it))) },
+                    onValueChangeFinished = onParamsChangeFinished,
                     range = -100f..100f,
                     defaultValue = 0f,
                     displayDecimals = 0,
@@ -301,9 +301,10 @@ fun ColorMixerScreen(
                 )
 
                 LightroomSlider(
-                    label = "グリーン プライマリ 彩度",
+                    label = "グリーン 彩度",
                     value = params.primaryGreen.saturationShift,
                     onValueChange = { onParamsChange(params.copy(primaryGreen = params.primaryGreen.copy(saturationShift = it))) },
+                    onValueChangeFinished = onParamsChangeFinished,
                     range = -100f..100f,
                     defaultValue = 0f,
                     displayDecimals = 0,
@@ -312,9 +313,10 @@ fun ColorMixerScreen(
                 )
 
                 LightroomSlider(
-                    label = "ブルー プライマリ 色相",
+                    label = "ブルー 色相",
                     value = params.primaryBlue.hueShift,
                     onValueChange = { onParamsChange(params.copy(primaryBlue = params.primaryBlue.copy(hueShift = it))) },
+                    onValueChangeFinished = onParamsChangeFinished,
                     range = -100f..100f,
                     defaultValue = 0f,
                     displayDecimals = 0,
@@ -323,9 +325,10 @@ fun ColorMixerScreen(
                 )
 
                 LightroomSlider(
-                    label = "ブルー プライマリ 彩度",
+                    label = "ブルー 彩度",
                     value = params.primaryBlue.saturationShift,
                     onValueChange = { onParamsChange(params.copy(primaryBlue = params.primaryBlue.copy(saturationShift = it))) },
+                    onValueChangeFinished = onParamsChangeFinished,
                     range = -100f..100f,
                     defaultValue = 0f,
                     displayDecimals = 0,
@@ -341,7 +344,7 @@ fun ColorMixerScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                    .padding(horizontal = 14.dp, vertical = 4.dp)
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -350,27 +353,27 @@ fun ColorMixerScreen(
                     Box(
                         modifier = Modifier
                             .background(
-                                if (isSelected) colors.surfaceElevated else colors.surface,
-                                RoundedCornerShape(3.dp)
+                                if (isSelected) colors.accentAmber.copy(alpha = 0.15f) else colors.surfaceElevated,
+                                LightRumorShapes.Panel
                             )
                             .border(
                                 1.dp,
                                 if (isSelected) colors.accentAmber else colors.borderSubtle,
-                                RoundedCornerShape(3.dp)
+                                LightRumorShapes.Panel
                             )
                             .clickable {
                                 hapticManager?.performDialTick()
                                 activeFilterId = filter.id
                                 onParamsChange(params.copy(monochromeWeights = filter.weights.clone()))
+                                onParamsChangeFinished?.invoke()
                             }
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = filter.label,
                             style = LightRumorTheme.typography.Tab,
-                            color = if (isSelected) colors.accentAmber else colors.textSecondary,
-                            fontSize = 10.sp
+                            color = if (isSelected) colors.accentAmber else colors.textSecondary
                         )
                     }
                 }
@@ -380,9 +383,7 @@ fun ColorMixerScreen(
 
             // 8-Channel Monochrome Luminance Sliders
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
+                modifier = Modifier.fillMaxWidth()
             ) {
                 COLOR_BANDS.forEach { band ->
                     val currentWeight = params.monochromeWeights.getOrElse(band.index) { 0.125f }
@@ -390,11 +391,16 @@ fun ColorMixerScreen(
                         label = "${band.name} 輝度",
                         value = currentWeight * 100f,
                         onValueChange = { newVal ->
-                            val updatedWeights = params.monochromeWeights.clone()
+                            val updatedWeights = if (params.monochromeWeights.size == 8) {
+                                params.monochromeWeights.clone()
+                            } else {
+                                FloatArray(8) { idx -> params.monochromeWeights.getOrElse(idx) { 0.125f } }
+                            }
                             updatedWeights[band.index] = newVal * 0.01f
                             activeFilterId = "custom"
                             onParamsChange(params.copy(monochromeWeights = updatedWeights))
                         },
+                        onValueChangeFinished = onParamsChangeFinished,
                         range = 0f..100f,
                         defaultValue = 12.5f,
                         unit = "%",

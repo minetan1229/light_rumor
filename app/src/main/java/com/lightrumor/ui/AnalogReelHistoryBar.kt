@@ -59,34 +59,30 @@ fun AnalogReelHistoryBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(colors.surfaceElevated)
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+                .padding(horizontal = 8.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     text = "REEL STEP #${currentNode?.stepIndex ?: 0}",
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 10.sp,
+                    fontSize = 13.sp,
                     color = colors.accentAmber
                 )
                 Text(
                     text = "[${currentNode?.actionLabel ?: "BASE"}]",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 9.sp,
+                    fontFamily = FontFamily.SansSerif,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 12.sp,
                     color = colors.textPrimary,
                     maxLines = 1
                 )
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "[-50]",
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 9.sp,
-                    color = colors.accentAmber,
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(
                     modifier = Modifier
                         .background(colors.surfacePressed, RoundedCornerShape(2.dp))
                         .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
@@ -94,15 +90,18 @@ fun AnalogReelHistoryBar(
                             hapticManager?.performDialTick()
                             historyManager.jumpStepsBack(50)?.let { onStateRestored(it) }
                         }
-                        .padding(horizontal = 5.dp, vertical = 2.dp)
-                )
+                        .padding(horizontal = 7.dp, vertical = 5.dp)
+                ) {
+                    Text(
+                        text = "-50",
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        color = colors.accentAmber
+                    )
+                }
 
-                Text(
-                    text = "[-10]",
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 9.sp,
-                    color = colors.accentAmber,
+                Box(
                     modifier = Modifier
                         .background(colors.surfacePressed, RoundedCornerShape(2.dp))
                         .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
@@ -110,15 +109,18 @@ fun AnalogReelHistoryBar(
                             hapticManager?.performDialTick()
                             historyManager.jumpStepsBack(10)?.let { onStateRestored(it) }
                         }
-                        .padding(horizontal = 5.dp, vertical = 2.dp)
-                )
+                        .padding(horizontal = 7.dp, vertical = 5.dp)
+                ) {
+                    Text(
+                        text = "-10",
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        color = colors.accentAmber
+                    )
+                }
 
-                Text(
-                    text = "[< UNDO]",
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 9.sp,
-                    color = if (historyManager.canUndo()) colors.textPrimary else colors.textSecondary.copy(alpha = 0.4f),
+                Box(
                     modifier = Modifier
                         .background(colors.surfacePressed, RoundedCornerShape(2.dp))
                         .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
@@ -126,15 +128,18 @@ fun AnalogReelHistoryBar(
                             hapticManager?.performDialTick()
                             historyManager.undo()?.let { onStateRestored(it) }
                         }
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                )
+                        .padding(horizontal = 8.dp, vertical = 5.dp)
+                ) {
+                    Text(
+                        text = "戻す",
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        color = if (historyManager.canUndo()) colors.textPrimary else colors.textSecondary.copy(alpha = 0.35f)
+                    )
+                }
 
-                Text(
-                    text = "[REDO >]",
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 9.sp,
-                    color = if (historyManager.canRedo()) colors.textPrimary else colors.textSecondary.copy(alpha = 0.4f),
+                Box(
                     modifier = Modifier
                         .background(colors.surfacePressed, RoundedCornerShape(2.dp))
                         .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
@@ -142,8 +147,16 @@ fun AnalogReelHistoryBar(
                             hapticManager?.performDialTick()
                             historyManager.redo()?.let { onStateRestored(it) }
                         }
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                )
+                        .padding(horizontal = 8.dp, vertical = 5.dp)
+                ) {
+                    Text(
+                        text = "進む",
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        color = if (historyManager.canRedo()) colors.textPrimary else colors.textSecondary.copy(alpha = 0.35f)
+                    )
+                }
             }
         }
 
@@ -153,15 +166,15 @@ fun AnalogReelHistoryBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(colors.surface)
-                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
                     .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = "BRANCHES:",
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 8.sp,
+                    fontSize = 11.sp,
                     color = colors.textSecondary
                 )
                 branches.forEach { branch ->
@@ -174,13 +187,13 @@ fun AnalogReelHistoryBar(
                                 hapticManager?.performDialTick()
                                 historyManager.switchBranch(branch.branchId)?.let { onStateRestored(it) }
                             }
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Text(
                             text = branch.name.uppercase(),
-                            fontFamily = FontFamily.Monospace,
+                            fontFamily = FontFamily.SansSerif,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 8.sp,
+                            fontSize = 11.sp,
                             color = if (isBranchActive) colors.surface else colors.textPrimary
                         )
                     }
@@ -192,7 +205,7 @@ fun AnalogReelHistoryBar(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(72.dp)
+                .height(84.dp)
                 .background(Color(0xFF0D0E10))
                 .draggable(
                     orientation = Orientation.Horizontal,
@@ -217,15 +230,15 @@ fun AnalogReelHistoryBar(
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().height(10.dp).padding(horizontal = 4.dp),
+                    modifier = Modifier.fillMaxWidth().height(12.dp).padding(horizontal = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     repeat(24) {
                         Box(
                             modifier = Modifier
-                                .width(6.dp)
-                                .height(5.dp)
+                                .width(7.dp)
+                                .height(6.dp)
                                 .background(Color(0xFF1E2024), RoundedCornerShape(1.dp))
                         )
                     }
@@ -237,7 +250,7 @@ fun AnalogReelHistoryBar(
                         .fillMaxWidth()
                         .padding(horizontal = 6.dp)
                         .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     timeline.forEach { node ->
@@ -254,15 +267,15 @@ fun AnalogReelHistoryBar(
                 }
 
                 Row(
-                    modifier = Modifier.fillMaxWidth().height(10.dp).padding(horizontal = 4.dp),
+                    modifier = Modifier.fillMaxWidth().height(12.dp).padding(horizontal = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     repeat(24) {
                         Box(
                             modifier = Modifier
-                                .width(6.dp)
-                                .height(5.dp)
+                                .width(7.dp)
+                                .height(6.dp)
                                 .background(Color(0xFF1E2024), RoundedCornerShape(1.dp))
                         )
                     }
@@ -282,7 +295,7 @@ private fun FilmFrameCell(
 
     Box(
         modifier = Modifier
-            .width(62.dp)
+            .width(74.dp)
             .fillMaxHeight()
             .background(
                 if (isCurrent) colors.surfacePressed else Color(0xFF141619),
@@ -294,7 +307,7 @@ private fun FilmFrameCell(
                 RoundedCornerShape(2.dp)
             )
             .clickable { onClick() }
-            .padding(3.dp),
+            .padding(4.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -305,21 +318,21 @@ private fun FilmFrameCell(
                 text = "#${"%02d".format(node.stepIndex)}",
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold,
-                fontSize = 9.sp,
+                fontSize = 12.sp,
                 color = if (isCurrent) colors.accentAmber else colors.textSecondary
             )
             Text(
                 text = node.actionLabel,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 7.sp,
+                fontFamily = FontFamily.SansSerif,
+                fontSize = 11.sp,
                 color = if (isCurrent) colors.textPrimary else colors.textSecondary,
                 maxLines = 1
             )
             if (isCurrent) {
                 Box(
                     modifier = Modifier
-                        .padding(top = 2.dp)
-                        .width(18.dp)
+                        .padding(top = 3.dp)
+                        .width(22.dp)
                         .height(2.dp)
                         .background(colors.accentAmber)
                 )

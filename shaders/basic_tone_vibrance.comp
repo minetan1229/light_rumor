@@ -10,9 +10,8 @@ layout(push_constant) uniform BasicToneParams {
     vec3 wbGains;               // (rGain, gGain, bGain)
     vec3 shadowTint;            // (shadowR, shadowG, shadowB)
 
-    // 2. Primary Calibration
-    vec2 calibRed;              // (hueShift, satShift) [-1.0, 1.0]
-    vec2 calibGreen;            // (hueShift, satShift) [-1.0, 1.0]
+    // 2. Primary Calibration (packed into vec4 + vec2 to keep push constants <= 128 bytes)
+    vec4 calibRedGreen;         // xy: calibRed (hueShift, satShift), zw: calibGreen (hueShift, satShift)
     vec2 calibBlue;             // (hueShift, satShift) [-1.0, 1.0]
 
     // 3. Basic Tone
@@ -27,8 +26,6 @@ layout(push_constant) uniform BasicToneParams {
     float vibrance;             // -1.0 to 1.0 (Skin-protected)
     float saturation;           // -1.0 to 1.0 (Global)
     float dehaze;               // -1.0 to 1.0 (Atmospheric scattering)
-    float clarity;              // -1.0 to 1.0 (Mid-frequency contrast)
-    float texture;              // -1.0 to 1.0 (High-frequency texture)
 
     // 5. Geometry & Dimensions
     ivec2 tileSize;             // Tile width, height
@@ -92,15 +89,23 @@ vec3 hslToRgb(vec3 hsl) {
     );
 }
 
-// Highlight recovery (soft-knee shoulder)
+// Highlight recovery (soft-knee shoulder compression when negative, boost when positive)
 vec3 recoverHighlights(vec3 c, float amount) {
-    if (amount <= 0.0) return c;
+    if (abs(amount) < 1e-5) return c;
     const float threshold = 0.75;
     float maxC = max(max(c.r, c.g), c.b);
     if (maxC > threshold) {
         float excess = maxC - threshold;
-        float compressed = threshold + (excess / (1.0 + excess * amount * 0.8));
-        c *= (compressed / maxC);
+        if (amount < 0.0) {
+            // Negative amount: highlight recovery / compression
+            float hFactor = -amount;
+            float compressed = threshold + (excess / (1.0 + excess * hFactor * 1.5));
+            c *= (compressed / maxC);
+        } else {
+            // Positive amount: highlight expansion / boost
+            float boosted = threshold + excess * (1.0 + amount * 0.5);
+            c *= (boosted / maxC);
+        }
     }
     return c;
 }
@@ -116,15 +121,16 @@ vec3 liftShadows(vec3 c, float amount) {
 // Atmospheric Dehaze model
 vec3 applyDehaze(vec3 c, float dehazeAmount) {
     if (abs(dehazeAmount) < 1e-5) return c;
-    // Dark channel estimation
-    float darkCh = min(min(c.r, c.g), c.b);
-    // Transmission factor estimation
-    float t = clamp(1.0 - 0.75 * darkCh, 0.15, 1.0);
-    // Dehazed color reconstruction
     vec3 atmosphericLight = vec3(0.95, 0.96, 0.98);
-    float factor = 1.0 + dehazeAmount * 0.5;
-    vec3 dehazed = (c - atmosphericLight) / mix(1.0, t, dehazeAmount * 0.6) + atmosphericLight;
-    return mix(c, max(vec3(0.0), dehazed), abs(dehazeAmount));
+    if (dehazeAmount > 0.0) {
+        float darkCh = min(min(c.r, c.g), c.b);
+        float t = clamp(1.0 - 0.75 * darkCh, 0.15, 1.0);
+        vec3 dehazed = (c - atmosphericLight) / mix(1.0, t, dehazeAmount * 0.6) + atmosphericLight;
+        return mix(c, max(vec3(0.0), dehazed), dehazeAmount);
+    } else {
+        // Add atmospheric haze
+        return mix(c, atmosphericLight, -dehazeAmount * 0.5);
+    }
 }
 
 // Skin-protected non-linear Vibrance
@@ -137,6 +143,9 @@ vec3 applyVibrance(vec3 c, float vib) {
     // Skin protection: Hue around 20-40 degrees (0.05 to 0.12 normalized)
     vec3 hsl = rgbToHsl(c);
     float hueDist = abs(hsl.x - 0.08);
+    if (hueDist > 0.5) {
+        hueDist = 1.0 - hueDist;
+    }
     float skinWeight = clamp(1.0 - (hueDist / 0.10), 0.0, 1.0);
 
     // Muted boost on skin tones and already saturated areas; strong boost on dull backgrounds
@@ -147,19 +156,23 @@ vec3 applyVibrance(vec3 c, float vib) {
 
 // Apply Primary Calibration
 vec3 applyCalibration(vec3 c) {
-    if (abs(params.calibRed.x) < 1e-4 && abs(params.calibRed.y) < 1e-4 &&
-        abs(params.calibGreen.x) < 1e-4 && abs(params.calibGreen.y) < 1e-4 &&
-        abs(params.calibBlue.x) < 1e-4 && abs(params.calibBlue.y) < 1e-4) {
+    vec2 calibRed = params.calibRedGreen.xy;
+    vec2 calibGreen = params.calibRedGreen.zw;
+    vec2 calibBlue = params.calibBlue;
+
+    if (abs(calibRed.x) < 1e-4 && abs(calibRed.y) < 1e-4 &&
+        abs(calibGreen.x) < 1e-4 && abs(calibGreen.y) < 1e-4 &&
+        abs(calibBlue.x) < 1e-4 && abs(calibBlue.y) < 1e-4) {
         return c;
     }
     vec3 hsl = rgbToHsl(c);
-    // Distance to Red (0.0), Green (0.333), Blue (0.667)
-    float wR = max(0.0, 1.0 - abs(hsl.x - 0.0) * 6.0) + max(0.0, 1.0 - abs(hsl.x - 1.0) * 6.0);
-    float wG = max(0.0, 1.0 - abs(hsl.x - 0.333) * 6.0);
-    float wB = max(0.0, 1.0 - abs(hsl.x - 0.667) * 6.0);
+    // Distance to Red (0.0), Green (0.333), Blue (0.667) with smooth 120-degree transition
+    float wR = max(0.0, 1.0 - abs(hsl.x - 0.0) * 3.0) + max(0.0, 1.0 - abs(hsl.x - 1.0) * 3.0);
+    float wG = max(0.0, 1.0 - abs(hsl.x - 0.333) * 3.0);
+    float wB = max(0.0, 1.0 - abs(hsl.x - 0.667) * 3.0);
 
-    float dHue = (wR * params.calibRed.x + wG * params.calibGreen.x + wB * params.calibBlue.x) * 0.15;
-    float dSat = (wR * params.calibRed.y + wG * params.calibGreen.y + wB * params.calibBlue.y) * 0.50;
+    float dHue = (wR * calibRed.x + wG * calibGreen.x + wB * calibBlue.x) * 0.15;
+    float dSat = (wR * calibRed.y + wG * calibGreen.y + wB * calibBlue.y) * 0.50;
 
     hsl.x = fract(hsl.x + dHue);
     hsl.y = clamp(hsl.y * (1.0 + dSat), 0.0, 1.0);
@@ -225,10 +238,12 @@ void main() {
     col = recoverHighlights(col, params.highlights);
     col = liftShadows(col, params.shadows);
 
-    // 5. Contrast around 0.18 middle gray pivot
+    // 5. Contrast (S-curve around 0.18 middle gray pivot)
     if (abs(params.contrast) > 1e-5) {
-        float factor = 1.0 + params.contrast * 0.6;
-        col = pow(max(col / 0.18, vec3(0.0)), vec3(factor)) * 0.18;
+        float factor = params.contrast * 0.6;
+        vec3 colBelow = 0.18 * pow(max(col / 0.18, vec3(0.0)), vec3(1.0 + factor));
+        vec3 colAbove = 1.0 - (1.0 - 0.18) * pow(max((vec3(1.0) - col) / (1.0 - 0.18), vec3(0.0)), vec3(1.0 + factor));
+        col = mix(colBelow, max(vec3(0.18), colAbove), step(vec3(0.18), col));
     }
 
     // 6. White & Black levels
@@ -247,8 +262,14 @@ void main() {
         col = mix(vec3(l), col, 1.0 + params.saturation);
     }
 
-    // 9. Tone Curve 1D LUT (if valid)
-    if (toneCurveLUT[255] > 0.0 || toneCurveLUT[0] >= 0.0) {
+    // 9. Tone Curve 1D LUT (bypass when unset or default identity curve)
+    bool isLinearDefault = (abs(toneCurveLUT[0] - 0.0) < 1e-4 &&
+                            abs(toneCurveLUT[255] - 1.0) < 1e-4 &&
+                            abs(toneCurveLUT[128] - (128.0 / 255.0)) < 2e-3 &&
+                            abs(toneCurveLUT[64] - (64.0 / 255.0)) < 2e-3 &&
+                            abs(toneCurveLUT[192] - (192.0 / 255.0)) < 2e-3);
+    bool isUnset = (toneCurveLUT[255] <= 0.0 && toneCurveLUT[0] <= 0.0);
+    if (!isUnset && !isLinearDefault) {
         col.r = sampleToneCurve(col.r);
         col.g = sampleToneCurve(col.g);
         col.b = sampleToneCurve(col.b);

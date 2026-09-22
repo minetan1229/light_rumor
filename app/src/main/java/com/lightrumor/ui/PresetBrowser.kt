@@ -127,7 +127,7 @@ fun PresetBrowser(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(colors.surfaceElevated)
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+                .padding(horizontal = 8.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -135,95 +135,99 @@ fun PresetBrowser(
                 modifier = Modifier
                     .weight(1.0f)
                     .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 XmpPresetParser.CATEGORIES.forEach { cat ->
                     val isSel = isSameCategory(cat, selectedCategory)
                     Box(
                         modifier = Modifier
-                            .background(if (isSel) colors.surfacePressed else Color.Transparent, RoundedCornerShape(2.dp))
-                            .border(1.dp, if (isSel) colors.accentAmber else colors.borderSubtle, RoundedCornerShape(2.dp))
+                            .background(if (isSel) colors.surfacePressed else Color.Transparent, RoundedCornerShape(3.dp))
+                            .border(1.dp, if (isSel) colors.accentAmber else colors.borderSubtle, RoundedCornerShape(3.dp))
                             .clickable {
                                 hapticManager?.performDialTick()
                                 selectedCategory = cat
                             }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Text(
                             text = getCategoryDisplayName(cat),
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 9.sp,
+                            fontFamily = FontFamily.SansSerif,
+                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                            fontSize = 12.sp,
                             color = if (isSel) colors.accentAmber else colors.textSecondary
                         )
                     }
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    text = "[読込]",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 9.sp,
+                    text = "読込",
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = colors.accentAmber,
                     modifier = Modifier
-                        .background(colors.surfacePressed, RoundedCornerShape(2.dp))
-                        .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
+                        .background(colors.surfacePressed, RoundedCornerShape(3.dp))
+                        .border(1.dp, colors.accentAmber.copy(alpha = 0.5f), RoundedCornerShape(3.dp))
                         .clickable { onImportXmp() }
-                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                        .padding(horizontal = 8.dp, vertical = 5.dp)
                 )
                 Text(
-                    text = "[書出]",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 9.sp,
+                    text = "書出",
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = colors.textPrimary,
                     modifier = Modifier
-                        .background(colors.surfacePressed, RoundedCornerShape(2.dp))
-                        .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
+                        .background(colors.surfacePressed, RoundedCornerShape(3.dp))
+                        .border(1.dp, colors.borderSubtle, RoundedCornerShape(3.dp))
                         .clickable { onExportXmp() }
-                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                        .padding(horizontal = 8.dp, vertical = 5.dp)
                 )
             }
         }
 
         // 2. PRESET AMOUNT SLIDER (0% to 200%)
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(colors.surface)
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    text = "プリセット適用量:",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 9.sp,
+                    text = "適用量",
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 12.sp,
                     color = colors.textSecondary
                 )
                 Text(
                     text = "${presetAmount.toInt()}%",
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
+                    style = LightRumorTheme.typography.ValueReadout,
+                    fontSize = 13.sp,
                     color = colors.accentAmber,
-                    modifier = Modifier
-                        .pointerInput(Unit) {
-                            detectTapGestures(
-                                onDoubleTap = {
-                                    hapticManager?.performDialTick()
-                                    presetAmount = 100.0f
-                                    selectedPreset?.let { onApplyPreset(it, 100.0f) }
-                                }
-                            )
-                        }
+                    modifier = Modifier.pointerInput(Unit) {
+                        detectTapGestures(
+                            onDoubleTap = {
+                                hapticManager?.performDialTick()
+                                presetAmount = 100.0f
+                                selectedPreset?.let { onApplyPreset(it, 100.0f) }
+                            }
+                        )
+                    }
                 )
             }
 
-            Slider(
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Custom Precision Amount Slider Track
+            LightroomSlider(
+                label = "",
                 value = presetAmount,
                 onValueChange = { newVal ->
                     presetAmount = newVal
@@ -237,35 +241,18 @@ fun PresetBrowser(
                         onApplyPreset(p, presetAmount)
                     }
                 },
-                valueRange = 0.0f..200.0f,
-                modifier = Modifier.weight(1.0f).padding(horizontal = 12.dp),
-                colors = SliderDefaults.colors(
-                    thumbColor = colors.accentAmber,
-                    activeTrackColor = colors.accentAmber,
-                    inactiveTrackColor = colors.borderSubtle
-                )
-            )
-
-            Text(
-                text = "[100%にリセット]",
-                fontFamily = FontFamily.Monospace,
-                fontSize = 8.sp,
-                color = colors.textSecondary,
-                modifier = Modifier
-                    .background(colors.surfacePressed, RoundedCornerShape(2.dp))
-                    .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
-                    .clickable {
-                        hapticManager?.performDialTick()
-                        presetAmount = 100.0f
-                        selectedPreset?.let { onApplyPreset(it, 100.0f) }
-                    }
-                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                range = 0.0f..200.0f,
+                defaultValue = 100.0f,
+                unit = "%",
+                displayDecimals = 0,
+                step = 1.0f,
+                hapticManager = hapticManager
             )
         }
 
         // 3. PRESET CARDS GRID (with Real-Time Hover Preview)
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 130.dp),
+            columns = GridCells.Adaptive(minSize = 140.dp),
             modifier = Modifier.weight(1.0f).fillMaxWidth().padding(6.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -306,7 +293,7 @@ private fun PresetCard(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(76.dp)
+            .height(84.dp)
             .background(
                 if (isSelected) colors.surfacePressed else colors.surfaceElevated,
                 RoundedCornerShape(3.dp)
@@ -320,17 +307,27 @@ private fun PresetCard(
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent()
-                        when (event.type) {
-                            PointerEventType.Enter -> onHover(true)
-                            PointerEventType.Exit -> onHover(false)
-                            PointerEventType.Press -> onHover(true)
-                            PointerEventType.Release -> onHover(false)
+                        if (event.type == PointerEventType.Enter) {
+                            onHover(true)
+                        } else if (event.type == PointerEventType.Exit) {
+                            onHover(false)
                         }
                     }
                 }
             }
-            .clickable { onClick() }
-            .padding(6.dp)
+            .pointerInput(preset.id) {
+                detectTapGestures(
+                    onPress = {
+                        onHover(true)
+                        tryAwaitRelease()
+                        onHover(false)
+                    },
+                    onTap = {
+                        onClick()
+                    }
+                )
+            }
+            .padding(8.dp)
     ) {
         Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
             Row(
@@ -340,23 +337,26 @@ private fun PresetCard(
             ) {
                 Text(
                     text = preset.name,
-                    fontFamily = FontFamily.Monospace,
+                    fontFamily = FontFamily.SansSerif,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 10.sp,
+                    fontSize = 13.sp,
                     color = if (isSelected) colors.accentAmber else colors.textPrimary,
-                    maxLines = 1
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f, fill = false)
                 )
+
+                Spacer(modifier = Modifier.width(4.dp))
 
                 Box(
                     modifier = Modifier
                         .background(colors.surface, RoundedCornerShape(2.dp))
                         .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
-                        .padding(horizontal = 3.dp, vertical = 1.dp)
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
                 ) {
                     Text(
                         text = getCategoryDisplayName(preset.category).take(4),
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 7.sp,
+                        fontFamily = FontFamily.SansSerif,
+                        fontSize = 11.sp,
                         color = colors.textSecondary
                     )
                 }
@@ -364,8 +364,8 @@ private fun PresetCard(
 
             Text(
                 text = preset.description,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 8.sp,
+                fontFamily = FontFamily.SansSerif,
+                fontSize = 11.sp,
                 color = colors.textSecondary,
                 maxLines = 2
             )
@@ -377,15 +377,15 @@ private fun PresetCard(
             ) {
                 Text(
                     text = if (preset.params.isMonochrome) "モノクロ" else "カラー RAW",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 7.sp,
+                    fontFamily = FontFamily.SansSerif,
+                    fontSize = 11.sp,
                     color = colors.accentAmber
                 )
                 Text(
-                    text = if (isSelected) "[適用中]" else "[タップ]",
-                    fontFamily = FontFamily.Monospace,
+                    text = if (isSelected) "適用中" else "選択",
+                    fontFamily = FontFamily.SansSerif,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 8.sp,
+                    fontSize = 11.sp,
                     color = if (isSelected) colors.accentAmber else colors.textSecondary
                 )
             }

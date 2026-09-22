@@ -99,19 +99,27 @@ bool LensfunIntegration::init() {
 }
 
 bool LensfunIntegration::findProfile(const ExifMetadata& exif, LensProfile& outProfile) const {
-    // 1. Try exact or substring match on lens model
+    // 1. Try exact or substring match on lens model (bidirectional)
     for (const auto& prof : m_impl->database) {
-        if (!exif.lensModel.empty() && prof.lensModel.find(exif.lensModel) != std::string::npos) {
-            outProfile = prof;
-            return true;
-        }
-        if (!exif.make.empty() && prof.lensMake.find(exif.make) != std::string::npos) {
+        if (!exif.lensModel.empty() &&
+            (prof.lensModel.find(exif.lensModel) != std::string::npos ||
+             exif.lensModel.find(prof.lensModel) != std::string::npos)) {
             outProfile = prof;
             return true;
         }
     }
 
-    // Default fallback to standard 24-70 GM II profile
+    // 2. Fallback: match maker and verify focal length range
+    for (const auto& prof : m_impl->database) {
+        if (!exif.make.empty() && prof.lensMake.find(exif.make) != std::string::npos) {
+            if (exif.focalLength <= 0.0 || (exif.focalLength >= prof.focalLengthMin && exif.focalLength <= prof.focalLengthMax)) {
+                outProfile = prof;
+                return true;
+            }
+        }
+    }
+
+    // Default fallback to standard profile
     if (!m_impl->database.empty()) {
         outProfile = m_impl->database[0];
         return true;
@@ -151,6 +159,8 @@ void LensfunIntegration::applyDistortionAndTCA(const FloatRGBA* src, FloatRGBA* 
                                               const LensProfile& profile,
                                               float distortionStrength,
                                               float tcaStrength) {
+    if (!src || !dst || width <= 0 || height <= 0) return;
+
     float k1 = profile.k1 * (distortionStrength * 0.01f);
     float k2 = profile.k2 * (distortionStrength * 0.01f);
     float tcaR = profile.tcaRed * (tcaStrength * 0.01f);
@@ -201,6 +211,8 @@ void LensfunIntegration::applyVignettingCorrection(const FloatRGBA* src, FloatRG
                                                   int32_t width, int32_t height,
                                                   const LensProfile& profile,
                                                   float vignettingStrength) {
+    if (!src || !dst || width <= 0 || height <= 0) return;
+
     float v1 = profile.v1 * (vignettingStrength * 0.01f);
     float v2 = profile.v2 * (vignettingStrength * 0.01f);
 
@@ -240,26 +252,30 @@ void LensfunIntegration::applyDefringe(const FloatRGBA* src, FloatRGBA* dst,
         return;
     }
 
-    float normPurple = purpleStrength * 0.01f;
-    float normGreen = greenStrength * 0.01f;
+    float normPurple = std::clamp(purpleStrength * 0.01f, 0.0f, 1.0f);
+    float normGreen = std::clamp(greenStrength * 0.01f, 0.0f, 1.0f);
 
     #pragma omp parallel for schedule(static)
     for (int32_t i = 0; i < width * height; ++i) {
         FloatRGBA p = src[i];
         float lum = 0.2126f * p.r + 0.7152f * p.g + 0.0722f * p.b;
 
-        // Purple fringe check: High R + High B, Low G
-        float purpleExcess = std::min(p.r, p.b) - p.g;
-        if (purpleExcess > 0.02f && normPurple > 0.0f) {
-            float desat = std::clamp(purpleExcess * normPurple * 2.0f, 0.0f, 1.0f);
+        // Purple / Magenta chromatic fringe check: Both R and B exceed G (Axial / LoCA)
+        float rExcess = std::max(0.0f, p.r - p.g);
+        float bExcess = std::max(0.0f, p.b - p.g);
+        float purpleExcess = std::min(rExcess, bExcess);
+        if (purpleExcess > 0.005f && normPurple > 0.0f) {
+            float fringeWeight = std::clamp((purpleExcess - 0.005f) / 0.01f, 0.0f, 1.0f);
+            float desat = fringeWeight * normPurple;
             p.r = p.r * (1.0f - desat) + lum * desat;
             p.b = p.b * (1.0f - desat) + lum * desat;
         }
 
         // Green fringe check: High G, Low R and B
         float greenExcess = p.g - std::max(p.r, p.b);
-        if (greenExcess > 0.02f && normGreen > 0.0f) {
-            float desat = std::clamp(greenExcess * normGreen * 2.0f, 0.0f, 1.0f);
+        if (greenExcess > 0.005f && normGreen > 0.0f) {
+            float fringeWeight = std::clamp((greenExcess - 0.005f) / 0.01f, 0.0f, 1.0f);
+            float desat = fringeWeight * normGreen;
             p.g = p.g * (1.0f - desat) + lum * desat;
         }
 

@@ -21,6 +21,7 @@ test_output_*.webp
 
 # Android & Gradle
 .gradle/
+.kotlin/
 local.properties
 **/build/
 captures/
@@ -33,3 +34,5 @@ captures/
 *.iml
 *.swp
 *~
+build_desktop/
+__pycache__/

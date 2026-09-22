@@ -38,46 +38,66 @@ object DirectExifWriter {
         }
 
         // 2. 実画像ファイル (JPEG / DNG / TIFF 等) の EXIF タグへの直接バイナリ書き込み
+        // ネイティブRAW（ARW, CR2, CR3, NEF等）は ExifInterface の直接書き換えに対応しておらず例外となるため、
+        // XMPサイドカー保存のみを行い、直接書き込みは非RAW（JPEG/TIFF/WebP/DNG等）のみに限定する。
+        val isRaw = ThumbnailLoader.isRawFile(item.filePath.ifEmpty { item.fileName })
+        if (isRaw) {
+            return@withContext anySuccess
+        }
+
         try {
-            var exifToSave: ExifInterface? = null
+            val isSupportedFormat = isWritableExifFormat(item.filePath, item.uri, context)
+            if (isSupportedFormat) {
+                var exifToSave: ExifInterface? = null
 
-            if (item.filePath.isNotEmpty()) {
-                val f = File(item.filePath)
-                if (f.exists() && f.canWrite()) {
-                    exifToSave = ExifInterface(f.absolutePath)
-                }
-            }
-
-            // content:// URI の場合、ParcelFileDescriptor を "rw" で開いて直接 EXIF を上書き保存
-            if (exifToSave == null && item.uri.scheme == "content") {
-                try {
-                    val pfd = context.contentResolver.openFileDescriptor(item.uri, "rw")
-                    if (pfd != null) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                            val fdExif = ExifInterface(pfd.fileDescriptor)
-                            applyMetadataToExif(fdExif, meta)
-                            fdExif.saveAttributes()
-                            pfd.close()
-                            return@withContext true
-                        } else {
-                            pfd.close()
-                        }
+                if (item.filePath.isNotEmpty()) {
+                    val f = File(item.filePath)
+                    if (f.exists() && f.canWrite()) {
+                        exifToSave = ExifInterface(f.absolutePath)
                     }
-                } catch (e: Throwable) {
-                    // content URI が読み取り専用の場合は XMP サイドカーのみ保存
                 }
-            }
 
-            if (exifToSave != null) {
-                applyMetadataToExif(exifToSave, meta)
-                exifToSave.saveAttributes()
-                anySuccess = true
+                // content:// URI の場合、ParcelFileDescriptor を "rw" で開いて直接 EXIF を上書き保存
+                if (exifToSave == null && item.uri.scheme == "content") {
+                    try {
+                        context.contentResolver.openFileDescriptor(item.uri, "rw")?.use { pfd ->
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                val fdExif = ExifInterface(pfd.fileDescriptor)
+                                applyMetadataToExif(fdExif, meta)
+                                fdExif.saveAttributes()
+                                return@withContext true
+                            }
+                        }
+                    } catch (e: Throwable) {
+                        // content URI が読み取り専用の場合は XMP サイドカーのみ保存
+                    }
+                }
+
+                if (exifToSave != null) {
+                    applyMetadataToExif(exifToSave, meta)
+                    exifToSave.saveAttributes()
+                    anySuccess = true
+                }
             }
         } catch (e: Throwable) {
             e.printStackTrace()
         }
 
         anySuccess
+    }
+
+    private fun isWritableExifFormat(filePath: String, uri: Uri, context: Context): Boolean {
+        if (filePath.isNotEmpty()) {
+            val ext = filePath.substringAfterLast('.', "").lowercase()
+            return ext in setOf("jpg", "jpeg", "dng", "webp")
+        }
+        val type = context.contentResolver.getType(uri)?.lowercase() ?: ""
+        if (type.contains("jpeg") || type.contains("jpg") || type.contains("webp") || type.contains("dng")) {
+            return true
+        }
+        val path = uri.path?.lowercase() ?: ""
+        val ext = path.substringAfterLast('.', "")
+        return ext in setOf("jpg", "jpeg", "dng", "webp")
     }
 
     private fun applyMetadataToExif(exif: ExifInterface, meta: CullingItemMetadata) {
@@ -122,7 +142,8 @@ object DirectExifWriter {
         if (meta.focalLength.isNotEmpty()) {
             val fl = meta.focalLength.replace(Regex("[^0-9.]"), "").toDoubleOrNull()
             if (fl != null) {
-                exif.setAttribute(ExifInterface.TAG_FOCAL_LENGTH, "$fl/1")
+                val flInt = kotlin.math.round((fl * 10.0)).toLong()
+                exif.setAttribute(ExifInterface.TAG_FOCAL_LENGTH, "$flInt/10")
             }
         }
 

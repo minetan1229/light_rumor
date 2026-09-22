@@ -44,7 +44,7 @@ inline float hueToRgb(float p, float q, float t) {
     return p;
 }
 
-inline void hslToRgb(float h, float s, float l, float& r, float& g, float& b) {
+[[maybe_unused]] inline void hslToRgb(float h, float s, float l, float& r, float& g, float& b) {
     if (s < 1e-6f) {
         r = g = b = l;
         return;
@@ -79,14 +79,11 @@ float MaskEngine::evaluateLinearAt(float x, float y, const Point2D& start, const
         t = smoothstep(0.0f, 1.0f, t);
     }
 
-    if (feather > 0.0f && feather < 1.0f) {
-        float fLow = feather * 0.5f;
-        float fHigh = 1.0f - fLow;
-        if (t < fLow) {
-            t = (fLow > 1e-5f) ? (t / fLow) * 0.5f : 0.0f;
-        } else if (t > fHigh) {
-            t = 0.5f + ((t - fHigh) / std::max(1e-5f, 1.0f - fHigh)) * 0.5f;
-        }
+    if (feather > 0.0f) {
+        float halfSpan = std::max(0.01f, feather * 0.5f);
+        float edge0 = std::max(0.0f, 0.5f - halfSpan);
+        float edge1 = std::min(1.0f, 0.5f + halfSpan);
+        t = smoothstep(edge0, edge1, t);
     }
 
     if (invert) {
@@ -143,7 +140,7 @@ float MaskEngine::evaluatePolygonAt(float x, float y, const std::vector<Point2D>
 
         // Ray-casting point-in-polygon test
         if (((vi.y > y) != (vj.y > y)) &&
-            (x < (vj.x - vi.x) * (y - vi.y) / (vj.y - vi.y + 1e-7f) + vi.x)) {
+            (x < (vj.x - vi.x) * (y - vi.y) / (vj.y - vi.y) + vi.x)) {
             inside = !inside;
         }
 
@@ -172,10 +169,15 @@ float MaskEngine::evaluatePolygonAt(float x, float y, const std::vector<Point2D>
 void MaskEngine::rasterizeBrushStrokes(const std::vector<BrushStrokePoint>& strokes,
                                        float baseRadius, float feather,
                                        int32_t width, int32_t height,
-                                       std::vector<float>& outMask) {
+                                       std::vector<float>& outMask,
+                                       int32_t offsetX, int32_t offsetY,
+                                       int32_t fullWidth, int32_t fullHeight) {
     if (outMask.size() != static_cast<size_t>(width) * height) {
         outMask.assign(static_cast<size_t>(width) * height, 0.0f);
     }
+
+    int32_t fullW = (fullWidth > 0) ? fullWidth : width;
+    int32_t fullH = (fullHeight > 0) ? fullHeight : height;
 
     for (const auto& pt : strokes) {
         // Stylus pressure modulation: pressure in [0, 1] linearly modulates radius and flow
@@ -183,14 +185,19 @@ void MaskEngine::rasterizeBrushStrokes(const std::vector<BrushStrokePoint>& stro
         float effRadius = pt.radius > 0.0f ? pt.radius * p : baseRadius * p;
         float effFlow = std::clamp(pt.flow * p, 0.0f, 1.0f);
 
-        // Convert normalized coordinates if in [0, 1], otherwise assume pixel coordinates
-        float px = (pt.x <= 1.0f && pt.y <= 1.0f && pt.x >= 0.0f && pt.y >= 0.0f) ? pt.x * width : pt.x;
-        float py = (pt.x <= 1.0f && pt.y <= 1.0f && pt.x >= 0.0f && pt.y >= 0.0f) ? pt.y * height : pt.y;
+        // Convert normalized coordinates if in [0, 1], otherwise assume pixel coordinates, and offset to local tile
+        float globalPx = (pt.x <= 1.0f && pt.y <= 1.0f && pt.x >= 0.0f && pt.y >= 0.0f) ? pt.x * fullW : pt.x;
+        float globalPy = (pt.x <= 1.0f && pt.y <= 1.0f && pt.x >= 0.0f && pt.y >= 0.0f) ? pt.y * fullH : pt.y;
+
+        float px = globalPx - offsetX;
+        float py = globalPy - offsetY;
 
         int32_t minX = std::max(0, static_cast<int32_t>(std::floor(px - effRadius)));
         int32_t maxX = std::min(width - 1, static_cast<int32_t>(std::ceil(px + effRadius)));
         int32_t minY = std::max(0, static_cast<int32_t>(std::floor(py - effRadius)));
         int32_t maxY = std::min(height - 1, static_cast<int32_t>(std::ceil(py + effRadius)));
+
+        if (minX > maxX || minY > maxY) continue;
 
         float f = std::clamp(feather, 0.01f, 1.0f);
         float innerR = std::max(0.0f, effRadius * (1.0f - f));
@@ -281,7 +288,7 @@ void MaskEngine::computeSobelEdgeMask(const std::vector<FloatRGBA>& pixels,
                 for (int dx = -1; dx <= 1; ++dx) {
                     int cx = std::clamp(x + dx, 0, width - 1);
                     int cy = std::clamp(y + dy, 0, height - 1);
-                    const FloatRGBA& c = pixels[cy * width + cx];
+                    const FloatRGBA& c = pixels[static_cast<size_t>(cy) * width + cx];
                     luma[dy + 1][dx + 1] = 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
                 }
             }
@@ -299,7 +306,7 @@ void MaskEngine::computeSobelEdgeMask(const std::vector<FloatRGBA>& pixels,
             if (invert) {
                 w = 1.0f - w;
             }
-            outMask[y * width + x] = std::clamp(w, 0.0f, 1.0f);
+            outMask[static_cast<size_t>(y) * width + x] = std::clamp(w, 0.0f, 1.0f);
         }
     }
 }
@@ -312,13 +319,18 @@ void MaskEngine::evaluateSingleMask(const MaskLayer& layer,
                                     const std::vector<FloatRGBA>& inPixels,
                                     int32_t width, int32_t height,
                                     const std::vector<float>& depthBuffer,
-                                    std::vector<float>& outMask) {
+                                    std::vector<float>& outMask,
+                                    int32_t offsetX, int32_t offsetY,
+                                    int32_t fullWidth, int32_t fullHeight) {
     size_t total = static_cast<size_t>(width) * height;
     outMask.resize(total);
 
+    int32_t fullW = (fullWidth > 0) ? fullWidth : width;
+    int32_t fullH = (fullHeight > 0) ? fullHeight : height;
+
     if (layer.type == MaskType::Brush) {
         std::fill(outMask.begin(), outMask.end(), 0.0f);
-        rasterizeBrushStrokes(layer.brushStrokes, layer.brushBaseRadius, layer.brushFeather, width, height, outMask);
+        rasterizeBrushStrokes(layer.brushStrokes, layer.brushBaseRadius, layer.brushFeather, width, height, outMask, offsetX, offsetY, fullW, fullH);
         if (layer.inverted) {
             for (size_t i = 0; i < total; ++i) {
                 outMask[i] = 1.0f - outMask[i];
@@ -332,7 +344,10 @@ void MaskEngine::evaluateSingleMask(const MaskLayer& layer,
         return;
     }
 
+    bool hasPixels = (inPixels.size() >= total);
+
     if (layer.type == MaskType::SobelEdge) {
+        if (!hasPixels) return;
         computeSobelEdgeMask(inPixels, width, height, layer.edgeThreshold, layer.edgeFeather, layer.inverted, outMask);
         if (layer.opacity < 1.0f) {
             for (size_t i = 0; i < total; ++i) {
@@ -348,8 +363,8 @@ void MaskEngine::evaluateSingleMask(const MaskLayer& layer,
     for (int64_t i = 0; i < static_cast<int64_t>(total); ++i) {
         int32_t x = static_cast<int32_t>(i % width);
         int32_t y = static_cast<int32_t>(i / width);
-        float normX = static_cast<float>(x) / std::max(1, width - 1);
-        float normY = static_cast<float>(y) / std::max(1, height - 1);
+        float normX = static_cast<float>(x + offsetX) / std::max(1, fullW - 1);
+        float normY = static_cast<float>(y + offsetY) / std::max(1, fullH - 1);
 
         float w = 0.0f;
         switch (layer.type) {
@@ -367,13 +382,13 @@ void MaskEngine::evaluateSingleMask(const MaskLayer& layer,
                                       layer.polygonFeather, layer.inverted);
                 break;
             case MaskType::LuminanceRange:
-                w = evaluateLuminanceAt(inPixels[i], layer.lumaMin, layer.lumaMax,
-                                        layer.lumaFeatherLow, layer.lumaFeatherHigh, layer.inverted);
+                w = hasPixels ? evaluateLuminanceAt(inPixels[i], layer.lumaMin, layer.lumaMax,
+                                                    layer.lumaFeatherLow, layer.lumaFeatherHigh, layer.inverted) : 0.0f;
                 break;
             case MaskType::ColorRange:
-                w = evaluateColorRangeAt(inPixels[i], layer.colorTargetHue, layer.colorTargetSat, layer.colorTargetLum,
-                                         layer.colorTolHue, layer.colorTolSat, layer.colorTolLum,
-                                         layer.colorFeather, layer.inverted);
+                w = hasPixels ? evaluateColorRangeAt(inPixels[i], layer.colorTargetHue, layer.colorTargetSat, layer.colorTargetLum,
+                                                     layer.colorTolHue, layer.colorTolSat, layer.colorTolLum,
+                                                     layer.colorFeather, layer.inverted) : 0.0f;
                 break;
             case MaskType::DepthMap:
                 w = hasDepth ? evaluateDepthAt(depthBuffer[i], layer.depthMin, layer.depthMax, layer.depthFeather, layer.inverted) : 0.0f;
@@ -391,7 +406,9 @@ void MaskEngine::evaluateCompositeMask(const std::vector<MaskLayer>& layers,
                                        const std::vector<FloatRGBA>& inPixels,
                                        int32_t width, int32_t height,
                                        const std::vector<float>& depthBuffer,
-                                       std::vector<float>& outCompositeMask) {
+                                       std::vector<float>& outCompositeMask,
+                                       int32_t offsetX, int32_t offsetY,
+                                       int32_t fullWidth, int32_t fullHeight) {
     size_t total = static_cast<size_t>(width) * height;
     outCompositeMask.assign(total, 0.0f);
 
@@ -401,7 +418,7 @@ void MaskEngine::evaluateCompositeMask(const std::vector<MaskLayer>& layers,
     for (const auto& layer : layers) {
         if (!layer.enabled) continue;
 
-        evaluateSingleMask(layer, inPixels, width, height, depthBuffer, layerMask);
+        evaluateSingleMask(layer, inPixels, width, height, depthBuffer, layerMask, offsetX, offsetY, fullWidth, fullHeight);
 
         if (firstLayer || layer.booleanOp == BooleanOp::Replace) {
             std::copy(layerMask.begin(), layerMask.end(), outCompositeMask.begin());
@@ -441,7 +458,9 @@ void MaskEngine::applyLocalAdjustments(std::vector<FloatRGBA>& pixels,
                                       int32_t width, int32_t height,
                                       const std::vector<float>& maskWeights,
                                       const LocalAdjustmentParams& adj) {
+    if (width <= 0 || height <= 0) return;
     size_t total = static_cast<size_t>(width) * height;
+    if (maskWeights.size() < total || pixels.size() < total) return;
 
     float expGain = std::pow(2.0f, adj.exposureEV);
 
@@ -469,7 +488,7 @@ void MaskEngine::applyLocalAdjustments(std::vector<FloatRGBA>& pixels,
 
         // 3. Contrast adjustment around 0.18 middle gray
         if (std::abs(adj.contrast) > 1e-4f) {
-            float effContrast = 1.0f + (adj.contrast * 0.005f) * w;
+            float effContrast = std::max(0.01f, 1.0f + (adj.contrast * 0.005f) * w);
             p.r = std::pow(std::max(0.0f, p.r / 0.18f), effContrast) * 0.18f;
             p.g = std::pow(std::max(0.0f, p.g / 0.18f), effContrast) * 0.18f;
             p.b = std::pow(std::max(0.0f, p.b / 0.18f), effContrast) * 0.18f;
@@ -480,7 +499,8 @@ void MaskEngine::applyLocalAdjustments(std::vector<FloatRGBA>& pixels,
             float maxC = std::max({p.r, p.g, p.b});
             if (maxC > 0.75f) {
                 float excess = maxC - 0.75f;
-                float comp = 0.75f + excess / (1.0f + excess * (adj.highlights * 0.008f * w));
+                float denom = std::max(0.01f, 1.0f + excess * std::abs(adj.highlights * 0.008f * w));
+                float comp = 0.75f + excess / denom;
                 p.r *= (comp / maxC);
                 p.g *= (comp / maxC);
                 p.b *= (comp / maxC);
@@ -524,13 +544,15 @@ void MaskEngine::applyLocalAdjustments(std::vector<FloatRGBA>& pixels,
 void MaskEngine::processMaskLayers(std::vector<FloatRGBA>& pixels,
                                    int32_t width, int32_t height,
                                    const std::vector<MaskLayer>& layers,
-                                   const std::vector<float>& depthBuffer) {
+                                   const std::vector<float>& depthBuffer,
+                                   int32_t offsetX, int32_t offsetY,
+                                   int32_t fullWidth, int32_t fullHeight) {
     if (layers.empty()) return;
 
     std::vector<float> maskBuffer;
     for (const auto& layer : layers) {
         if (!layer.enabled) continue;
-        evaluateSingleMask(layer, pixels, width, height, depthBuffer, maskBuffer);
+        evaluateSingleMask(layer, pixels, width, height, depthBuffer, maskBuffer, offsetX, offsetY, fullWidth, fullHeight);
         applyLocalAdjustments(pixels, width, height, maskBuffer, layer.adjustments);
     }
 }
@@ -541,11 +563,16 @@ void MaskEngine::processMaskLayers(std::vector<FloatRGBA>& pixels,
 
 void MaskEngine::applyCloneStamp(std::vector<FloatRGBA>& pixels,
                                  int32_t width, int32_t height,
-                                 const RetouchOperation& op) {
-    float dstPxX = (op.targetPos.x <= 1.0f) ? op.targetPos.x * width : op.targetPos.x;
-    float dstPxY = (op.targetPos.y <= 1.0f) ? op.targetPos.y * height : op.targetPos.y;
-    float srcPxX = (op.sourcePos.x <= 1.0f) ? op.sourcePos.x * width : op.sourcePos.x;
-    float srcPxY = (op.sourcePos.y <= 1.0f) ? op.sourcePos.y * height : op.sourcePos.y;
+                                 const RetouchOperation& op,
+                                 int32_t offsetX, int32_t offsetY,
+                                 int32_t fullWidth, int32_t fullHeight) {
+    int32_t fullW = (fullWidth > 0) ? fullWidth : width;
+    int32_t fullH = (fullHeight > 0) ? fullHeight : height;
+
+    float dstPxX = ((op.targetPos.x <= 1.0f) ? op.targetPos.x * fullW : op.targetPos.x) - offsetX;
+    float dstPxY = ((op.targetPos.y <= 1.0f) ? op.targetPos.y * fullH : op.targetPos.y) - offsetY;
+    float srcPxX = ((op.sourcePos.x <= 1.0f) ? op.sourcePos.x * fullW : op.sourcePos.x) - offsetX;
+    float srcPxY = ((op.sourcePos.y <= 1.0f) ? op.sourcePos.y * fullH : op.sourcePos.y) - offsetY;
 
     float offX = srcPxX - dstPxX;
     float offY = srcPxY - dstPxY;
@@ -554,6 +581,8 @@ void MaskEngine::applyCloneStamp(std::vector<FloatRGBA>& pixels,
     int32_t maxX = std::min(width - 1, static_cast<int32_t>(std::ceil(dstPxX + op.radius)));
     int32_t minY = std::max(0, static_cast<int32_t>(std::floor(dstPxY - op.radius)));
     int32_t maxY = std::min(height - 1, static_cast<int32_t>(std::ceil(dstPxY + op.radius)));
+
+    if (minX > maxX || minY > maxY) return;
 
     float innerR = std::max(0.0f, op.radius * (1.0f - op.feather));
 
@@ -569,8 +598,8 @@ void MaskEngine::applyCloneStamp(std::vector<FloatRGBA>& pixels,
                 int32_t sx = std::clamp(static_cast<int32_t>(std::round(x + offX)), 0, width - 1);
                 int32_t sy = std::clamp(static_cast<int32_t>(std::round(y + offY)), 0, height - 1);
 
-                const FloatRGBA& srcPixel = orig[sy * width + sx];
-                FloatRGBA& dstPixel = pixels[y * width + x];
+                const FloatRGBA& srcPixel = orig[static_cast<size_t>(sy) * width + sx];
+                FloatRGBA& dstPixel = pixels[static_cast<size_t>(y) * width + x];
 
                 dstPixel.r = dstPixel.r * (1.0f - alpha) + srcPixel.r * alpha;
                 dstPixel.g = dstPixel.g * (1.0f - alpha) + srcPixel.g * alpha;
@@ -583,11 +612,16 @@ void MaskEngine::applyCloneStamp(std::vector<FloatRGBA>& pixels,
 void MaskEngine::applyPoissonHeal(std::vector<FloatRGBA>& pixels,
                                   int32_t width, int32_t height,
                                   const RetouchOperation& op,
-                                  int32_t maxIterations) {
-    float dstPxX = (op.targetPos.x <= 1.0f) ? op.targetPos.x * width : op.targetPos.x;
-    float dstPxY = (op.targetPos.y <= 1.0f) ? op.targetPos.y * height : op.targetPos.y;
-    float srcPxX = (op.sourcePos.x <= 1.0f) ? op.sourcePos.x * width : op.sourcePos.x;
-    float srcPxY = (op.sourcePos.y <= 1.0f) ? op.sourcePos.y * height : op.sourcePos.y;
+                                  int32_t maxIterations,
+                                  int32_t offsetX, int32_t offsetY,
+                                  int32_t fullWidth, int32_t fullHeight) {
+    int32_t fullW = (fullWidth > 0) ? fullWidth : width;
+    int32_t fullH = (fullHeight > 0) ? fullHeight : height;
+
+    float dstPxX = ((op.targetPos.x <= 1.0f) ? op.targetPos.x * fullW : op.targetPos.x) - offsetX;
+    float dstPxY = ((op.targetPos.y <= 1.0f) ? op.targetPos.y * fullH : op.targetPos.y) - offsetY;
+    float srcPxX = ((op.sourcePos.x <= 1.0f) ? op.sourcePos.x * fullW : op.sourcePos.x) - offsetX;
+    float srcPxY = ((op.sourcePos.y <= 1.0f) ? op.sourcePos.y * fullH : op.sourcePos.y) - offsetY;
 
     int32_t offX = static_cast<int32_t>(std::round(srcPxX - dstPxX));
     int32_t offY = static_cast<int32_t>(std::round(srcPxY - dstPxY));
@@ -598,6 +632,8 @@ void MaskEngine::applyPoissonHeal(std::vector<FloatRGBA>& pixels,
     int32_t minY = std::max(0, static_cast<int32_t>(std::floor(dstPxY)) - pad);
     int32_t maxY = std::min(height - 1, static_cast<int32_t>(std::ceil(dstPxY)) + pad);
 
+    if (minX >= maxX || minY >= maxY) return;
+
     std::vector<float> maskWeights(static_cast<size_t>(width) * height, 0.0f);
     float innerR = std::max(0.0f, op.radius * (1.0f - op.feather));
 
@@ -606,7 +642,7 @@ void MaskEngine::applyPoissonHeal(std::vector<FloatRGBA>& pixels,
             float dist = std::sqrt((x - dstPxX) * (x - dstPxX) + (y - dstPxY) * (y - dstPxY));
             if (dist <= op.radius) {
                 float falloff = (dist <= innerR) ? 1.0f : (1.0f - smoothstep(innerR, op.radius, dist));
-                maskWeights[y * width + x] = falloff * op.opacity;
+                maskWeights[static_cast<size_t>(y) * width + x] = falloff * op.opacity;
             }
         }
     }
@@ -618,12 +654,14 @@ void MaskEngine::applyPoissonHeal(std::vector<FloatRGBA>& pixels,
 
 void MaskEngine::processRetouchOps(std::vector<FloatRGBA>& pixels,
                                    int32_t width, int32_t height,
-                                   const std::vector<RetouchOperation>& ops) {
+                                   const std::vector<RetouchOperation>& ops,
+                                   int32_t offsetX, int32_t offsetY,
+                                   int32_t fullWidth, int32_t fullHeight) {
     for (const auto& op : ops) {
         if (op.isHeal) {
-            applyPoissonHeal(pixels, width, height, op);
+            applyPoissonHeal(pixels, width, height, op, 40, offsetX, offsetY, fullWidth, fullHeight);
         } else {
-            applyCloneStamp(pixels, width, height, op);
+            applyCloneStamp(pixels, width, height, op, offsetX, offsetY, fullWidth, fullHeight);
         }
     }
 }
@@ -640,6 +678,8 @@ void PoissonSolver::solve(const std::vector<FloatRGBA>& destImage,
                           int32_t iterations,
                           std::vector<FloatRGBA>& outHealedImage) {
     if (width <= 0 || height <= 0 || destImage.empty()) return;
+    size_t total = static_cast<size_t>(width) * height;
+    if (destImage.size() < total || maskWeights.size() < total) return;
     outHealedImage = destImage;
 
     minX = std::clamp(minX, 0, width - 1);
@@ -649,7 +689,7 @@ void PoissonSolver::solve(const std::vector<FloatRGBA>& destImage,
 
     int32_t roiW = maxX - minX + 1;
     int32_t roiH = maxY - minY + 1;
-    if (roiW <= 0 || roiH <= 0) return;
+    if (roiW <= 2 || roiH <= 2) return;
 
     size_t roiTotal = static_cast<size_t>(roiW) * roiH;
 
@@ -667,7 +707,8 @@ void PoissonSolver::solve(const std::vector<FloatRGBA>& destImage,
             int32_t sy = std::clamp(y + srcOffsetY, 0, height - 1);
             const FloatRGBA& dst = destImage[idx];
             const FloatRGBA& src = destImage[static_cast<size_t>(sy) * width + sx];
-            if (maskWeights[idx] < 0.01f) {
+            // Boundaries of ROI must always serve as Dirichlet conditions to prevent membrane collapse to 0
+            if (maskWeights[idx] < 0.01f || lx == 0 || lx == roiW - 1 || ly == 0 || ly == roiH - 1) {
                 diffPing[locIdx] = FloatRGBA(dst.r - src.r, dst.g - src.g, dst.b - src.b, 1.0f);
             } else {
                 diffPing[locIdx] = FloatRGBA(0.0f, 0.0f, 0.0f, 1.0f);

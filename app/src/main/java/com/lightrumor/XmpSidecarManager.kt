@@ -3,6 +3,7 @@ package com.lightrumor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -15,7 +16,7 @@ import java.io.File
  */
 object XmpSidecarManager {
 
-    private val scope = CoroutineScope(Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val debounceJobs = java.util.concurrent.ConcurrentHashMap<String, Job>()
 
     /**
@@ -25,7 +26,12 @@ object XmpSidecarManager {
     fun getSidecarFile(imageFilePath: String): File {
         val file = File(imageFilePath)
         val nameWithoutExt = file.nameWithoutExtension
-        return File(file.parentFile, "$nameWithoutExt.xmp")
+        val parent = file.parentFile
+        return if (parent != null) {
+            File(parent, "$nameWithoutExt.xmp")
+        } else {
+            File("$nameWithoutExt.xmp")
+        }
     }
 
     /**
@@ -41,81 +47,71 @@ object XmpSidecarManager {
             val meta = CullingItemMetadata(id = imageFilePath, filePath = imageFilePath)
             val params = DevelopmentParams()
 
-            // 1. Parse Rating: <xmp:Rating>3</xmp:Rating>
-            val ratingMatch = Regex("<xmp:Rating>(\\d+)</xmp:Rating>").find(xml)
-            if (ratingMatch != null) {
-                meta.rating = ratingMatch.groupValues[1].toIntOrNull() ?: 0
+            // Helper to extract value from either attribute syntax (tag="val") or element syntax (<tag>val</tag>)
+            fun extractTag(tag: String): String? {
+                val attrPattern = Regex("""\b$tag="([^"]*)"""")
+                val attrMatch = attrPattern.find(xml)
+                if (attrMatch != null) return attrMatch.groupValues[1]
+
+                val elemPattern = Regex("""<$tag>([^<]*)</$tag>""")
+                val elemMatch = elemPattern.find(xml)
+                if (elemMatch != null) return elemMatch.groupValues[1]
+
+                return null
             }
 
-            // 2. Parse Color Label: <xmp:Label>Red</xmp:Label>
-            val labelMatch = Regex("<xmp:Label>([A-Za-z]+)</xmp:Label>").find(xml)
-            if (labelMatch != null) {
-                val labelStr = labelMatch.groupValues[1]
-                meta.colorLabel = ColorLabel.values().firstOrNull { it.labelName.equals(labelStr, ignoreCase = true) } ?: ColorLabel.NONE
+            // 1. Parse Rating: xmp:Rating="3" or <xmp:Rating>3</xmp:Rating>
+            extractTag("xmp:Rating")?.toIntOrNull()?.let {
+                meta.rating = it
             }
 
-            // 3. Parse Pick Status: <photoshop:Urgency>1</photoshop:Urgency> or <crs:Pick>1</crs:Pick>
-            val pickMatch = Regex("<(photoshop:Urgency|crs:Pick)>(-?\\d+)</(photoshop:Urgency|crs:Pick)>").find(xml)
-            if (pickMatch != null) {
-                val pickVal = pickMatch.groupValues[2].toIntOrNull() ?: 0
+            // 2. Parse Color Label: xmp:Label="Red" or <xmp:Label>Red</xmp:Label>
+            extractTag("xmp:Label")?.let { labelStr ->
+                meta.colorLabel = ColorLabel.entries.firstOrNull { it.labelName.equals(labelStr, ignoreCase = true) } ?: ColorLabel.NONE
+            }
+
+            // 3. Parse Pick Status: crs:Pick="1" or photoshop:Urgency="1" or element equivalents
+            val pickStr = extractTag("crs:Pick") ?: extractTag("photoshop:Urgency")
+            if (pickStr != null) {
+                val pickVal = pickStr.toIntOrNull() ?: 0
                 meta.pickStatus = when (pickVal) {
                     1 -> PickStatus.PICKED
                     -1 -> PickStatus.REJECTED
                     else -> PickStatus.NONE
                 }
             }
-            
+
             // 3.5 Parse Dates
-            val dateMatch = Regex("<(xmp:CreateDate|photoshop:DateCreated|exif:DateTimeOriginal)>([^<]+)</(xmp:CreateDate|photoshop:DateCreated|exif:DateTimeOriginal)>").find(xml)
-            if (dateMatch != null) {
-                meta.captureDate = dateMatch.groupValues[2]
+            val dateStr = extractTag("xmp:CreateDate") ?: extractTag("photoshop:DateCreated") ?: extractTag("exif:DateTimeOriginal")
+            if (dateStr != null) {
+                meta.captureDate = dateStr
             }
 
-            // Parse EXIF info if present
-            val modelMatch = Regex("<tiff:Model>([^<]+)</tiff:Model>").find(xml)
-            if (modelMatch != null) meta.cameraModel = modelMatch.groupValues[1]
+            // Parse EXIF & Camera info if present
+            extractTag("tiff:Make")?.let { meta.cameraMake = it }
+            extractTag("tiff:Model")?.let { meta.cameraModel = it }
+            (extractTag("aux:Lens") ?: extractTag("exif:LensModel"))?.let { meta.lensModel = it }
+            extractTag("exif:FNumber")?.let { meta.fNumber = it }
+            extractTag("exif:ExposureTime")?.let { meta.exposureTime = it }
+            extractTag("exif:ISOSpeedRatings")?.let { meta.isoSpeed = it }
+            extractTag("exif:FocalLength")?.let { meta.focalLength = it }
 
-            val fNumMatch = Regex("<exif:FNumber>([^<]+)</exif:FNumber>").find(xml)
-            if (fNumMatch != null) meta.fNumber = fNumMatch.groupValues[1]
-
-            val expTimeMatch = Regex("<exif:ExposureTime>([^<]+)</exif:ExposureTime>").find(xml)
-            if (expTimeMatch != null) meta.exposureTime = expTimeMatch.groupValues[1]
-
-            val isoMatch = Regex("<exif:ISOSpeedRatings>([^<]+)</exif:ISOSpeedRatings>").find(xml) ?: Regex("<exif:ISOSpeedRatings>\\s*<rdf:Seq>\\s*<rdf:li>([^<]+)</rdf:li>").find(xml)
-            if (isoMatch != null) meta.isoSpeed = isoMatch.groupValues[1]
-
-            val focalMatch = Regex("<exif:FocalLength>([^<]+)</exif:FocalLength>").find(xml)
-            if (focalMatch != null) meta.focalLength = focalMatch.groupValues[1]
-
-
-            // 4. Parse Develop Parameters: e.g. crs:Exposure2012="+0.50"
-            val expMatch = Regex("crs:Exposure2012=\"([+-]?\\d*\\.?\\d+)\"").find(xml)
-            if (expMatch != null) {
-                params.exposureEV = expMatch.groupValues[1].toFloatOrNull() ?: 0.0f
-            }
-            val tempMatch = Regex("crs:Temperature=\"(\\d+)\"").find(xml)
-            if (tempMatch != null) {
-                params.kelvin = tempMatch.groupValues[1].toFloatOrNull() ?: 5500.0f
-            }
-            val tintMatch = Regex("crs:Tint=\"([+-]?\\d*\\.?\\d+)\"").find(xml)
-            if (tintMatch != null) {
-                params.tint = tintMatch.groupValues[1].toFloatOrNull() ?: 0.0f
-            }
-
-            val clarityMatch = Regex("crs:Clarity2012=\"([+-]?\\d+)\"").find(xml)
-            if (clarityMatch != null) {
-                params.clarity = clarityMatch.groupValues[1].toFloatOrNull() ?: 0.0f
-            }
-
-            val dehazeMatch = Regex("crs:Dehaze=\"([+-]?\\d+)\"").find(xml)
-            if (dehazeMatch != null) {
-                params.dehaze = dehazeMatch.groupValues[1].toFloatOrNull() ?: 0.0f
-            }
-
-            val profileMatch = Regex("crs:CameraProfile=\"([^\"]+)\"").find(xml)
-            if (profileMatch != null) {
-                params.colorProfile = profileMatch.groupValues[1]
-            }
+            // 4. Parse Develop Parameters: e.g. crs:Exposure2012="+0.50" or <crs:Exposure2012>+0.50</crs:Exposure2012>
+            extractTag("crs:Exposure2012")?.toFloatOrNull()?.let { params.exposureEV = it }
+            extractTag("crs:Temperature")?.toFloatOrNull()?.let { params.kelvin = it }
+            extractTag("crs:Tint")?.toFloatOrNull()?.let { params.tint = it }
+            extractTag("crs:Contrast2012")?.toFloatOrNull()?.let { params.contrast = it }
+            extractTag("crs:Highlights2012")?.toFloatOrNull()?.let { params.highlights = it }
+            extractTag("crs:Shadows2012")?.toFloatOrNull()?.let { params.shadows = it }
+            extractTag("crs:Whites2012")?.toFloatOrNull()?.let { params.whites = it }
+            extractTag("crs:Blacks2012")?.toFloatOrNull()?.let { params.blacks = it }
+            extractTag("crs:Vibrance")?.toFloatOrNull()?.let { params.vibrance = it }
+            extractTag("crs:Saturation")?.toFloatOrNull()?.let { params.saturation = it }
+            extractTag("crs:Clarity2012")?.toFloatOrNull()?.let { params.clarity = it }
+            extractTag("crs:Dehaze")?.toFloatOrNull()?.let { params.dehaze = it }
+            extractTag("crs:Sharpness")?.toFloatOrNull()?.let { params.sharpeningAmount = it }
+            extractTag("crs:LuminanceSmoothing")?.toFloatOrNull()?.let { params.luminanceNR = it }
+            extractTag("crs:CameraProfile")?.let { if (it.isNotEmpty()) params.colorProfile = it }
 
             Pair(meta, params)
         } catch (e: Throwable) {
@@ -170,26 +166,27 @@ object XmpSidecarManager {
                 append("    xmlns:crs=\"http://ns.adobe.com/camera-raw-settings/1.0/\"\n")
                 append("    xmlns:exif=\"http://ns.adobe.com/exif/1.0/\"\n")
                 append("    xmlns:tiff=\"http://ns.adobe.com/tiff/1.0/\"\n")
+                append("    xmlns:aux=\"http://ns.adobe.com/exif/1.0/aux/\"\n")
                 append("   xmp:Rating=\"${meta.rating}\"\n")
                 if (meta.colorLabel != ColorLabel.NONE) {
-                    append("   xmp:Label=\"${meta.colorLabel.labelName}\"\n")
+                    append("   xmp:Label=\"${escapeXml(meta.colorLabel.labelName)}\"\n")
                 }
                 append("   photoshop:Urgency=\"$pickVal\"\n")
                 append("   crs:Pick=\"$pickVal\"\n")
                 
                 if (modifiedFields.contains("captureDate") && meta.captureDate.isNotEmpty()) {
-                    append("   xmp:CreateDate=\"${meta.captureDate}\"\n")
-                    append("   photoshop:DateCreated=\"${meta.captureDate}\"\n")
-                    append("   exif:DateTimeOriginal=\"${meta.captureDate}\"\n")
+                    append("   xmp:CreateDate=\"${escapeXml(meta.captureDate)}\"\n")
+                    append("   photoshop:DateCreated=\"${escapeXml(meta.captureDate)}\"\n")
+                    append("   exif:DateTimeOriginal=\"${escapeXml(meta.captureDate)}\"\n")
                 }
                 if (modifiedFields.contains("cameraModel") && meta.cameraModel.isNotEmpty()) {
-                    append("   tiff:Model=\"${meta.cameraModel}\"\n")
+                    append("   tiff:Model=\"${escapeXml(meta.cameraModel)}\"\n")
                 }
                 if (modifiedFields.contains("cameraMake") && meta.cameraMake.isNotEmpty()) {
-                    append("   tiff:Make=\"${meta.cameraMake}\"\n")
+                    append("   tiff:Make=\"${escapeXml(meta.cameraMake)}\"\n")
                 }
                 if (modifiedFields.contains("lensModel") && meta.lensModel.isNotEmpty()) {
-                    append("   aux:Lens=\"${meta.lensModel}\"\n")
+                    append("   aux:Lens=\"${escapeXml(meta.lensModel)}\"\n")
                 }
                 if (modifiedFields.contains("fNumber") && meta.fNumber.isNotEmpty()) {
                     append("   exif:FNumber=\"${meta.fNumber.removePrefix("f/")}\"\n")
@@ -219,7 +216,7 @@ object XmpSidecarManager {
                 append("   crs:Clarity2012=\"${params.clarity.toInt()}\"\n")
                 append("   crs:Dehaze=\"${params.dehaze.toInt()}\"\n")
                 if (params.colorProfile.isNotEmpty()) {
-                    append("   crs:CameraProfile=\"${params.colorProfile}\"\n")
+                    append("   crs:CameraProfile=\"${escapeXml(params.colorProfile)}\"\n")
                 }
                 append("   crs:Sharpness=\"${params.sharpeningAmount.toInt()}\"\n")
                 append("   crs:LuminanceSmoothing=\"${params.luminanceNR.toInt()}\">\n")
@@ -234,5 +231,12 @@ object XmpSidecarManager {
             e.printStackTrace()
         }
     }
+
+    private fun escapeXml(str: String): String = str
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&apos;")
 }
 

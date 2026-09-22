@@ -5,8 +5,12 @@ import android.graphics.Bitmap
 import android.util.LruCache
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
@@ -21,6 +25,7 @@ class CullingCacheManager(
     private val diskCacheDir: File? = context?.cacheDir?.resolve("culling_cache")
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var currentPrefetchJob: Job? = null
 
     // 1. In-Memory LRU Cache (sized to 25% of available heap memory, in KB)
     private val maxMemoryKb = (Runtime.getRuntime().maxMemory() / 1024).toInt()
@@ -71,7 +76,9 @@ class CullingCacheManager(
             val diskBmp = loadFromDisk(key)
             if (diskBmp != null) {
                 memoryCache.put(key, diskBmp)
-                onLoaded(diskBmp)
+                withContext(Dispatchers.Main) {
+                    onLoaded(diskBmp)
+                }
                 return@launch
             }
 
@@ -80,7 +87,9 @@ class CullingCacheManager(
             if (loadedBmp != null) {
                 memoryCache.put(key, loadedBmp)
                 saveToDisk(key, loadedBmp)
-                onLoaded(loadedBmp)
+                withContext(Dispatchers.Main) {
+                    onLoaded(loadedBmp)
+                }
             }
         }
     }
@@ -92,6 +101,8 @@ class CullingCacheManager(
     fun prefetchAround(currentIndex: Int, items: List<PhotoItem>, windowSize: Int = 5) {
         if (items.isEmpty()) return
 
+        currentPrefetchJob?.cancel()
+
         // Interleaved priority sequence: +1, -1, +2, -2, +3, -3, +4, -4, +5, -5
         val offsets = mutableListOf<Int>()
         for (w in 1..windowSize) {
@@ -99,8 +110,9 @@ class CullingCacheManager(
             offsets.add(-w)
         }
 
-        scope.launch {
+        currentPrefetchJob = scope.launch {
             for (offset in offsets) {
+                if (!isActive) break
                 val idx = currentIndex + offset
                 if (idx in items.indices) {
                     val targetItem = items[idx]
@@ -125,6 +137,14 @@ class CullingCacheManager(
         diskCacheDir?.listFiles()?.forEach { it.delete() }
     }
 
+    /**
+     * Cancels active background prefetch jobs and releases CoroutineScope resources.
+     */
+    fun cancel() {
+        currentPrefetchJob?.cancel()
+        scope.cancel()
+    }
+
     private fun getCacheKey(item: PhotoItem): String {
         val raw = item.filePath.ifEmpty { item.uri.toString() }
         return md5(raw)
@@ -147,8 +167,24 @@ class CullingCacheManager(
             FileOutputStream(file).use { out ->
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
             }
+            trimDiskCacheIfNeeded(dir, maxBytes = 250L * 1024L * 1024L)
         } catch (e: Throwable) {
             // Disk caching non-fatal
+        }
+    }
+
+    private fun trimDiskCacheIfNeeded(dir: File, maxBytes: Long) {
+        val files = dir.listFiles { f -> f.name.endsWith(".cache") } ?: return
+        var totalSize = files.sumOf { it.length() }
+        if (totalSize > maxBytes) {
+            val sorted = files.sortedBy { it.lastModified() }
+            for (f in sorted) {
+                val len = f.length()
+                if (f.delete()) {
+                    totalSize -= len
+                    if (totalSize <= (maxBytes * 0.8).toLong()) break
+                }
+            }
         }
     }
 
