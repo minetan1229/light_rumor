@@ -36,13 +36,15 @@ import com.lightrumor.*
 fun DevelopStudioScreen(
     photoItem: PhotoItem,
     cacheManager: CullingCacheManager,
-    onBack: (DevelopmentParams) -> Unit
+    onBack: (DevelopmentParams, List<MaskLayerState>) -> Unit
 ) {
     var isDarkTheme by remember { mutableStateOf(true) }
     var devParams by remember(photoItem.uri) { mutableStateOf(photoItem.developParams.deepCopy()) }
+    var maskLayers by remember(photoItem.uri) { mutableStateOf(photoItem.maskLayers.map { it.deepCopy() }) }
 
     BackHandler {
-        onBack(devParams)
+        photoItem.maskLayers = maskLayers
+        onBack(devParams, maskLayers)
     }
     var hoverPreviewParams by remember { mutableStateOf<DevelopmentParams?>(null) }
     var compareMode by remember { mutableStateOf(CompareMode.Off) }
@@ -50,8 +52,7 @@ fun DevelopStudioScreen(
 
     // Phase 5 State
     var studioMode by remember { mutableStateOf(StudioMode.Develop) }
-    val historyManager = remember(photoItem.uri) { HistoryManager(devParams) }
-    var maskLayers by remember { mutableStateOf<List<MaskLayerState>>(emptyList()) }
+    val historyManager = remember(photoItem.uri) { HistoryManager(devParams, maskLayers) }
     var selectedMaskIndex by remember { mutableStateOf(0) }
 
     // Active Precision Dial state
@@ -69,10 +70,14 @@ fun DevelopStudioScreen(
     var originalBitmap by remember(photoItem.uri) {
         mutableStateOf(cacheManager.getFromMemory(photoItem.filePath.ifEmpty { photoItem.uri.toString() }))
     }
+    val activeUri by rememberUpdatedState(photoItem.uri)
 
     LaunchedEffect(photoItem.uri) {
+        val targetUri = photoItem.uri
         cacheManager.loadBitmap(photoItem) { bmp ->
-            originalBitmap = bmp
+            if (activeUri == targetUri) {
+                originalBitmap = bmp
+            }
         }
     }
 
@@ -109,7 +114,10 @@ fun DevelopStudioScreen(
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .clickable { onBack(devParams) }
+                                .clickable {
+                                    photoItem.maskLayers = maskLayers
+                                    onBack(devParams, maskLayers)
+                                }
                                 .padding(horizontal = 8.dp, vertical = 6.dp)
                         ) {
                             androidx.compose.foundation.Canvas(modifier = Modifier.size(10.dp, 14.dp)) {

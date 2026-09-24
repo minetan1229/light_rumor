@@ -1,6 +1,5 @@
 #pragma once
-#ifndef LIGHT_RUMOR_COMMON_H
-#define LIGHT_RUMOR_COMMON_H
+
 
 #include <cstdint>
 #include <string>
@@ -511,6 +510,10 @@ inline void mergeDevelopmentParams(const DevelopmentParams& src, DevelopmentPara
         dst.maskLayers = src.maskLayers;
         dst.retouchOps = src.retouchOps;
     }
+    if (mask == BatchSyncMask::All) {
+        dst.outputColorSpace = src.outputColorSpace;
+        dst.enableDithering = src.enableDithering;
+    }
 }
 
 // -------------------------------------------------------------------------
@@ -695,7 +698,3 @@ struct ExportRecipe {
 namespace light_rumor {
     using namespace lightrumor;
 }
-
-
-
-#endif // LIGHT_RUMOR_COMMON_H

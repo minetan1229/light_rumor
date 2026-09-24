@@ -30,6 +30,15 @@ VulkanCompute::~VulkanCompute() {
 }
 
 bool VulkanCompute::init() {
+    if (m_impl->vulkanLib) {
+#if defined(_WIN32)
+        FreeLibrary((HMODULE)m_impl->vulkanLib);
+#else
+        dlclose(m_impl->vulkanLib);
+#endif
+        m_impl->vulkanLib = nullptr;
+    }
+
     // Attempt dynamic loading of Vulkan library
 #if defined(_WIN32)
     m_impl->vulkanLib = (void*)LoadLibraryA("vulkan-1.dll");

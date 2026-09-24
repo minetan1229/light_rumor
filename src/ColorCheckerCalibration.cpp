@@ -336,10 +336,6 @@ bool ColorCheckerCalibration::calibrate(const std::vector<FloatRGBA>& frame,
     XtX[4] += lambda;
     XtX[8] += lambda;
 
-    XtY[0] += lambda;
-    XtY[4] += lambda;
-    XtY[8] += lambda;
-
     float invXtX[9];
     if (!invert3x3(XtX, invXtX)) {
         return false;

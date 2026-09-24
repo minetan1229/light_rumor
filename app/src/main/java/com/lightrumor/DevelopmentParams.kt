@@ -361,7 +361,10 @@ data class ExportConfig(
     val jpegQuality: Int = 98,
     val chromaSubsampling: ChromaSubsampling = ChromaSubsampling.YUV444,
     val tileSize: Int = 2048,
-    val tilePadding: Int = 16
+    val tilePadding: Int = 16,
+    val maxLongEdge: Int = 0,
+    val enableWatermark: Boolean = false,
+    val watermarkText: String = ""
 )
 
 enum class PickStatus(val value: Int) {

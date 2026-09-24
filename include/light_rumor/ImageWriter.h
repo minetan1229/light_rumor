@@ -31,6 +31,12 @@ public:
                             int32_t width, int32_t height,
                             const ExifMetadata* metadata);
 
+    // Write 16-bit RGB image to Linear DNG with Exif metadata
+    static bool writeLinearDNG(const std::string& filePath,
+                               const uint16_t* rgb16Data,
+                               int32_t width, int32_t height,
+                               const ExifMetadata* metadata);
+
     // Write 8-bit RGB image to TIFF with Exif metadata
     static bool writeTIFF8(const std::string& filePath,
                            const uint8_t* rgb8Data,

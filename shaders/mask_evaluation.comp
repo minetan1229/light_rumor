@@ -24,44 +24,46 @@ layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 #define BOOL_OP_INTERSECT 3
 
 layout(push_constant) uniform MaskUniforms {
-    ivec2 imageSize;
-    int maskType;
-    int booleanOp;
-    int invert;
-    float opacity;
+    ivec2 imageSize;     // 8B (offset 0)
+    int maskType;        // 4B (offset 8)
+    int booleanOp;       // 4B (offset 12)
+    int invert;          // 4B (offset 16)
+    float opacity;       // 4B (offset 20)
 
-    // Linear Gradient
-    vec2 linearStart;
-    vec2 linearEnd;
-    float linearFeather;
-    int linearEasing; // 0: Linear, 1: Smoothstep
-
-    // Radial / Elliptical
-    vec2 radialCenter;
-    vec2 radialRadius; // (rx, ry)
-    float radialAngle;  // in radians
-    float radialFeather; // 0.0 to 1.0
-
-    // Luminance Range
-    vec2 lumaRange;      // (min, max) in [0.0, 1.0]
-    vec2 lumaFeather;    // (featherLow, featherHigh)
-
-    // Color Range
-    vec3 colorTarget;    // H (0..360), S (0..1), L (0..1)
-    vec3 colorTolerance; // tolH, tolS, tolL
-    float colorFeather;
-
-    // Depth Range
-    vec2 depthRange;     // (min, max) in [0.0, 1.0]
-    float depthFeather;
-
-    // Edge / Sobel
-    float edgeThreshold;
-    float edgeFeather;
-
-    // Polygon / Bezier
-    int vertexCount;
+    // Packed parameter vectors (16B each, total 96B -> uniform size: 120B <= 128B)
+    vec4 p0; // Linear: start(xy), end(zw) | Radial: center(xy), radius(zw)
+    vec4 p1; // Linear: feather(x), easing(y) | Radial: angle(x), feather(y) | Sobel: thresh(x), feather(y) | Poly: vertexCount(z), feather(w)
+    vec4 p2; // Luma: range(xy), feather(zw)
+    vec4 p3; // Color: target(xyz), feather(w)
+    vec4 p4; // Color: tolerance(xyz), depthFeather(w)
+    vec4 p5; // Depth: range(xy), unused(zw)
 } u_params;
+
+// Parameter unpack accessors
+#define u_linearStart    (u_params.p0.xy)
+#define u_linearEnd      (u_params.p0.zw)
+#define u_linearFeather  (u_params.p1.x)
+#define u_linearEasing   (int(u_params.p1.y))
+
+#define u_radialCenter   (u_params.p0.xy)
+#define u_radialRadius   (u_params.p0.zw)
+#define u_radialAngle    (u_params.p1.x)
+#define u_radialFeather  (u_params.p1.y)
+
+#define u_lumaRange      (u_params.p2.xy)
+#define u_lumaFeather    (u_params.p2.zw)
+
+#define u_colorTarget    (u_params.p3.xyz)
+#define u_colorFeather   (u_params.p3.w)
+#define u_colorTolerance (u_params.p4.xyz)
+
+#define u_depthRange     (u_params.p5.xy)
+#define u_depthFeather   (u_params.p4.w)
+
+#define u_edgeThreshold  (u_params.p1.x)
+#define u_edgeFeather    (u_params.p1.y)
+#define u_vertexCount    (int(u_params.p1.z))
+#define u_polyFeather    (u_params.p1.w)
 
 // Bindings
 // Set 0, Binding 0: Image RGBA input (for Luminance, Color, Sobel)
@@ -89,21 +91,34 @@ layout(std430, set = 0, binding = 4) writeonly buffer MaskOutputBuffer {
     float maskOut[];
 };
 
-// Helper: RGB to HSL
+// Helper: RGB to HSL (HDR-safe, degrees hue 0..360)
 vec3 rgbToHsl(vec3 c) {
-    float cMin = min(min(c.r, c.g), c.b);
-    float cMax = max(max(c.r, c.g), c.b);
+    vec3 safeC = max(c, vec3(0.0));
+    float cMin = min(min(safeC.r, safeC.g), safeC.b);
+    float cMax = max(max(safeC.r, safeC.g), safeC.b);
     float delta = cMax - cMin;
     vec3 hsl = vec3(0.0, 0.0, (cMax + cMin) * 0.5);
 
-    if (delta > 1e-6) {
-        hsl.y = hsl.z < 0.5 ? (delta / (cMax + cMin)) : (delta / (2.0 - cMax - cMin));
-        if (c.r == cMax) {
-            hsl.x = (c.g - c.b) / delta + (c.g < c.b ? 6.0 : 0.0);
-        } else if (c.g == cMax) {
-            hsl.x = (c.b - c.r) / delta + 2.0;
+    if (delta > 1e-6 && cMax > 1e-6) {
+        if (hsl.z < 0.5) {
+            float denom = cMax + cMin;
+            hsl.y = delta / max(denom, 1e-5);
         } else {
-            hsl.x = (c.r - c.g) / delta + 4.0;
+            float denom = 2.0 - cMax - cMin;
+            if (denom <= 1e-5) {
+                hsl.y = delta / max(cMax, 1e-5);
+            } else {
+                hsl.y = delta / denom;
+            }
+        }
+        hsl.y = clamp(hsl.y, 0.0, 1.0);
+
+        if (safeC.r == cMax) {
+            hsl.x = (safeC.g - safeC.b) / delta + (safeC.g < safeC.b ? 6.0 : 0.0);
+        } else if (safeC.g == cMax) {
+            hsl.x = (safeC.b - safeC.r) / delta + 2.0;
+        } else {
+            hsl.x = (safeC.r - safeC.g) / delta + 4.0;
         }
         hsl.x *= 60.0; // 0 to 360 degrees
     }
@@ -112,14 +127,14 @@ vec3 rgbToHsl(vec3 c) {
 
 // 1. Linear Gradient Evaluation
 float evaluateLinearGradient(vec2 p) {
-    vec2 v = u_params.linearEnd - u_params.linearStart;
+    vec2 v = u_linearEnd - u_linearStart;
     float lenSq = dot(v, v);
     if (lenSq < 1e-6) return 0.0;
 
-    float t = dot(p - u_params.linearStart, v) / lenSq;
+    float t = dot(p - u_linearStart, v) / lenSq;
     t = clamp(t, 0.0, 1.0);
 
-    if (u_params.linearEasing == 1) {
+    if (u_linearEasing == 1) {
         // S-curve smoothstep easing
         t = smoothstep(0.0, 1.0, t);
     }
@@ -128,20 +143,20 @@ float evaluateLinearGradient(vec2 p) {
 
 // 2. Radial / Elliptical Gradient Evaluation
 float evaluateRadialGradient(vec2 p) {
-    vec2 rel = p - u_params.radialCenter;
-    float cosA = cos(-u_params.radialAngle);
-    float sinA = sin(-u_params.radialAngle);
+    vec2 rel = p - u_radialCenter;
+    float cosA = cos(-u_radialAngle);
+    float sinA = sin(-u_radialAngle);
     vec2 rotated = vec2(
         rel.x * cosA - rel.y * sinA,
         rel.x * sinA + rel.y * cosA
     );
 
-    vec2 r = max(u_params.radialRadius, vec2(1e-4));
+    vec2 r = max(u_radialRadius, vec2(1e-4));
     float distNorm = length(rotated / r);
 
     if (distNorm >= 1.0) return 0.0;
 
-    float feather = clamp(u_params.radialFeather, 0.01, 1.0);
+    float feather = clamp(u_radialFeather, 0.01, 1.0);
     float innerR = max(0.0, 1.0 - feather);
     if (distNorm <= innerR) {
         return 1.0;
@@ -151,7 +166,7 @@ float evaluateRadialGradient(vec2 p) {
 
 // 3. Polygon Point-in-Polygon & Signed Distance
 float evaluatePolygon(vec2 p) {
-    int n = u_params.vertexCount;
+    int n = min(u_vertexCount, 32);
     if (n < 3) return 0.0;
 
     bool inside = false;
@@ -175,7 +190,7 @@ float evaluatePolygon(vec2 p) {
         minDist = min(minDist, d);
     }
 
-    float feather = max(0.005, u_params.linearFeather);
+    float feather = max(0.005, u_polyFeather);
     float edgeWeight = clamp(minDist / feather, 0.0, 1.0);
     return inside ? (0.5 + 0.5 * edgeWeight) : max(0.0, 0.5 - 0.5 * edgeWeight);
 }
@@ -185,10 +200,10 @@ float evaluateLuminance(vec3 col) {
     // Rec.709 Luminance
     float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
 
-    float low = u_params.lumaRange.x;
-    float high = u_params.lumaRange.y;
-    float fLow = max(1e-4, u_params.lumaFeather.x);
-    float fHigh = max(1e-4, u_params.lumaFeather.y);
+    float low = u_lumaRange.x;
+    float high = u_lumaRange.y;
+    float fLow = max(1e-4, u_lumaFeather.x);
+    float fHigh = max(1e-4, u_lumaFeather.y);
 
     float wLow = smoothstep(low - fLow, low, luma);
     float wHigh = 1.0 - smoothstep(high, high + fHigh, luma);
@@ -200,8 +215,8 @@ float evaluateColorRange(vec3 col) {
     vec3 hsl = rgbToHsl(col); // hsl.x is in [0, 360] degrees
 
     // Safe hue evaluation: harmonizes both normalized [0, 1] and degree [0, 360] inputs
-    float targetH = u_params.colorTarget.x;
-    float tolH = u_params.colorTolerance.x;
+    float targetH = u_colorTarget.x;
+    float tolH = u_colorTolerance.x;
     if (tolH > 0.0 && tolH <= 1.0 && targetH <= 1.0) {
         targetH *= 360.0;
         tolH *= 360.0;
@@ -213,13 +228,13 @@ float evaluateColorRange(vec3 col) {
     float dH = abs(hsl.x - targetH);
     if (dH > 180.0) dH = 360.0 - dH;
 
-    float dS = abs(hsl.y - u_params.colorTarget.y);
-    float dL = abs(hsl.z - u_params.colorTarget.z);
+    float dS = abs(hsl.y - u_colorTarget.y);
+    float dL = abs(hsl.z - u_colorTarget.z);
 
-    float f = max(1e-4, u_params.colorFeather);
+    float f = max(1e-4, u_colorFeather);
     float wH = 1.0 - smoothstep(tolH, tolH + f * 45.0, dH);
-    float wS = 1.0 - smoothstep(u_params.colorTolerance.y, u_params.colorTolerance.y + f * 0.3, dS);
-    float wL = 1.0 - smoothstep(u_params.colorTolerance.z, u_params.colorTolerance.z + f * 0.3, dL);
+    float wS = 1.0 - smoothstep(u_colorTolerance.y, u_colorTolerance.y + f * 0.3, dS);
+    float wL = 1.0 - smoothstep(u_colorTolerance.z, u_colorTolerance.z + f * 0.3, dL);
 
     return clamp(wH * wS * wL, 0.0, 1.0);
 }
@@ -227,9 +242,9 @@ float evaluateColorRange(vec3 col) {
 // 7. Depth Map Mask
 float evaluateDepth(int idx) {
     float d = inDepth[idx];
-    float low = u_params.depthRange.x;
-    float high = u_params.depthRange.y;
-    float f = max(1e-4, u_params.depthFeather);
+    float low = u_depthRange.x;
+    float high = u_depthRange.y;
+    float f = max(1e-4, u_depthFeather);
 
     float wLow = smoothstep(low - f, low, d);
     float wHigh = 1.0 - smoothstep(high, high + f, d);
@@ -259,8 +274,8 @@ float evaluateSobel(ivec2 pos) {
                ( 1.0 * luma[2][0] + 2.0 * luma[2][1] + 1.0 * luma[2][2]);
 
     float grad = sqrt(gx * gx + gy * gy);
-    float thresh = max(0.01, u_params.edgeThreshold);
-    float f = max(1e-4, u_params.edgeFeather);
+    float thresh = max(0.01, u_edgeThreshold);
+    float f = max(1e-4, u_edgeFeather);
     return smoothstep(thresh - f, thresh + f, grad);
 }
 
@@ -271,7 +286,7 @@ void main() {
     }
 
     int idx = pos.y * u_params.imageSize.x + pos.x;
-    vec2 pNorm = vec2(pos) / vec2(u_params.imageSize);
+    vec2 pNorm = vec2(pos) / vec2(max(ivec2(1), u_params.imageSize));
 
     // Evaluate single mask weight
     float rawWeight = 0.0;

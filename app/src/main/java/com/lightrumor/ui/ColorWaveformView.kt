@@ -91,12 +91,7 @@ fun ColorWaveformView(
                     waveH = h
                 )
 
-                val existing = waveformBitmap
-                val outBmp = if (existing != null && !existing.isRecycled && existing.width == w && existing.height == h && existing.isMutable) {
-                    existing
-                } else {
-                    Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-                }
+                val outBmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
                 outBmp.setPixels(wavePixels, 0, w, 0, 0, w, h)
                 withContext(Dispatchers.Main) {
                     waveformBitmap = outBmp

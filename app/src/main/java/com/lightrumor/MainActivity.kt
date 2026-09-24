@@ -72,13 +72,15 @@ class MainActivity : ComponentActivity() {
         }
 
         val existingParams = editHistoryCatalog.getParamsForUri(uri.toString()) ?: DevelopmentParams()
+        val existingMasks = editHistoryCatalog.getMasksForUri(uri.toString())
 
         val item = PhotoItem(
             uri = uri,
             filePath = resolvedPath,
             fileName = fileName,
             isRaw = ThumbnailLoader.isRawFile(fileName),
-            developParams = existingParams
+            developParams = existingParams,
+            maskLayers = existingMasks
         )
         editHistoryCatalog.applyMetadataFromCatalog(uri.toString(), item.metadata)
         if (item.metadata.cameraModel.isEmpty() && item.metadata.fNumber.isEmpty() && item.metadata.isoSpeed.isEmpty()) {
@@ -209,25 +211,34 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                when {
-                    // 1. コレクション画面 (写真未選択時)
-                    photoItems.isEmpty() -> {
-                        val recentEntries = editHistoryCatalog.getRecentEntries()
-                        val recentItems = recentEntries.map { entry ->
-                            PhotoItem(
-                                uri = Uri.parse(entry.uri),
-                                filePath = entry.filePath,
-                                fileName = entry.fileName,
-                                isRaw = ThumbnailLoader.isRawFile(entry.fileName.ifEmpty { entry.filePath }),
-                                developParams = editHistoryCatalog.getParamsForUri(entry.uri) ?: DevelopmentParams()
-                            ).apply {
-                                editHistoryCatalog.applyMetadataFromCatalog(entry.uri, metadata)
-                                if (entry.lastEditedAt > 0) {
-                                    metadata.captureDate = java.text.SimpleDateFormat("yyyy/MM/dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(entry.lastEditedAt))
+                var recentItems by remember { mutableStateOf<List<PhotoItem>>(emptyList()) }
+                LaunchedEffect(photoItems.isEmpty()) {
+                    if (photoItems.isEmpty()) {
+                        val items = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            val recentEntries = editHistoryCatalog.getRecentEntries()
+                            recentEntries.map { entry ->
+                                PhotoItem(
+                                    uri = Uri.parse(entry.uri),
+                                    filePath = entry.filePath,
+                                    fileName = entry.fileName,
+                                    isRaw = ThumbnailLoader.isRawFile(entry.fileName.ifEmpty { entry.filePath }),
+                                    developParams = editHistoryCatalog.getParamsForUri(entry.uri) ?: DevelopmentParams(),
+                                    maskLayers = editHistoryCatalog.getMasksForUri(entry.uri)
+                                ).apply {
+                                    editHistoryCatalog.applyMetadataFromCatalog(entry.uri, metadata)
+                                    if (entry.lastEditedAt > 0) {
+                                        metadata.captureDate = java.text.SimpleDateFormat("yyyy/MM/dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(entry.lastEditedAt))
+                                    }
                                 }
                             }
                         }
+                        recentItems = items
+                    }
+                }
 
+                when {
+                    // 1. コレクション画面 (写真未選択時)
+                    photoItems.isEmpty() -> {
                         QuickOpenScreen(
                             cacheManager = cacheManager,
                             hasPermission = hasStoragePermission,
@@ -256,15 +267,17 @@ class MainActivity : ComponentActivity() {
                         DevelopStudioScreen(
                             photoItem = activeDevelopItem!!,
                             cacheManager = cacheManager,
-                            onBack = { updatedParams ->
+                            onBack = { updatedParams, updatedMasks ->
                                 activeDevelopItem?.let { item ->
                                     item.developParams = updatedParams
+                                    item.maskLayers = updatedMasks
                                     editHistoryCatalog.saveEntry(
                                         uri = item.uri.toString(),
                                         fileName = item.fileName,
                                         params = updatedParams,
                                         filePath = item.filePath,
-                                        metadata = item.metadata
+                                        metadata = item.metadata,
+                                        masks = updatedMasks
                                     )
                                 }
                                 activeDevelopItem = null
@@ -329,5 +342,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        cacheManager.cancel()
     }
 }

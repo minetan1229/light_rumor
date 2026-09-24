@@ -16,22 +16,37 @@ namespace {
 
 // Fast RGB <-> HSL conversion
 inline void rgbToHsl(float r, float g, float b, float& h, float& s, float& l) {
-    float maxVal = std::max({r, g, b});
-    float minVal = std::min({r, g, b});
+    float safeR = std::max(0.0f, r);
+    float safeG = std::max(0.0f, g);
+    float safeB = std::max(0.0f, b);
+    float maxVal = std::max({safeR, safeG, safeB});
+    float minVal = std::min({safeR, safeG, safeB});
     float delta = maxVal - minVal;
     l = (maxVal + minVal) * 0.5f;
 
-    if (delta < 1e-6f) {
+    if (delta < 1e-6f || maxVal < 1e-6f) {
         h = 0.0f;
         s = 0.0f;
     } else {
-        s = (l < 0.5f) ? (delta / (maxVal + minVal)) : (delta / (2.0f - maxVal - minVal));
-        if (r == maxVal) {
-            h = (g - b) / delta + (g < b ? 6.0f : 0.0f);
-        } else if (g == maxVal) {
-            h = (b - r) / delta + 2.0f;
+        if (l < 0.5f) {
+            float denom = maxVal + minVal;
+            s = delta / std::max(denom, 1e-5f);
         } else {
-            h = (r - g) / delta + 4.0f;
+            float denom = 2.0f - maxVal - minVal;
+            if (denom <= 1e-5f) {
+                s = delta / std::max(maxVal, 1e-5f);
+            } else {
+                s = delta / denom;
+            }
+        }
+        s = std::clamp(s, 0.0f, 1.0f);
+
+        if (safeR == maxVal) {
+            h = (safeG - safeB) / delta + (safeG < safeB ? 6.0f : 0.0f);
+        } else if (safeG == maxVal) {
+            h = (safeB - safeR) / delta + 2.0f;
+        } else {
+            h = (safeR - safeG) / delta + 4.0f;
         }
         h *= 60.0f; // 0 to 360 degrees
     }
@@ -57,6 +72,145 @@ inline void hslToRgb(float h, float s, float l, float& r, float& g, float& b) {
     r = hueToRgb(p, q, hNorm + 1.0f / 3.0f);
     g = hueToRgb(p, q, hNorm);
     b = hueToRgb(p, q, hNorm - 1.0f / 3.0f);
+}
+
+template <typename T>
+void applyFlip(std::vector<T>& buffer, int32_t imgW, int32_t imgH, bool flipH, bool flipV) {
+    if (!flipH && !flipV) return;
+    if (flipH) {
+        #pragma omp parallel for schedule(static)
+        for (int32_t y = 0; y < imgH; ++y) {
+            T* row = &buffer[static_cast<size_t>(y) * imgW * 3];
+            for (int32_t x = 0; x < imgW / 2; ++x) {
+                int32_t oppX = imgW - 1 - x;
+                std::swap(row[x * 3 + 0], row[oppX * 3 + 0]);
+                std::swap(row[x * 3 + 1], row[oppX * 3 + 1]);
+                std::swap(row[x * 3 + 2], row[oppX * 3 + 2]);
+            }
+        }
+    }
+    if (flipV) {
+        #pragma omp parallel for schedule(static)
+        for (int32_t y = 0; y < imgH / 2; ++y) {
+            int32_t oppY = imgH - 1 - y;
+            T* rowA = &buffer[static_cast<size_t>(y) * imgW * 3];
+            T* rowB = &buffer[static_cast<size_t>(oppY) * imgW * 3];
+            for (int32_t x = 0; x < imgW * 3; ++x) {
+                std::swap(rowA[x], rowB[x]);
+            }
+        }
+    }
+}
+
+template <typename T>
+void applyStepRotation(std::vector<T>& buffer, int32_t& imgW, int32_t& imgH, int32_t steps) {
+    int32_t normSteps = (steps % 4 + 4) % 4;
+    if (normSteps == 0) return;
+
+    if (normSteps == 2) {
+        // 180° rotation
+        int64_t totalPixels = static_cast<int64_t>(imgW) * imgH;
+        #pragma omp parallel for schedule(static)
+        for (int64_t i = 0; i < totalPixels / 2; ++i) {
+            size_t opp = static_cast<size_t>(totalPixels - 1 - i);
+            size_t cur = static_cast<size_t>(i);
+            std::swap(buffer[cur * 3 + 0], buffer[opp * 3 + 0]);
+            std::swap(buffer[cur * 3 + 1], buffer[opp * 3 + 1]);
+            std::swap(buffer[cur * 3 + 2], buffer[opp * 3 + 2]);
+        }
+        return;
+    }
+
+    int32_t newW = imgH;
+    int32_t newH = imgW;
+    std::vector<T> rotated(static_cast<size_t>(newW) * newH * 3);
+
+    if (normSteps == 1) {
+        // 90° CW: (x, y) in old -> (imgH - 1 - y, x) in new
+        #pragma omp parallel for schedule(static)
+        for (int32_t y = 0; y < imgH; ++y) {
+            for (int32_t x = 0; x < imgW; ++x) {
+                int32_t nx = imgH - 1 - y;
+                int32_t ny = x;
+                size_t srcIdx = (static_cast<size_t>(y) * imgW + x) * 3;
+                size_t dstIdx = (static_cast<size_t>(ny) * newW + nx) * 3;
+                rotated[dstIdx + 0] = buffer[srcIdx + 0];
+                rotated[dstIdx + 1] = buffer[srcIdx + 1];
+                rotated[dstIdx + 2] = buffer[srcIdx + 2];
+            }
+        }
+    } else if (normSteps == 3) {
+        // 270° CW / 90° CCW: (x, y) in old -> (y, imgW - 1 - x) in new
+        #pragma omp parallel for schedule(static)
+        for (int32_t y = 0; y < imgH; ++y) {
+            for (int32_t x = 0; x < imgW; ++x) {
+                int32_t nx = y;
+                int32_t ny = imgW - 1 - x;
+                size_t srcIdx = (static_cast<size_t>(y) * imgW + x) * 3;
+                size_t dstIdx = (static_cast<size_t>(ny) * newW + nx) * 3;
+                rotated[dstIdx + 0] = buffer[srcIdx + 0];
+                rotated[dstIdx + 1] = buffer[srcIdx + 1];
+                rotated[dstIdx + 2] = buffer[srcIdx + 2];
+            }
+        }
+    }
+
+    buffer = std::move(rotated);
+    imgW = newW;
+    imgH = newH;
+}
+
+template <typename T>
+void applyFineRotation(std::vector<T>& buffer, int32_t imgW, int32_t imgH, float degrees) {
+    if (std::abs(degrees) < 1e-3f) return;
+    float rad = -degrees * 3.14159265358979323846f / 180.0f; // inverse rotation for sampling
+    float cosA = std::cos(rad);
+    float sinA = std::sin(rad);
+    float cx = imgW * 0.5f;
+    float cy = imgH * 0.5f;
+
+    std::vector<T> rotated(static_cast<size_t>(imgW) * imgH * 3);
+
+    #pragma omp parallel for schedule(static)
+    for (int32_t ny = 0; ny < imgH; ++ny) {
+        float dy = ny - cy;
+        for (int32_t nx = 0; nx < imgW; ++nx) {
+            float dx = nx - cx;
+            float sx = cx + (dx * cosA - dy * sinA);
+            float sy = cy + (dx * sinA + dy * cosA);
+
+            int32_t x0 = static_cast<int32_t>(std::floor(sx));
+            int32_t y0 = static_cast<int32_t>(std::floor(sy));
+            int32_t x1 = x0 + 1;
+            int32_t y1 = y0 + 1;
+
+            float fx = sx - x0;
+            float fy = sy - y0;
+
+            x0 = std::clamp(x0, 0, imgW - 1);
+            x1 = std::clamp(x1, 0, imgW - 1);
+            y0 = std::clamp(y0, 0, imgH - 1);
+            y1 = std::clamp(y1, 0, imgH - 1);
+
+            size_t dstIdx = (static_cast<size_t>(ny) * imgW + nx) * 3;
+            size_t idx00 = (static_cast<size_t>(y0) * imgW + x0) * 3;
+            size_t idx10 = (static_cast<size_t>(y0) * imgW + x1) * 3;
+            size_t idx01 = (static_cast<size_t>(y1) * imgW + x0) * 3;
+            size_t idx11 = (static_cast<size_t>(y1) * imgW + x1) * 3;
+
+            for (int32_t c = 0; c < 3; ++c) {
+                float v00 = buffer[idx00 + c];
+                float v10 = buffer[idx10 + c];
+                float v01 = buffer[idx01 + c];
+                float v11 = buffer[idx11 + c];
+                float val = (v00 * (1.0f - fx) + v10 * fx) * (1.0f - fy) +
+                            (v01 * (1.0f - fx) + v11 * fx) * fy;
+                rotated[dstIdx + c] = static_cast<T>(std::clamp(std::round(val), 0.0f, static_cast<float>(std::numeric_limits<T>::max())));
+            }
+        }
+    }
+
+    buffer = std::move(rotated);
 }
 
 // 8-color band centers in degrees: Red, Orange, Yellow, Green, Aqua, Blue, Purple, Magenta
@@ -108,8 +262,8 @@ void ExportPipeline::processTileLinear(const std::vector<FloatRGBA>& inPaddedTil
     // 1. Calculate White Balance multipliers (2,000K to 50,000K)
     float kelvin = std::clamp(params.kelvin, 2000.0f, 50000.0f);
     float kelvinRatio = kelvin / 5500.0f;
-    float rGain = std::pow(1.0f / kelvinRatio, 0.65f);
-    float bGain = std::pow(kelvinRatio, 0.85f);
+    float rGain = std::pow(kelvinRatio, 0.65f);
+    float bGain = std::pow(1.0f / kelvinRatio, 0.85f);
     float gGain = std::max(0.01f, 1.0f - (params.tint * 0.005f));
     // Normalize relative to G
     rGain /= gGain;
@@ -348,6 +502,7 @@ void ExportPipeline::quantizeTo8Bit(const std::vector<FloatRGBA>& linearTile,
                                     uint32_t tileStartX, uint32_t tileStartY,
                                     ColorSpace cs, bool enableDither,
                                     std::vector<uint8_t>& out8BitRGB) {
+    if (width <= 0 || height <= 0) return;
     size_t numPixels = static_cast<size_t>(width) * height;
     out8BitRGB.resize(numPixels * 3);
 
@@ -391,6 +546,7 @@ void ExportPipeline::quantizeTo16Bit(const std::vector<FloatRGBA>& linearTile,
                                      uint32_t tileStartX, uint32_t tileStartY,
                                      ColorSpace cs, bool enableDither,
                                      std::vector<uint16_t>& out16BitRGB) {
+    if (width <= 0 || height <= 0) return;
     size_t numPixels = static_cast<size_t>(width) * height;
     out16BitRGB.resize(numPixels * 3);
 
@@ -452,7 +608,7 @@ bool ExportPipeline::processImage(RawDecoder& decoder,
     }
 
     // Allocate output buffer for the final image
-    bool is16Bit = (options.format == ExportFormat::TIFF16);
+    bool is16Bit = (options.format == ExportFormat::TIFF16 || options.format == ExportFormat::LinearDNG);
     std::vector<uint8_t> finalRgb8;
     std::vector<uint16_t> finalRgb16;
 
@@ -489,8 +645,10 @@ bool ExportPipeline::processImage(RawDecoder& decoder,
             processTileLinear(inPaddedTile, paddedRect.width, paddedRect.height, validW, validH, padding, params, outValidTile, padLeft, padTop, paddedRect.x, paddedRect.y, imgW, imgH);
 
             // Quantize with TPDF dithering and color space OETF
+            // For Linear DNG, bypass OETF gamma to preserve true linear radiance.
             if (is16Bit) {
-                quantizeTo16Bit(outValidTile, validW, validH, tileX, tileY, params.outputColorSpace, params.enableDithering, tileRgb16);
+                ColorSpace actualCs = (options.format == ExportFormat::LinearDNG) ? ColorSpace::LinearSRGB : params.outputColorSpace;
+                quantizeTo16Bit(outValidTile, validW, validH, tileX, tileY, actualCs, params.enableDithering, tileRgb16);
                 // Copy tile rows to full image buffer
                 for (int32_t r = 0; r < validH; ++r) {
                     size_t srcOffset = static_cast<size_t>(r) * validW * 3;
@@ -515,17 +673,128 @@ bool ExportPipeline::processImage(RawDecoder& decoder,
         }
     }
 
-    // Apply watermark if requested for 8-bit outputs
+    // 1. Crop geometry handling
+    const auto& geo = params.geometry;
+    bool hasCrop = (geo.cropW > 0.0f && geo.cropH > 0.0f &&
+                   (geo.cropX > 1e-4f || geo.cropY > 1e-4f || geo.cropW < 0.9999f || geo.cropH < 0.9999f));
+    if (hasCrop) {
+        int32_t cropX = std::clamp(static_cast<int32_t>(std::round(geo.cropX * imgW)), 0, imgW - 1);
+        int32_t cropY = std::clamp(static_cast<int32_t>(std::round(geo.cropY * imgH)), 0, imgH - 1);
+        int32_t cropW = std::clamp(static_cast<int32_t>(std::round(geo.cropW * imgW)), 1, imgW - cropX);
+        int32_t cropH = std::clamp(static_cast<int32_t>(std::round(geo.cropH * imgH)), 1, imgH - cropY);
+
+        if (is16Bit) {
+            std::vector<uint16_t> cropped(static_cast<size_t>(cropW) * cropH * 3);
+            for (int32_t y = 0; y < cropH; ++y) {
+                const uint16_t* srcRow = &finalRgb16[(static_cast<size_t>(cropY + y) * imgW + cropX) * 3];
+                uint16_t* dstRow = &cropped[static_cast<size_t>(y) * cropW * 3];
+                std::memcpy(dstRow, srcRow, cropW * 3 * sizeof(uint16_t));
+            }
+            finalRgb16 = std::move(cropped);
+        } else {
+            std::vector<uint8_t> cropped(static_cast<size_t>(cropW) * cropH * 3);
+            for (int32_t y = 0; y < cropH; ++y) {
+                const uint8_t* srcRow = &finalRgb8[(static_cast<size_t>(cropY + y) * imgW + cropX) * 3];
+                uint8_t* dstRow = &cropped[static_cast<size_t>(y) * cropW * 3];
+                std::memcpy(dstRow, srcRow, cropW * 3);
+            }
+            finalRgb8 = std::move(cropped);
+        }
+        imgW = cropW;
+        imgH = cropH;
+    }
+
+    // 2. Flip & Rotation geometry handling
+    if (is16Bit) {
+        applyFlip(finalRgb16, imgW, imgH, geo.flipHorizontal, geo.flipVertical);
+        applyStepRotation(finalRgb16, imgW, imgH, geo.rotationSteps);
+        applyFineRotation(finalRgb16, imgW, imgH, geo.rotationDegrees);
+    } else {
+        applyFlip(finalRgb8, imgW, imgH, geo.flipHorizontal, geo.flipVertical);
+        applyStepRotation(finalRgb8, imgW, imgH, geo.rotationSteps);
+        applyFineRotation(finalRgb8, imgW, imgH, geo.rotationDegrees);
+    }
+
+    // 3. High-quality Bilinear Downscaling (e.g. 2048px for SNS)
+    if (options.maxLongEdge > 0 && std::max(imgW, imgH) > options.maxLongEdge) {
+        float scale = static_cast<float>(options.maxLongEdge) / std::max(imgW, imgH);
+        int32_t newW = std::max(1, static_cast<int32_t>(std::round(imgW * scale)));
+        int32_t newH = std::max(1, static_cast<int32_t>(std::round(imgH * scale)));
+
+        if (is16Bit) {
+            std::vector<uint16_t> resized(static_cast<size_t>(newW) * newH * 3);
+            #pragma omp parallel for schedule(static)
+            for (int32_t ny = 0; ny < newH; ++ny) {
+                float sy = (ny + 0.5f) / scale - 0.5f;
+                int32_t y0 = std::clamp(static_cast<int32_t>(std::floor(sy)), 0, imgH - 1);
+                int32_t y1 = std::clamp(y0 + 1, 0, imgH - 1);
+                float wy = sy - y0;
+
+                for (int32_t nx = 0; nx < newW; ++nx) {
+                    float sx = (nx + 0.5f) / scale - 0.5f;
+                    int32_t x0 = std::clamp(static_cast<int32_t>(std::floor(sx)), 0, imgW - 1);
+                    int32_t x1 = std::clamp(x0 + 1, 0, imgW - 1);
+                    float wx = sx - x0;
+
+                    for (int c = 0; c < 3; ++c) {
+                        float v00 = finalRgb16[(static_cast<size_t>(y0) * imgW + x0) * 3 + c];
+                        float v10 = finalRgb16[(static_cast<size_t>(y0) * imgW + x1) * 3 + c];
+                        float v01 = finalRgb16[(static_cast<size_t>(y1) * imgW + x0) * 3 + c];
+                        float v11 = finalRgb16[(static_cast<size_t>(y1) * imgW + x1) * 3 + c];
+
+                        float val = (v00 * (1.0f - wx) + v10 * wx) * (1.0f - wy) +
+                                    (v01 * (1.0f - wx) + v11 * wx) * wy;
+                        resized[(static_cast<size_t>(ny) * newW + nx) * 3 + c] = static_cast<uint16_t>(std::clamp(val + 0.5f, 0.0f, 65535.0f));
+                    }
+                }
+            }
+            finalRgb16 = std::move(resized);
+        } else {
+            std::vector<uint8_t> resized(static_cast<size_t>(newW) * newH * 3);
+            #pragma omp parallel for schedule(static)
+            for (int32_t ny = 0; ny < newH; ++ny) {
+                float sy = (ny + 0.5f) / scale - 0.5f;
+                int32_t y0 = std::clamp(static_cast<int32_t>(std::floor(sy)), 0, imgH - 1);
+                int32_t y1 = std::clamp(y0 + 1, 0, imgH - 1);
+                float wy = sy - y0;
+
+                for (int32_t nx = 0; nx < newW; ++nx) {
+                    float sx = (nx + 0.5f) / scale - 0.5f;
+                    int32_t x0 = std::clamp(static_cast<int32_t>(std::floor(sx)), 0, imgW - 1);
+                    int32_t x1 = std::clamp(x0 + 1, 0, imgW - 1);
+                    float wx = sx - x0;
+
+                    for (int c = 0; c < 3; ++c) {
+                        float v00 = finalRgb8[(static_cast<size_t>(y0) * imgW + x0) * 3 + c];
+                        float v10 = finalRgb8[(static_cast<size_t>(y0) * imgW + x1) * 3 + c];
+                        float v01 = finalRgb8[(static_cast<size_t>(y1) * imgW + x0) * 3 + c];
+                        float v11 = finalRgb8[(static_cast<size_t>(y1) * imgW + x1) * 3 + c];
+
+                        float val = (v00 * (1.0f - wx) + v10 * wx) * (1.0f - wy) +
+                                    (v01 * (1.0f - wx) + v11 * wx) * wy;
+                        resized[(static_cast<size_t>(ny) * newW + nx) * 3 + c] = static_cast<uint8_t>(std::clamp(val + 0.5f, 0.0f, 255.0f));
+                    }
+                }
+            }
+            finalRgb8 = std::move(resized);
+        }
+        imgW = newW;
+        imgH = newH;
+    }
+
+    // 3. Apply watermark if requested for 8-bit outputs
     if (options.enableWatermark && !options.watermarkText.empty() && !is16Bit) {
         ImageWriter::renderWatermark8(finalRgb8, imgW, imgH, options.watermarkText, true);
     }
 
-    // Write final output file with Exif metadata
+    // 4. Write final output file with Exif metadata
     const ExifMetadata* metaPtr = options.embedExif ? &decoder.getMetadata() : nullptr;
     bool writeOk = false;
 
     if (options.format == ExportFormat::JPEG) {
         writeOk = ImageWriter::writeJPEG(outputPath, finalRgb8.data(), imgW, imgH, options.jpegQuality, options.chromaSubsampling, metaPtr);
+    } else if (options.format == ExportFormat::LinearDNG) {
+        writeOk = ImageWriter::writeLinearDNG(outputPath, finalRgb16.data(), imgW, imgH, metaPtr);
     } else if (options.format == ExportFormat::TIFF16) {
         writeOk = ImageWriter::writeTIFF16(outputPath, finalRgb16.data(), imgW, imgH, metaPtr);
     } else if (options.format == ExportFormat::TIFF8) {

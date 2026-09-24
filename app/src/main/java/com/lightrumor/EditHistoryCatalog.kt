@@ -276,6 +276,182 @@ class EditHistoryCatalog(context: Context) {
             }
             return params
         }
+
+        fun masksToJson(masks: List<MaskLayerState>): String {
+            if (masks.isEmpty()) return ""
+            val array = JSONArray()
+            for (m in masks) {
+                val obj = JSONObject()
+                obj.put("id", m.id)
+                obj.put("name", m.name)
+                obj.put("enabled", m.enabled)
+                obj.put("inverted", m.inverted)
+                obj.put("opacity", m.opacity.toDouble())
+                obj.put("type", m.type.name)
+                obj.put("booleanOp", m.booleanOp.name)
+
+                obj.put("linearStartX", m.linearStartX.toDouble())
+                obj.put("linearStartY", m.linearStartY.toDouble())
+                obj.put("linearEndX", m.linearEndX.toDouble())
+                obj.put("linearEndY", m.linearEndY.toDouble())
+                obj.put("linearFeather", m.linearFeather.toDouble())
+
+                obj.put("radialCenterX", m.radialCenterX.toDouble())
+                obj.put("radialCenterY", m.radialCenterY.toDouble())
+                obj.put("radialRadiusX", m.radialRadiusX.toDouble())
+                obj.put("radialRadiusY", m.radialRadiusY.toDouble())
+                obj.put("radialAngle", m.radialAngle.toDouble())
+                obj.put("radialFeather", m.radialFeather.toDouble())
+
+                val polyArr = JSONArray()
+                for (pt in m.polygonVertices) {
+                    val pObj = JSONObject()
+                    pObj.put("x", pt.x.toDouble())
+                    pObj.put("y", pt.y.toDouble())
+                    polyArr.put(pObj)
+                }
+                obj.put("polygonVertices", polyArr)
+
+                val brushArr = JSONArray()
+                for (b in m.brushStrokes) {
+                    val bObj = JSONObject()
+                    bObj.put("x", b.x.toDouble())
+                    bObj.put("y", b.y.toDouble())
+                    bObj.put("p", b.pressure.toDouble())
+                    bObj.put("r", b.radius.toDouble())
+                    bObj.put("f", b.flow.toDouble())
+                    bObj.put("er", b.isEraser)
+                    brushArr.put(bObj)
+                }
+                obj.put("brushStrokes", brushArr)
+                obj.put("brushRadius", m.brushRadius.toDouble())
+                obj.put("brushFeather", m.brushFeather.toDouble())
+
+                obj.put("lumaMin", m.lumaMin.toDouble())
+                obj.put("lumaMax", m.lumaMax.toDouble())
+                obj.put("lumaFeather", m.lumaFeather.toDouble())
+
+                obj.put("colorTargetHue", m.colorTargetHue.toDouble())
+                obj.put("colorTargetSat", m.colorTargetSat.toDouble())
+                obj.put("colorTargetLum", m.colorTargetLum.toDouble())
+                obj.put("colorTolHue", m.colorTolHue.toDouble())
+                obj.put("colorTolSat", m.colorTolSat.toDouble())
+                obj.put("colorTolLum", m.colorTolLum.toDouble())
+
+                obj.put("depthMin", m.depthMin.toDouble())
+                obj.put("depthMax", m.depthMax.toDouble())
+                obj.put("edgeThreshold", m.edgeThreshold.toDouble())
+
+                val adjObj = JSONObject()
+                adjObj.put("exposureEV", m.adjustments.exposureEV.toDouble())
+                adjObj.put("contrast", m.adjustments.contrast.toDouble())
+                adjObj.put("highlights", m.adjustments.highlights.toDouble())
+                adjObj.put("shadows", m.adjustments.shadows.toDouble())
+                adjObj.put("whites", m.adjustments.whites.toDouble())
+                adjObj.put("blacks", m.adjustments.blacks.toDouble())
+                adjObj.put("kelvinOffset", m.adjustments.kelvinOffset.toDouble())
+                adjObj.put("tintOffset", m.adjustments.tintOffset.toDouble())
+                adjObj.put("saturation", m.adjustments.saturation.toDouble())
+                adjObj.put("clarity", m.adjustments.clarity.toDouble())
+                adjObj.put("dehaze", m.adjustments.dehaze.toDouble())
+                obj.put("adjustments", adjObj)
+
+                array.put(obj)
+            }
+            return array.toString()
+        }
+
+        fun jsonToMasks(json: String): List<MaskLayerState> {
+            if (json.isEmpty()) return emptyList()
+            val list = mutableListOf<MaskLayerState>()
+            try {
+                val array = JSONArray(json)
+                for (i in 0 until array.length()) {
+                    val obj = array.getJSONObject(i)
+                    val polyList = mutableListOf<MaskPoint>()
+                    if (obj.has("polygonVertices")) {
+                        val pArr = obj.getJSONArray("polygonVertices")
+                        for (j in 0 until pArr.length()) {
+                            val p = pArr.getJSONObject(j)
+                            polyList.add(MaskPoint(p.optDouble("x", 0.0).toFloat(), p.optDouble("y", 0.0).toFloat()))
+                        }
+                    }
+                    val brushList = mutableListOf<BrushStrokePoint>()
+                    if (obj.has("brushStrokes")) {
+                        val bArr = obj.getJSONArray("brushStrokes")
+                        for (j in 0 until bArr.length()) {
+                            val b = bArr.getJSONObject(j)
+                            brushList.add(
+                                BrushStrokePoint(
+                                    x = b.optDouble("x", 0.0).toFloat(),
+                                    y = b.optDouble("y", 0.0).toFloat(),
+                                    pressure = b.optDouble("p", 1.0).toFloat(),
+                                    radius = b.optDouble("r", 25.0).toFloat(),
+                                    flow = b.optDouble("f", 1.0).toFloat(),
+                                    isEraser = b.optBoolean("er", false)
+                                )
+                            )
+                        }
+                    }
+                    val adj = LocalAdjustmentState()
+                    if (obj.has("adjustments")) {
+                        val a = obj.getJSONObject("adjustments")
+                        adj.exposureEV = a.optDouble("exposureEV", 0.0).toFloat()
+                        adj.contrast = a.optDouble("contrast", 0.0).toFloat()
+                        adj.highlights = a.optDouble("highlights", 0.0).toFloat()
+                        adj.shadows = a.optDouble("shadows", 0.0).toFloat()
+                        adj.whites = a.optDouble("whites", 0.0).toFloat()
+                        adj.blacks = a.optDouble("blacks", 0.0).toFloat()
+                        adj.kelvinOffset = a.optDouble("kelvinOffset", 0.0).toFloat()
+                        adj.tintOffset = a.optDouble("tintOffset", 0.0).toFloat()
+                        adj.saturation = a.optDouble("saturation", 0.0).toFloat()
+                        adj.clarity = a.optDouble("clarity", 0.0).toFloat()
+                        adj.dehaze = a.optDouble("dehaze", 0.0).toFloat()
+                    }
+                    val mask = MaskLayerState(
+                        id = obj.optString("id", java.util.UUID.randomUUID().toString()),
+                        name = obj.optString("name", "Mask Layer"),
+                        enabled = obj.optBoolean("enabled", true),
+                        inverted = obj.optBoolean("inverted", false),
+                        opacity = obj.optDouble("opacity", 1.0).toFloat(),
+                        type = try { MaskType.valueOf(obj.optString("type", MaskType.RADIAL_GRADIENT.name)) } catch (_: Exception) { MaskType.RADIAL_GRADIENT },
+                        booleanOp = try { BooleanOp.valueOf(obj.optString("booleanOp", BooleanOp.UNION.name)) } catch (_: Exception) { BooleanOp.UNION },
+                        linearStartX = obj.optDouble("linearStartX", 0.2).toFloat(),
+                        linearStartY = obj.optDouble("linearStartY", 0.2).toFloat(),
+                        linearEndX = obj.optDouble("linearEndX", 0.8).toFloat(),
+                        linearEndY = obj.optDouble("linearEndY", 0.8).toFloat(),
+                        linearFeather = obj.optDouble("linearFeather", 0.2).toFloat(),
+                        radialCenterX = obj.optDouble("radialCenterX", 0.5).toFloat(),
+                        radialCenterY = obj.optDouble("radialCenterY", 0.5).toFloat(),
+                        radialRadiusX = obj.optDouble("radialRadiusX", 0.3).toFloat(),
+                        radialRadiusY = obj.optDouble("radialRadiusY", 0.3).toFloat(),
+                        radialAngle = obj.optDouble("radialAngle", 0.0).toFloat(),
+                        radialFeather = obj.optDouble("radialFeather", 0.5).toFloat(),
+                        polygonVertices = polyList,
+                        brushStrokes = brushList,
+                        brushRadius = obj.optDouble("brushRadius", 30.0).toFloat(),
+                        brushFeather = obj.optDouble("brushFeather", 0.5).toFloat(),
+                        lumaMin = obj.optDouble("lumaMin", 0.0).toFloat(),
+                        lumaMax = obj.optDouble("lumaMax", 1.0).toFloat(),
+                        lumaFeather = obj.optDouble("lumaFeather", 0.1).toFloat(),
+                        colorTargetHue = obj.optDouble("colorTargetHue", 0.0).toFloat(),
+                        colorTargetSat = obj.optDouble("colorTargetSat", 0.0).toFloat(),
+                        colorTargetLum = obj.optDouble("colorTargetLum", 0.5).toFloat(),
+                        colorTolHue = obj.optDouble("colorTolHue", 30.0).toFloat(),
+                        colorTolSat = obj.optDouble("colorTolSat", 0.3).toFloat(),
+                        colorTolLum = obj.optDouble("colorTolLum", 0.3).toFloat(),
+                        depthMin = obj.optDouble("depthMin", 0.0).toFloat(),
+                        depthMax = obj.optDouble("depthMax", 1.0).toFloat(),
+                        edgeThreshold = obj.optDouble("edgeThreshold", 0.15).toFloat(),
+                        adjustments = adj
+                    )
+                    list.add(mask)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            return list
+        }
     }
 
     data class CatalogEntry(
@@ -284,6 +460,7 @@ class EditHistoryCatalog(context: Context) {
         val fileName: String = "",
         val lastEditedAt: Long = System.currentTimeMillis(),
         val devParamsJson: String = "",
+        val masksJson: String = "",
         val rating: Int = 0,
         val pickStatus: String = "NONE",
         val colorLabel: String = "NONE",
@@ -304,7 +481,8 @@ class EditHistoryCatalog(context: Context) {
         fileName: String,
         params: DevelopmentParams,
         filePath: String = "",
-        metadata: CullingItemMetadata? = null
+        metadata: CullingItemMetadata? = null,
+        masks: List<MaskLayerState>? = null
     ) {
         val currentEntries = getRecentEntries().toMutableList()
         val existing = currentEntries.find { it.uri == uri }
@@ -321,6 +499,7 @@ class EditHistoryCatalog(context: Context) {
         val resolvedExposureTime = metadata?.exposureTime?.ifEmpty { null } ?: existing?.exposureTime ?: ""
         val resolvedIsoSpeed = metadata?.isoSpeed?.ifEmpty { null } ?: existing?.isoSpeed ?: ""
         val resolvedFocalLength = metadata?.focalLength?.ifEmpty { null } ?: existing?.focalLength ?: ""
+        val resolvedMasksJson = if (masks != null) masksToJson(masks) else (existing?.masksJson ?: "")
 
         val newEntry = CatalogEntry(
             uri = uri,
@@ -328,6 +507,7 @@ class EditHistoryCatalog(context: Context) {
             fileName = fileName.ifEmpty { existing?.fileName ?: "" },
             lastEditedAt = System.currentTimeMillis(),
             devParamsJson = paramsToJson(params),
+            masksJson = resolvedMasksJson,
             rating = resolvedRating,
             pickStatus = resolvedPickStatus,
             colorLabel = resolvedColorLabel,
@@ -354,6 +534,7 @@ class EditHistoryCatalog(context: Context) {
             obj.put("fileName", entry.fileName)
             obj.put("lastEditedAt", entry.lastEditedAt)
             obj.put("devParamsJson", entry.devParamsJson)
+            obj.put("masksJson", entry.masksJson)
             obj.put("rating", entry.rating)
             obj.put("pickStatus", entry.pickStatus)
             obj.put("colorLabel", entry.colorLabel)
@@ -375,9 +556,10 @@ class EditHistoryCatalog(context: Context) {
         fileName: String,
         params: DevelopmentParams,
         filePath: String = "",
-        metadata: CullingItemMetadata? = null
+        metadata: CullingItemMetadata? = null,
+        masks: List<MaskLayerState>? = null
     ) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-        saveEntry(uri, fileName, params, filePath, metadata)
+        saveEntry(uri, fileName, params, filePath, metadata, masks)
     }
 
     @Synchronized
@@ -395,7 +577,8 @@ class EditHistoryCatalog(context: Context) {
             fileName = fileName.ifEmpty { existing?.fileName ?: "" },
             params = devParams,
             filePath = if (filePath.isNotEmpty()) filePath else (existing?.filePath ?: ""),
-            metadata = metadata
+            metadata = metadata,
+            masks = existing?.masksJson?.let { jsonToMasks(it) }
         )
     }
 
@@ -414,6 +597,7 @@ class EditHistoryCatalog(context: Context) {
                         fileName = if (obj.has("fileName")) obj.getString("fileName") else "",
                         lastEditedAt = if (obj.has("lastEditedAt")) obj.getLong("lastEditedAt") else 0L,
                         devParamsJson = if (obj.has("devParamsJson")) obj.getString("devParamsJson") else "",
+                        masksJson = if (obj.has("masksJson")) obj.getString("masksJson") else "",
                         rating = if (obj.has("rating")) obj.getInt("rating") else 0,
                         pickStatus = if (obj.has("pickStatus")) obj.getString("pickStatus") else "NONE",
                         colorLabel = if (obj.has("colorLabel")) obj.getString("colorLabel") else "NONE",
@@ -444,6 +628,11 @@ class EditHistoryCatalog(context: Context) {
     fun getParamsForUri(uri: String): DevelopmentParams? {
         val entry = getEntryForUri(uri) ?: return null
         return if (entry.devParamsJson.isNotEmpty()) jsonToParams(entry.devParamsJson) else null
+    }
+
+    fun getMasksForUri(uri: String): List<MaskLayerState> {
+        val entry = getEntryForUri(uri) ?: return emptyList()
+        return if (entry.masksJson.isNotEmpty()) jsonToMasks(entry.masksJson) else emptyList()
     }
 
     fun applyMetadataFromCatalog(uri: String, meta: CullingItemMetadata) {

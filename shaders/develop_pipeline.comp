@@ -49,21 +49,34 @@ layout(std430, set = 0, binding = 2) readonly buffer HslBuffer {
     vec4 monoWeights2; // weights 4..7
 };
 
-// Convert RGB to HSL
+// Convert RGB to HSL (HDR-safe)
 vec3 rgbToHsl(vec3 c) {
-    float cMin = min(min(c.r, c.g), c.b);
-    float cMax = max(max(c.r, c.g), c.b);
+    vec3 safeC = max(c, vec3(0.0));
+    float cMin = min(min(safeC.r, safeC.g), safeC.b);
+    float cMax = max(max(safeC.r, safeC.g), safeC.b);
     float delta = cMax - cMin;
     vec3 hsl = vec3(0.0, 0.0, (cMax + cMin) * 0.5);
 
-    if (delta > 1e-6) {
-        hsl.y = hsl.z < 0.5 ? (delta / (cMax + cMin)) : (delta / (2.0 - cMax - cMin));
-        if (c.r == cMax) {
-            hsl.x = (c.g - c.b) / delta + (c.g < c.b ? 6.0 : 0.0);
-        } else if (c.g == cMax) {
-            hsl.x = (c.b - c.r) / delta + 2.0;
+    if (delta > 1e-6 && cMax > 1e-6) {
+        if (hsl.z < 0.5) {
+            float denom = cMax + cMin;
+            hsl.y = delta / max(denom, 1e-5);
         } else {
-            hsl.x = (c.r - c.g) / delta + 4.0;
+            float denom = 2.0 - cMax - cMin;
+            if (denom <= 1e-5) {
+                hsl.y = delta / max(cMax, 1e-5);
+            } else {
+                hsl.y = delta / denom;
+            }
+        }
+        hsl.y = clamp(hsl.y, 0.0, 1.0);
+
+        if (safeC.r == cMax) {
+            hsl.x = (safeC.g - safeC.b) / delta + (safeC.g < safeC.b ? 6.0 : 0.0);
+        } else if (safeC.g == cMax) {
+            hsl.x = (safeC.b - safeC.r) / delta + 2.0;
+        } else {
+            hsl.x = (safeC.r - safeC.g) / delta + 4.0;
         }
         hsl.x /= 6.0; // 0.0 to 1.0 (0 to 360 deg)
     }
@@ -156,15 +169,15 @@ vec3 applyOETF(vec3 linearC, int cs) {
 }
 
 void main() {
-    ivec2 localId = ivec2(gl_GlobalInvocationID.xy);
-    if (localId.x >= params.tileSize.x || localId.y >= params.tileSize.y) {
+    ivec2 globalId = ivec2(gl_GlobalInvocationID.xy);
+    if (globalId.x >= params.tileSize.x || globalId.y >= params.tileSize.y) {
         return;
     }
 
     int paddedW = params.tileSize.x + 2 * params.padding;
     int paddedH = params.tileSize.y + 2 * params.padding;
-    int padX = clamp(localId.x + params.padding, 0, paddedW - 1);
-    int padY = clamp(localId.y + params.padding, 0, paddedH - 1);
+    int padX = clamp(globalId.x + params.padding, 0, paddedW - 1);
+    int padY = clamp(globalId.y + params.padding, 0, paddedH - 1);
     int paddedIdx = padY * paddedW + padX;
 
     vec4 pix = inPixels[paddedIdx];
@@ -240,6 +253,6 @@ void main() {
     // 8. Output Color Space OETF (Transfer Function)
     vec3 outputCol = applyOETF(col, params.outputColorSpace);
 
-    int outIdx = localId.y * params.tileSize.x + localId.x;
+    int outIdx = globalId.y * params.tileSize.x + globalId.x;
     outPixels[outIdx] = vec4(outputCol, pix.a);
 }

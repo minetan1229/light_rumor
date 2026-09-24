@@ -41,6 +41,9 @@ object LightRumorNativeEngine {
         chromaSubsampling: Int,
         kelvin: Float,
         tint: Float,
+        shadowTintR: Float,
+        shadowTintG: Float,
+        shadowTintB: Float,
         exposureEV: Float,
         contrast: Float,
         highlights: Float,
@@ -49,12 +52,47 @@ object LightRumorNativeEngine {
         blacks: Float,
         vibrance: Float,
         saturation: Float,
+        dehaze: Float,
+        clarity: Float,
+        texture: Float,
         isMonochrome: Boolean,
+        monochromeWeights: FloatArray,
+        hslBands: FloatArray,
+        primaryCalibration: FloatArray,
+        splitToning: FloatArray,
+        toneCurveLUT: FloatArray,
         luminanceNR: Float,
+        luminanceNRDetail: Float,
+        luminanceNRContrast: Float,
         chromaNR: Float,
+        chromaNRDetail: Float,
+        chromaNRSmoothness: Float,
         sharpeningAmount: Float,
+        sharpeningRadius: Float,
+        sharpeningDetail: Float,
+        sharpeningMasking: Float,
         outputColorSpace: Int,
         enableDithering: Boolean,
+        enableLensCorrection: Boolean,
+        distortionCorrection: Float,
+        vignettingCorrection: Float,
+        chromaticAberration: Float,
+        defringePurple: Float,
+        defringeGreen: Float,
+        cropX: Float,
+        cropY: Float,
+        cropW: Float,
+        cropH: Float,
+        rotationDegrees: Float,
+        rotationSteps: Int,
+        flipHorizontal: Boolean,
+        flipVertical: Boolean,
+        perspectiveVertical: Float,
+        perspectiveHorizontal: Float,
+        distortion: Float,
+        maxLongEdge: Int,
+        enableWatermark: Boolean,
+        watermarkText: String,
         callback: ProgressCallback?
     ): Boolean
 
@@ -66,6 +104,28 @@ object LightRumorNativeEngine {
         callback: ProgressCallback?
     ): Boolean {
         if (!isAvailable) return false
+        val hslArray = FloatArray(24)
+        for (i in 0 until 8) {
+            val band = if (i < params.hslBands.size) params.hslBands[i] else HSLBandAdjust()
+            hslArray[i * 3 + 0] = band.hueShift
+            hslArray[i * 3 + 1] = band.saturation
+            hslArray[i * 3 + 2] = band.luminance
+        }
+        val primaryCalib = floatArrayOf(
+            params.primaryRed.hueShift, params.primaryRed.saturationShift,
+            params.primaryGreen.hueShift, params.primaryGreen.saturationShift,
+            params.primaryBlue.hueShift, params.primaryBlue.saturationShift
+        )
+        val splitTone = floatArrayOf(
+            params.splitToning.highlightsHue, params.splitToning.highlightsSat,
+            params.splitToning.shadowsHue, params.splitToning.shadowsSat,
+            params.splitToning.balance
+        )
+        val monoWeights = if (params.monochromeWeights.size == 8) {
+            params.monochromeWeights
+        } else {
+            floatArrayOf(0.18f, 0.24f, 0.22f, 0.16f, 0.08f, 0.06f, 0.03f, 0.03f)
+        }
         return try {
             nativeProcessRaw(
                 inputPath = inputPath,
@@ -75,6 +135,9 @@ object LightRumorNativeEngine {
                 chromaSubsampling = config.chromaSubsampling.id,
                 kelvin = params.kelvin,
                 tint = params.tint,
+                shadowTintR = params.shadowTintR,
+                shadowTintG = params.shadowTintG,
+                shadowTintB = params.shadowTintB,
                 exposureEV = params.exposureEV,
                 contrast = params.contrast,
                 highlights = params.highlights,
@@ -83,12 +146,47 @@ object LightRumorNativeEngine {
                 blacks = params.blacks,
                 vibrance = params.vibrance,
                 saturation = params.saturation,
+                dehaze = params.dehaze,
+                clarity = params.clarity,
+                texture = params.texture,
                 isMonochrome = params.isMonochrome,
+                monochromeWeights = monoWeights,
+                hslBands = hslArray,
+                primaryCalibration = primaryCalib,
+                splitToning = splitTone,
+                toneCurveLUT = params.toneCurveLUT,
                 luminanceNR = params.luminanceNR,
+                luminanceNRDetail = params.luminanceNRDetail,
+                luminanceNRContrast = params.luminanceNRContrast,
                 chromaNR = params.chromaNR,
+                chromaNRDetail = params.chromaNRDetail,
+                chromaNRSmoothness = params.chromaNRSmoothness,
                 sharpeningAmount = params.sharpeningAmount,
+                sharpeningRadius = params.sharpeningRadius,
+                sharpeningDetail = params.sharpeningDetail,
+                sharpeningMasking = params.sharpeningMasking,
                 outputColorSpace = params.outputColorSpace.id,
                 enableDithering = params.enableDithering,
+                enableLensCorrection = params.lensCorrection.enableProfileCorrection,
+                distortionCorrection = params.lensCorrection.distortionCorrection,
+                vignettingCorrection = params.lensCorrection.vignettingCorrection,
+                chromaticAberration = params.lensCorrection.chromaticAberration,
+                defringePurple = params.lensCorrection.defringePurple,
+                defringeGreen = params.lensCorrection.defringeGreen,
+                cropX = params.geometry.cropX,
+                cropY = params.geometry.cropY,
+                cropW = params.geometry.cropW,
+                cropH = params.geometry.cropH,
+                rotationDegrees = params.geometry.rotationDegrees,
+                rotationSteps = params.geometry.rotationSteps,
+                flipHorizontal = params.geometry.flipHorizontal,
+                flipVertical = params.geometry.flipVertical,
+                perspectiveVertical = params.geometry.perspectiveVertical,
+                perspectiveHorizontal = params.geometry.perspectiveHorizontal,
+                distortion = params.geometry.distortion,
+                maxLongEdge = config.maxLongEdge,
+                enableWatermark = config.enableWatermark,
+                watermarkText = config.watermarkText,
                 callback = callback
             )
         } catch (e: Throwable) {

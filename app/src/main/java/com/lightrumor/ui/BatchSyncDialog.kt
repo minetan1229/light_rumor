@@ -184,14 +184,19 @@ fun BatchSyncDialog(
                                 // Apply to all target items in memory and asynchronously write to XMP
                                 val currentOptions = options
                                 coroutineScope.launch {
+                                    // メインスレッドでUI状態を更新
+                                    targetItems.forEach { target ->
+                                        currentOptions.merge(sourceItem.developParams, target.developParams)
+                                        if (currentOptions.syncRatingAndLabel) {
+                                            target.metadata.rating = sourceItem.metadata.rating
+                                            target.metadata.pickStatus = sourceItem.metadata.pickStatus
+                                            target.metadata.colorLabel = sourceItem.metadata.colorLabel
+                                        }
+                                    }
+                                    
+                                    // IOスレッドでファイル保存
                                     withContext(Dispatchers.IO) {
                                         targetItems.forEach { target ->
-                                            currentOptions.merge(sourceItem.developParams, target.developParams)
-                                            if (currentOptions.syncRatingAndLabel) {
-                                                target.metadata.rating = sourceItem.metadata.rating
-                                                target.metadata.pickStatus = sourceItem.metadata.pickStatus
-                                                target.metadata.colorLabel = sourceItem.metadata.colorLabel
-                                            }
                                             XmpSidecarManager.scheduleSaveSidecar(target.filePath, target.metadata, target.developParams)
                                         }
                                     }

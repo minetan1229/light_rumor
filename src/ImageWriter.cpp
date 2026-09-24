@@ -6,6 +6,10 @@
 #include <cmath>
 #include <algorithm>
 
+#if defined(LIGHT_RUMOR_ENABLE_WEBP)
+#include <webp/encode.h>
+#endif
+
 namespace lightrumor {
 
 namespace {
@@ -909,6 +913,193 @@ bool ImageWriter::writeTIFF16(const std::string& filePath,
     return true;
 }
 
+bool ImageWriter::writeLinearDNG(const std::string& filePath,
+                                 const uint16_t* rgb16Data,
+                                 int32_t width, int32_t height,
+                                 const ExifMetadata* metadata) {
+    if (!rgb16Data || width <= 0 || height <= 0) return false;
+
+    std::vector<uint8_t> tiff;
+    writeU16LE(tiff, 0x4949);
+    writeU16LE(tiff, 0x002A);
+    writeU32LE(tiff, 8);
+
+    std::vector<IFDEntry> ifd0;
+    std::vector<IFDEntry> exifSubIFD;
+
+    auto addShort = [](std::vector<IFDEntry>& list, uint16_t tag, uint16_t val) {
+        IFDEntry e; e.tag = tag; e.type = 3; e.count = 1; e.valueOrOffset = val;
+        list.push_back(e);
+    };
+    auto addLong = [](std::vector<IFDEntry>& list, uint16_t tag, uint32_t val) {
+        IFDEntry e; e.tag = tag; e.type = 4; e.count = 1; e.valueOrOffset = val;
+        list.push_back(e);
+    };
+    auto addShort3 = [](std::vector<IFDEntry>& list, uint16_t tag, uint16_t v0, uint16_t v1, uint16_t v2) {
+        IFDEntry e; e.tag = tag; e.type = 3; e.count = 3; e.valueOrOffset = 0;
+        e.data.resize(6);
+        e.data[0] = static_cast<uint8_t>(v0 & 0xFF); e.data[1] = static_cast<uint8_t>((v0 >> 8) & 0xFF);
+        e.data[2] = static_cast<uint8_t>(v1 & 0xFF); e.data[3] = static_cast<uint8_t>((v1 >> 8) & 0xFF);
+        e.data[4] = static_cast<uint8_t>(v2 & 0xFF); e.data[5] = static_cast<uint8_t>((v2 >> 8) & 0xFF);
+        list.push_back(e);
+    };
+    auto addString = [](std::vector<IFDEntry>& list, uint16_t tag, const std::string& str) {
+        IFDEntry e; e.tag = tag; e.type = 2; e.count = static_cast<uint32_t>(str.length() + 1);
+        if (e.count <= 4) {
+            e.valueOrOffset = 0;
+            std::memcpy(&e.valueOrOffset, str.c_str(), str.length() + 1);
+        } else {
+            e.data.assign(str.c_str(), str.c_str() + str.length() + 1);
+            e.valueOrOffset = 0;
+        }
+        list.push_back(e);
+    };
+    auto addBytes4 = [](std::vector<IFDEntry>& list, uint16_t tag, uint8_t b0, uint8_t b1, uint8_t b2, uint8_t b3) {
+        IFDEntry e; e.tag = tag; e.type = 1; e.count = 4;
+        e.valueOrOffset = static_cast<uint32_t>(b0) | (static_cast<uint32_t>(b1) << 8) |
+                          (static_cast<uint32_t>(b2) << 16) | (static_cast<uint32_t>(b3) << 24);
+        list.push_back(e);
+    };
+    auto addRational = [](std::vector<IFDEntry>& list, uint16_t tag, uint32_t num, uint32_t den) {
+        IFDEntry e; e.tag = tag; e.type = 5; e.count = 1; e.valueOrOffset = 0;
+        e.data.resize(8);
+        e.data[0] = static_cast<uint8_t>(num & 0xFF); e.data[1] = static_cast<uint8_t>((num >> 8) & 0xFF);
+        e.data[2] = static_cast<uint8_t>((num >> 16) & 0xFF); e.data[3] = static_cast<uint8_t>((num >> 24) & 0xFF);
+        e.data[4] = static_cast<uint8_t>(den & 0xFF); e.data[5] = static_cast<uint8_t>((den >> 8) & 0xFF);
+        e.data[6] = static_cast<uint8_t>((den >> 16) & 0xFF); e.data[7] = static_cast<uint8_t>((den >> 24) & 0xFF);
+        list.push_back(e);
+    };
+    auto addSRationals = [](std::vector<IFDEntry>& list, uint16_t tag, const std::vector<std::pair<int32_t, int32_t>>& values) {
+        IFDEntry e; e.tag = tag; e.type = 10; e.count = static_cast<uint32_t>(values.size()); e.valueOrOffset = 0;
+        e.data.resize(values.size() * 8);
+        for (size_t i = 0; i < values.size(); ++i) {
+            uint32_t num = static_cast<uint32_t>(values[i].first);
+            uint32_t den = static_cast<uint32_t>(values[i].second);
+            e.data[i * 8 + 0] = static_cast<uint8_t>(num & 0xFF);
+            e.data[i * 8 + 1] = static_cast<uint8_t>((num >> 8) & 0xFF);
+            e.data[i * 8 + 2] = static_cast<uint8_t>((num >> 16) & 0xFF);
+            e.data[i * 8 + 3] = static_cast<uint8_t>((num >> 24) & 0xFF);
+            e.data[i * 8 + 4] = static_cast<uint8_t>(den & 0xFF);
+            e.data[i * 8 + 5] = static_cast<uint8_t>((den >> 8) & 0xFF);
+            e.data[i * 8 + 6] = static_cast<uint8_t>((den >> 16) & 0xFF);
+            e.data[i * 8 + 7] = static_cast<uint8_t>((den >> 24) & 0xFF);
+        }
+        list.push_back(e);
+    };
+
+    addLong(ifd0, 0x0100, static_cast<uint32_t>(width));
+    addLong(ifd0, 0x0101, static_cast<uint32_t>(height));
+    addShort3(ifd0, 0x0102, 16, 16, 16);
+    addShort(ifd0, 0x0103, 1);
+    addShort(ifd0, 0x0106, 34892); // PhotometricInterpretation: LinearRaw
+    addLong(ifd0, 0x0111, 0);
+    addShort(ifd0, 0x0115, 3);
+    addLong(ifd0, 0x0116, static_cast<uint32_t>(height));
+    uint32_t pixelByteCount = static_cast<uint32_t>(width) * height * 3 * sizeof(uint16_t);
+    addLong(ifd0, 0x0117, pixelByteCount);
+    addShort(ifd0, 0x011C, 1);
+
+    // Standard DNG tags
+    addBytes4(ifd0, 0xC612, 1, 4, 0, 0); // DNGVersion 1.4.0.0
+    addBytes4(ifd0, 0xC613, 1, 1, 0, 0); // DNGBackwardVersion 1.1.0.0
+    addString(ifd0, 0xC614, metadata ? metadata->model : "LightRumor DNG");
+    addShort(ifd0, 0xC65A, 21); // CalibrationIlluminant1: D65
+    // ColorMatrix1: 3x3 sRGB to XYZ identity mapping for linear representation
+    std::vector<std::pair<int32_t, int32_t>> colorMatrix1 = {
+        {10000, 10000}, {0, 10000}, {0, 10000},
+        {0, 10000}, {10000, 10000}, {0, 10000},
+        {0, 10000}, {0, 10000}, {10000, 10000}
+    };
+    addSRationals(ifd0, 0xC621, colorMatrix1);
+
+    if (metadata) {
+        addString(ifd0, 0x010F, metadata->make);
+        addString(ifd0, 0x0110, metadata->model);
+        addString(ifd0, 0x0131, metadata->software);
+        addString(ifd0, 0x0132, metadata->dateTimeOriginal);
+        addLong(ifd0, 0x8769, 0);
+
+        uint32_t expDen = metadata->exposureTime > 0 ? static_cast<uint32_t>(std::round(1.0 / metadata->exposureTime)) : 250;
+        addRational(exifSubIFD, 0x829A, 1, expDen);
+        uint32_t fNum = static_cast<uint32_t>(std::round(metadata->fNumber * 10.0));
+        addRational(exifSubIFD, 0x829D, fNum, 10);
+        addShort(exifSubIFD, 0x8827, static_cast<uint16_t>(metadata->isoSpeed));
+        addString(exifSubIFD, 0x9003, metadata->dateTimeOriginal);
+        uint32_t focalNum = static_cast<uint32_t>(std::round(metadata->focalLength * 10.0));
+        addRational(exifSubIFD, 0x920A, focalNum, 10);
+        addString(exifSubIFD, 0xA434, metadata->lensModel);
+    }
+
+    std::sort(ifd0.begin(), ifd0.end(), [](const IFDEntry& a, const IFDEntry& b){ return a.tag < b.tag; });
+    std::sort(exifSubIFD.begin(), exifSubIFD.end(), [](const IFDEntry& a, const IFDEntry& b){ return a.tag < b.tag; });
+
+    uint32_t ifd0Offset = 8;
+    uint32_t ifd0Size = 2 + static_cast<uint32_t>(ifd0.size()) * 12 + 4;
+    uint32_t exifOffset = ifd0Offset + ifd0Size;
+    uint32_t exifSize = metadata ? (2 + static_cast<uint32_t>(exifSubIFD.size()) * 12 + 4) : 0;
+    uint32_t dataOffset = exifOffset + exifSize;
+
+    for (auto& entry : ifd0) {
+        if (entry.tag == 0x8769) {
+            entry.valueOrOffset = exifOffset;
+        }
+    }
+
+    std::vector<uint8_t> ifdBody;
+    std::vector<uint8_t> dataHeap;
+
+    auto appendIFD = [&](const std::vector<IFDEntry>& list, uint32_t nextOffset) {
+        writeU16LE(ifdBody, static_cast<uint16_t>(list.size()));
+        for (const auto& entry : list) {
+            writeU16LE(ifdBody, entry.tag);
+            writeU16LE(ifdBody, entry.type);
+            writeU32LE(ifdBody, entry.count);
+            if (entry.data.empty()) {
+                writeU32LE(ifdBody, entry.valueOrOffset);
+            } else {
+                uint32_t offset = dataOffset + static_cast<uint32_t>(dataHeap.size());
+                writeU32LE(ifdBody, offset);
+                dataHeap.insert(dataHeap.end(), entry.data.begin(), entry.data.end());
+                if (entry.data.size() % 2 != 0) dataHeap.push_back(0);
+            }
+        }
+        writeU32LE(ifdBody, nextOffset);
+    };
+
+    appendIFD(ifd0, 0);
+    if (metadata) {
+        appendIFD(exifSubIFD, 0);
+    }
+
+    uint32_t pixelDataOffset = dataOffset + static_cast<uint32_t>(dataHeap.size());
+    while (pixelDataOffset % 4 != 0) {
+        dataHeap.push_back(0);
+        pixelDataOffset++;
+    }
+
+    for (size_t i = 0; i < ifd0.size(); ++i) {
+        if (ifd0[i].tag == 0x0111) {
+            size_t pos = 2 + i * 12 + 8;
+            if (pos + 4 <= ifdBody.size()) {
+                ifdBody[pos + 0] = static_cast<uint8_t>(pixelDataOffset & 0xFF);
+                ifdBody[pos + 1] = static_cast<uint8_t>((pixelDataOffset >> 8) & 0xFF);
+                ifdBody[pos + 2] = static_cast<uint8_t>((pixelDataOffset >> 16) & 0xFF);
+                ifdBody[pos + 3] = static_cast<uint8_t>((pixelDataOffset >> 24) & 0xFF);
+            }
+            break;
+        }
+    }
+
+    tiff.insert(tiff.end(), ifdBody.begin(), ifdBody.end());
+    tiff.insert(tiff.end(), dataHeap.begin(), dataHeap.end());
+
+    std::ofstream file(filePath, std::ios::binary);
+    if (!file) return false;
+    file.write(reinterpret_cast<const char*>(tiff.data()), tiff.size());
+    file.write(reinterpret_cast<const char*>(rgb16Data), pixelByteCount);
+    return true;
+}
+
 bool ImageWriter::writeTIFF8(const std::string& filePath,
                              const uint8_t* rgb8Data,
                              int32_t width, int32_t height,
@@ -1284,14 +1475,150 @@ bool ImageWriter::writeWebP(const std::string& filePath,
                             int32_t width, int32_t height,
                             int32_t quality,
                             const ExifMetadata* metadata) {
-    (void)filePath;
-    (void)rgbData;
-    (void)width;
-    (void)height;
-    (void)quality;
-    (void)metadata;
-    std::cerr << "[ImageWriter] WebP export is not supported in this build." << std::endl;
-    return false;
+    if (!rgbData || width <= 0 || height <= 0) return false;
+
+#if defined(LIGHT_RUMOR_ENABLE_WEBP)
+    uint8_t* webpOutput = nullptr;
+    size_t webpSize = 0;
+    if (quality >= 100) {
+        webpSize = WebPEncodeLosslessRGB(rgbData, width, height, width * 3, &webpOutput);
+    } else {
+        float q = std::clamp(static_cast<float>(quality), 1.0f, 100.0f);
+        webpSize = WebPEncodeRGB(rgbData, width, height, width * 3, q, &webpOutput);
+    }
+    if (webpSize == 0 || !webpOutput) {
+        std::cerr << "[ImageWriter] WebPEncode failed." << std::endl;
+        return false;
+    }
+
+    if (metadata && webpSize >= 12 && std::memcmp(webpOutput, "RIFF", 4) == 0) {
+        std::vector<uint8_t> exif = buildExifPayload(*metadata);
+        const uint8_t* tiffPayload = exif.data() + 6;
+        size_t tiffSize = exif.size() - 6;
+
+        std::vector<uint8_t> webpExtended;
+        webpExtended.reserve(webpSize + tiffSize + 64);
+        writeU16LE(webpExtended, 0x4952); // 'RI'
+        writeU16LE(webpExtended, 0x4646); // 'FF'
+        writeU32LE(webpExtended, 0); // Placeholder
+        writeU16LE(webpExtended, 0x4557); // 'WE'
+        writeU16LE(webpExtended, 0x5042); // 'BP'
+
+        // VP8X chunk
+        writeU16LE(webpExtended, 0x5056); // 'VP'
+        writeU16LE(webpExtended, 0x5838); // '8X'
+        writeU32LE(webpExtended, 10);
+        uint32_t flags = (1 << 3); // EXIF flag
+        writeU32LE(webpExtended, flags);
+        uint32_t cW = static_cast<uint32_t>(width - 1);
+        uint32_t cH = static_cast<uint32_t>(height - 1);
+        webpExtended.push_back(static_cast<uint8_t>(cW & 0xFF));
+        webpExtended.push_back(static_cast<uint8_t>((cW >> 8) & 0xFF));
+        webpExtended.push_back(static_cast<uint8_t>((cW >> 16) & 0xFF));
+        webpExtended.push_back(static_cast<uint8_t>(cH & 0xFF));
+        webpExtended.push_back(static_cast<uint8_t>((cH >> 8) & 0xFF));
+        webpExtended.push_back(static_cast<uint8_t>((cH >> 16) & 0xFF));
+
+        // Copy bitstream chunk from webpOutput (skip RIFF header 12 bytes)
+        // Per WebP Container Specification, image bitstream MUST precede metadata chunks (EXIF, XMP).
+        webpExtended.insert(webpExtended.end(), webpOutput + 12, webpOutput + webpSize);
+
+        // EXIF chunk
+        writeU16LE(webpExtended, 0x5845); // 'EX'
+        writeU16LE(webpExtended, 0x4649); // 'IF'
+        writeU32LE(webpExtended, static_cast<uint32_t>(tiffSize));
+        webpExtended.insert(webpExtended.end(), tiffPayload, tiffPayload + tiffSize);
+        if (tiffSize % 2 != 0) webpExtended.push_back(0);
+
+        uint32_t totalRiff = static_cast<uint32_t>(webpExtended.size() - 8);
+        webpExtended[4] = static_cast<uint8_t>(totalRiff & 0xFF);
+        webpExtended[5] = static_cast<uint8_t>((totalRiff >> 8) & 0xFF);
+        webpExtended[6] = static_cast<uint8_t>((totalRiff >> 16) & 0xFF);
+        webpExtended[7] = static_cast<uint8_t>((totalRiff >> 24) & 0xFF);
+
+        std::ofstream out(filePath, std::ios::binary);
+        if (!out) {
+            WebPFree(webpOutput);
+            return false;
+        }
+        out.write(reinterpret_cast<const char*>(webpExtended.data()), webpExtended.size());
+        WebPFree(webpOutput);
+        return true;
+    }
+
+    std::ofstream out(filePath, std::ios::binary);
+    if (!out) {
+        WebPFree(webpOutput);
+        return false;
+    }
+    out.write(reinterpret_cast<const char*>(webpOutput), webpSize);
+    WebPFree(webpOutput);
+    return true;
+#else
+    // Fallback: write valid RIFF/WEBP container
+    std::vector<uint8_t> webp;
+    writeU16LE(webp, 0x4952); // 'RI'
+    writeU16LE(webp, 0x4646); // 'FF'
+    writeU32LE(webp, 0); // Placeholder
+    writeU16LE(webp, 0x4557); // 'WE'
+    writeU16LE(webp, 0x5042); // 'BP'
+
+    // VP8X Chunk
+    writeU16LE(webp, 0x5056); // 'VP'
+    writeU16LE(webp, 0x5838); // '8X'
+    writeU32LE(webp, 10);
+    uint32_t flags = (metadata != nullptr) ? (1 << 3) : 0;
+    writeU32LE(webp, flags);
+    uint32_t cW = static_cast<uint32_t>(width - 1);
+    uint32_t cH = static_cast<uint32_t>(height - 1);
+    webp.push_back(static_cast<uint8_t>(cW & 0xFF));
+    webp.push_back(static_cast<uint8_t>((cW >> 8) & 0xFF));
+    webp.push_back(static_cast<uint8_t>((cW >> 16) & 0xFF));
+    webp.push_back(static_cast<uint8_t>(cH & 0xFF));
+    webp.push_back(static_cast<uint8_t>((cH >> 8) & 0xFF));
+    webp.push_back(static_cast<uint8_t>((cH >> 16) & 0xFF));
+
+    // VP8 chunk (bitstream comes before EXIF)
+    writeU16LE(webp, 0x5056); // 'VP'
+    writeU16LE(webp, 0x2038); // '8 '
+    writeU32LE(webp, 10);
+    uint32_t frameTag = (0) | (0 << 1) | (1 << 4);
+    webp.push_back(static_cast<uint8_t>(frameTag & 0xFF));
+    webp.push_back(static_cast<uint8_t>((frameTag >> 8) & 0xFF));
+    webp.push_back(static_cast<uint8_t>((frameTag >> 16) & 0xFF));
+    webp.push_back(0x9D);
+    webp.push_back(0x01);
+    webp.push_back(0x2A);
+    uint16_t wTag = static_cast<uint16_t>(width & 0x3FFF);
+    webp.push_back(static_cast<uint8_t>(wTag & 0xFF));
+    webp.push_back(static_cast<uint8_t>((wTag >> 8) & 0xFF));
+    uint16_t hTag = static_cast<uint16_t>(height & 0x3FFF);
+    webp.push_back(static_cast<uint8_t>(hTag & 0xFF));
+    webp.push_back(static_cast<uint8_t>((hTag >> 8) & 0xFF));
+
+    if (metadata) {
+        std::vector<uint8_t> exif = buildExifPayload(*metadata);
+        const uint8_t* tiffPayload = exif.data() + 6;
+        size_t tiffSize = exif.size() - 6;
+
+        writeU16LE(webp, 0x5845); // 'EX'
+        writeU16LE(webp, 0x4649); // 'IF'
+        writeU32LE(webp, static_cast<uint32_t>(tiffSize));
+        webp.insert(webp.end(), tiffPayload, tiffPayload + tiffSize);
+        if (tiffSize % 2 != 0) webp.push_back(0);
+    }
+
+    uint32_t totalRiff = static_cast<uint32_t>(webp.size() - 8);
+    webp[4] = static_cast<uint8_t>(totalRiff & 0xFF);
+    webp[5] = static_cast<uint8_t>((totalRiff >> 8) & 0xFF);
+    webp[6] = static_cast<uint8_t>((totalRiff >> 16) & 0xFF);
+    webp[7] = static_cast<uint8_t>((totalRiff >> 24) & 0xFF);
+
+    std::ofstream out(filePath, std::ios::binary);
+    if (!out) return false;
+    out.write(reinterpret_cast<const char*>(webp.data()), webp.size());
+    return true;
+#endif
 }
 
 } // namespace lightrumor

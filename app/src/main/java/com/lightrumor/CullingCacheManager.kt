@@ -10,6 +10,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -26,6 +28,7 @@ class CullingCacheManager(
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var currentPrefetchJob: Job? = null
+    private val mutex = Mutex()
 
     // 1. In-Memory LRU Cache (sized to 25% of available heap memory, in KB)
     private val maxMemoryKb = (Runtime.getRuntime().maxMemory() / 1024).toInt()
@@ -160,16 +163,18 @@ class CullingCacheManager(
         }
     }
 
-    private fun saveToDisk(key: String, bitmap: Bitmap) {
+    private suspend fun saveToDisk(key: String, bitmap: Bitmap) {
         val dir = diskCacheDir ?: return
-        try {
-            val file = File(dir, "$key.cache")
-            FileOutputStream(file).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+        mutex.withLock {
+            try {
+                val file = File(dir, "$key.cache")
+                FileOutputStream(file).use { out ->
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+                }
+                trimDiskCacheIfNeeded(dir, maxBytes = 250L * 1024L * 1024L)
+            } catch (e: Throwable) {
+                // Disk caching non-fatal
             }
-            trimDiskCacheIfNeeded(dir, maxBytes = 250L * 1024L * 1024L)
-        } catch (e: Throwable) {
-            // Disk caching non-fatal
         }
     }
 

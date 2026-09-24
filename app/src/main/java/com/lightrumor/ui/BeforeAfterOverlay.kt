@@ -6,6 +6,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
@@ -31,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lightrumor.*
 import kotlin.math.abs
+import kotlin.math.pow
 import kotlin.math.sqrt
 
 enum class CompareMode {
@@ -68,6 +71,16 @@ fun calculateFittedRect(containerW: Float, containerH: Float, imgW: Float, imgH:
         val left = (containerW - fw) / 2f
         Rect(left, 0f, left + fw, containerH)
     }
+}
+
+fun clampOffset(offset: Offset, scale: Float, containerW: Float, containerH: Float): Offset {
+    if (scale <= 1.0f) return Offset.Zero
+    val maxOffsetX = (containerW * (scale - 1f)) / 2f
+    val maxOffsetY = (containerH * (scale - 1f)) / 2f
+    return Offset(
+        x = offset.x.coerceIn(-maxOffsetX, maxOffsetX),
+        y = offset.y.coerceIn(-maxOffsetY, maxOffsetY)
+    )
 }
 
 fun buildPhotoDevelopColorMatrix(params: DevelopmentParams): ColorMatrix {
@@ -165,22 +178,83 @@ fun BeforeAfterOverlay(
     var maskDisplayMode by remember { mutableStateOf(MaskDisplayMode.APPLIED) }
     var showMaskOverlay by remember { mutableStateOf(true) }
 
+    // ズーム・パン状態
+    var zoomScale by remember { mutableFloatStateOf(1.0f) }
+    var panOffset by remember { mutableStateOf(Offset.Zero) }
+
+    // マスクレイヤー状態
+    var localMaskLayers by remember(maskLayers) { mutableStateOf(maskLayers) }
+    val currentActiveLayer = localMaskLayers.getOrNull(selectedMaskIndex)
+
+    // ブラシ（ペン）描画用リアルタイムストロークバッファ
+    val inProgressStrokes = remember { mutableStateListOf<BrushStrokePoint>() }
+    var isEraserMode by remember { mutableStateOf(false) }
+    var brushRadius by remember { mutableFloatStateOf(28.0f) }
+
     val developColorMatrix = remember(params) { buildPhotoDevelopColorMatrix(params) }
     val developColorFilter = remember(developColorMatrix) { ColorFilter.colorMatrix(developColorMatrix) }
 
-    // マスクモード時は長押し比較を無効化し、写真上でのマスク操作にポインターを100%解放
-    val outerModifier = if (!isMaskMode) {
+    // 非マスクモードかつ比較Off時のジェスチャー: ダブルタップ切替、ピンチズーム、拡大時パン、等倍時長押しRAW比較
+    val outerModifier = if (!isMaskMode && compareMode == CompareMode.Off) {
         modifier
             .fillMaxSize()
             .clipToBounds()
             .pointerInput(Unit) {
                 detectTapGestures(
+                    onDoubleTap = {
+                        if (zoomScale > 1.1f) {
+                            zoomScale = 1.0f
+                            panOffset = Offset.Zero
+                        } else {
+                            zoomScale = 2.5f
+                        }
+                    },
                     onPress = {
-                        isHoldBefore = true
-                        tryAwaitRelease()
-                        isHoldBefore = false
+                        if (zoomScale <= 1.05f) {
+                            isHoldBefore = true
+                            tryAwaitRelease()
+                            isHoldBefore = false
+                        }
                     }
                 )
+            }
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    var prevCentroid = Offset.Zero
+                    var prevSpan = 0f
+                    val totalW = size.width.toFloat()
+                    val totalH = size.height.toFloat()
+
+                    do {
+                        val event = awaitPointerEvent()
+                        val pressedPointers = event.changes.filter { it.pressed }
+
+                        if (pressedPointers.size >= 2) {
+                            val p1 = pressedPointers[0].position
+                            val p2 = pressedPointers[1].position
+                            val centroid = (p1 + p2) / 2f
+                            val span = (p1 - p2).getDistance()
+
+                            if (prevSpan > 0f) {
+                                val zoomFactor = span / prevSpan
+                                val newScale = (zoomScale * zoomFactor).coerceIn(1.0f, 6.0f)
+                                val panDelta = centroid - prevCentroid
+                                zoomScale = newScale
+                                panOffset = clampOffset(panOffset + panDelta, newScale, totalW, totalH)
+                            }
+                            prevCentroid = centroid
+                            prevSpan = span
+                            event.changes.forEach { it.consume() }
+
+                        } else if (pressedPointers.size == 1 && zoomScale > 1.05f) {
+                            val p = pressedPointers[0]
+                            val dragDelta = p.position - p.previousPosition
+                            panOffset = clampOffset(panOffset + dragDelta, zoomScale, totalW, totalH)
+                            p.consume()
+                        }
+                    } while (event.changes.any { it.pressed })
+                }
             }
     } else {
         modifier
@@ -191,6 +265,18 @@ fun BeforeAfterOverlay(
     Box(modifier = outerModifier) {
         val activeBitmap = if (isHoldBefore) originalBitmap else (developedBitmap ?: originalBitmap)
         val activeFilter = if (isHoldBefore) null else developColorFilter
+
+        // ズーム・パンが適用されるコンテンツレイヤー
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = zoomScale
+                    scaleY = zoomScale
+                    translationX = panOffset.x
+                    translationY = panOffset.y
+                }
+        ) {
 
         when (compareMode) {
             CompareMode.Off -> {
@@ -401,9 +487,121 @@ fun BeforeAfterOverlay(
         }
 
         // ---------------------------------------------------------------------
-        // IN-VIEWPORT MASK OVERLAY & INTERACTIVE PIN ADJUSTMENT
+        // IN-VIEWPORT MASK OVERLAY CANVAS (ズーム・パンレイヤー内に描画)
         // ---------------------------------------------------------------------
-        val activeLayer = maskLayers.getOrNull(selectedMaskIndex)
+        if (isMaskMode && currentActiveLayer != null && showMaskOverlay && compareMode == CompareMode.Off) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val imgW = (activeBitmap?.width ?: 1).toFloat()
+                val imgH = (activeBitmap?.height ?: 1).toFloat()
+                val fitted = calculateFittedRect(size.width, size.height, imgW, imgH)
+                val w = fitted.width
+                val h = fitted.height
+                val ox = fitted.left
+                val oy = fitted.top
+
+                val colApplied = overlayColor.color
+                val colExcluded = Color(0x9900B0FF)
+
+                if (maskDisplayMode == MaskDisplayMode.DUAL_COLOR) {
+                    drawRect(
+                        color = colExcluded.copy(alpha = 0.28f),
+                        topLeft = Offset(ox, oy),
+                        size = Size(w, h)
+                    )
+                } else if (maskDisplayMode == MaskDisplayMode.EXCLUDED) {
+                    drawRect(
+                        color = colApplied.copy(alpha = 0.35f),
+                        topLeft = Offset(ox, oy),
+                        size = Size(w, h)
+                    )
+                }
+
+                when (currentActiveLayer.type) {
+                    MaskType.RADIAL_GRADIENT -> {
+                        val cx = ox + currentActiveLayer.radialCenterX * w
+                        val cy = oy + currentActiveLayer.radialCenterY * h
+                        val rx = currentActiveLayer.radialRadiusX * w
+                        val ry = currentActiveLayer.radialRadiusY * h
+
+                        val fillAlpha = when (maskDisplayMode) {
+                            MaskDisplayMode.APPLIED -> 0.42f
+                            MaskDisplayMode.EXCLUDED -> 0.05f
+                            MaskDisplayMode.DUAL_COLOR -> 0.48f
+                        }
+
+                        drawOval(
+                            color = colApplied.copy(alpha = fillAlpha),
+                            topLeft = Offset(cx - rx, cy - ry),
+                            size = Size(rx * 2f, ry * 2f)
+                        )
+                        drawOval(
+                            color = colApplied,
+                            topLeft = Offset(cx - rx, cy - ry),
+                            size = Size(rx * 2f, ry * 2f),
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx() / zoomScale.coerceAtLeast(1f))
+                        )
+
+                        // 中心移動ピン（拡大率に応じて画面上での見た目を調整）
+                        val pinRadius1 = 12.dp.toPx() / zoomScale.coerceAtLeast(1f)
+                        val pinRadius2 = 5.dp.toPx() / zoomScale.coerceAtLeast(1f)
+                        drawCircle(color = colors.accentAmber, radius = pinRadius1, center = Offset(cx, cy))
+                        drawCircle(color = Color.Black, radius = pinRadius2, center = Offset(cx, cy))
+
+                        // 外周半径変更ピン
+                        val pinRadius3 = 9.dp.toPx() / zoomScale.coerceAtLeast(1f)
+                        val pinRadius4 = 4.dp.toPx() / zoomScale.coerceAtLeast(1f)
+                        drawCircle(color = Color.White, radius = pinRadius3, center = Offset(cx + rx, cy))
+                        drawCircle(color = colors.accentAmber, radius = pinRadius4, center = Offset(cx + rx, cy))
+                    }
+
+                    MaskType.LINEAR_GRADIENT -> {
+                        val sx = ox + currentActiveLayer.linearStartX * w
+                        val sy = oy + currentActiveLayer.linearStartY * h
+                        val ex = ox + currentActiveLayer.linearEndX * w
+                        val ey = oy + currentActiveLayer.linearEndY * h
+
+                        drawLine(
+                            color = colApplied,
+                            start = Offset(sx, sy),
+                            end = Offset(ex, ey),
+                            strokeWidth = 3.dp.toPx() / zoomScale.coerceAtLeast(1f)
+                        )
+                        val pinRadius1 = 12.dp.toPx() / zoomScale.coerceAtLeast(1f)
+                        val pinRadius2 = 5.dp.toPx() / zoomScale.coerceAtLeast(1f)
+                        val pinRadius3 = 10.dp.toPx() / zoomScale.coerceAtLeast(1f)
+                        drawCircle(color = colors.accentAmber, radius = pinRadius1, center = Offset(sx, sy))
+                        drawCircle(color = Color.Black, radius = pinRadius2, center = Offset(sx, sy))
+                        drawCircle(color = Color.White, radius = pinRadius3, center = Offset(ex, ey))
+                        drawCircle(color = colors.accentAmber, radius = pinRadius2, center = Offset(ex, ey))
+                    }
+
+                    MaskType.BRUSH -> {
+                        // 確定ストロークの描画
+                        currentActiveLayer.brushStrokes.forEach { pt ->
+                            val strokeColor = if (pt.isEraser) Color(0xFF101012).copy(alpha = 0.85f) else colApplied.copy(alpha = 0.50f)
+                            drawCircle(
+                                color = strokeColor,
+                                radius = pt.radius,
+                                center = Offset(ox + pt.x * w, oy + pt.y * h)
+                            )
+                        }
+                        // ドラッグ中のリアルタイムストローク描画
+                        inProgressStrokes.forEach { pt ->
+                            val strokeColor = if (pt.isEraser) Color(0xFF101012).copy(alpha = 0.85f) else colApplied.copy(alpha = 0.50f)
+                            drawCircle(
+                                color = strokeColor,
+                                radius = pt.radius,
+                                center = Offset(ox + pt.x * w, oy + pt.y * h)
+                            )
+                        }
+                    }
+
+                    else -> {}
+                }
+            }
+        }
+
+        } // photoZoomModifier Box の閉じ括弧
 
         // マスクが0件の時のクイック追加案内
         if (isMaskMode && maskLayers.isEmpty()) {
@@ -468,7 +666,8 @@ fun BeforeAfterOverlay(
                         .clickable {
                             val newLayer = MaskLayerState(
                                 name = "ブラシ 1",
-                                type = MaskType.BRUSH
+                                type = MaskType.BRUSH,
+                                brushRadius = brushRadius
                             )
                             onMaskLayersChange?.invoke(listOf(newLayer))
                         }
@@ -479,220 +678,203 @@ fun BeforeAfterOverlay(
             }
         }
 
-        if (isMaskMode && activeLayer != null && showMaskOverlay && compareMode == CompareMode.Off) {
-            var localMaskLayers by remember(maskLayers) { mutableStateOf(maskLayers) }
-            val currentActiveLayer = localMaskLayers.getOrNull(selectedMaskIndex)
-
+        // マスクモード時のインタラクティブ入力（2本指ピンチズーム・パン ＆ 1本指ペン描画/ピン移動）
+        if (isMaskMode && currentActiveLayer != null && showMaskOverlay && compareMode == CompareMode.Off) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerInput(currentActiveLayer?.id, currentActiveLayer?.type) {
-                        var draggingTarget = 0 // 0: None, 1: Center/Start, 2: Radius/End
-                        detectDragGestures(
-                            onDragStart = { offset ->
-                                val totalW = size.width.toFloat()
-                                val totalH = size.height.toFloat()
-                                if (totalW <= 0f || totalH <= 0f) return@detectDragGestures
-                                val imgW = (activeBitmap?.width ?: 1).toFloat()
-                                val imgH = (activeBitmap?.height ?: 1).toFloat()
-                                val fitted = calculateFittedRect(totalW, totalH, imgW, imgH)
-                                if (fitted.width <= 0f || fitted.height <= 0f) return@detectDragGestures
+                    .pointerInput(currentActiveLayer.id, currentActiveLayer.type, isEraserMode, brushRadius) {
+                        awaitEachGesture {
+                            val firstDown = awaitFirstDown(requireUnconsumed = false)
+                            var isMultiTouch = false
+                            var prevCentroid = Offset.Zero
+                            var prevSpan = 0f
 
-                                val nx = ((offset.x - fitted.left) / fitted.width).coerceIn(0f, 1f)
-                                val ny = ((offset.y - fitted.top) / fitted.height).coerceIn(0f, 1f)
-                                
-                                val layer = currentActiveLayer ?: return@detectDragGestures
+                            val totalW = size.width.toFloat()
+                            val totalH = size.height.toFloat()
+                            val imgW = (activeBitmap?.width ?: 1).toFloat()
+                            val imgH = (activeBitmap?.height ?: 1).toFloat()
+                            val fitted = calculateFittedRect(totalW, totalH, imgW, imgH)
 
-                                when (layer.type) {
-                                    MaskType.RADIAL_GRADIENT -> {
-                                        val distCenter = sqrt((nx - layer.radialCenterX) * (nx - layer.radialCenterX) + (ny - layer.radialCenterY) * (ny - layer.radialCenterY))
-                                        val distEdge = abs(distCenter - layer.radialRadiusX)
-                                        draggingTarget = if (distCenter < 0.14f) 1 else if (distEdge < 0.12f) 2 else 1
-                                    }
-                                    MaskType.LINEAR_GRADIENT -> {
-                                        val distStart = sqrt((nx - layer.linearStartX) * (nx - layer.linearStartX) + (ny - layer.linearStartY) * (ny - layer.linearStartY))
-                                        val distEnd = sqrt((nx - layer.linearEndX) * (nx - layer.linearEndX) + (ny - layer.linearEndY) * (ny - layer.linearEndY))
-                                        draggingTarget = if (distStart < distEnd) 1 else 2
-                                    }
-                                    MaskType.BRUSH -> {
-                                        val updatedList = layer.brushStrokes + BrushStrokePoint(x = nx, y = ny, radius = layer.brushRadius)
-                                        localMaskLayers = localMaskLayers.mapIndexed { i, l ->
-                                            if (i == selectedMaskIndex) l.copy(brushStrokes = updatedList) else l
-                                        }
-                                    }
-                                    else -> {}
+                            // スクリーン座標から写真正規化座標 (0..1) への変換
+                            fun screenToNorm(pos: Offset): Offset {
+                                val cx = totalW / 2f
+                                val cy = totalH / 2f
+                                val lx = (pos.x - cx - panOffset.x) / zoomScale + cx
+                                val ly = (pos.y - cy - panOffset.y) / zoomScale + cy
+                                val nx = if (fitted.width > 0f) ((lx - fitted.left) / fitted.width).coerceIn(0f, 1f) else 0.5f
+                                val ny = if (fitted.height > 0f) ((ly - fitted.top) / fitted.height).coerceIn(0f, 1f) else 0.5f
+                                return Offset(nx, ny)
+                            }
+
+                            val layer = localMaskLayers.getOrNull(selectedMaskIndex) ?: return@awaitEachGesture
+                            var draggingTarget = 0 // 0: None, 1: Center/Start, 2: Radius/End
+                            val initialNorm = screenToNorm(firstDown.position)
+
+                            when (layer.type) {
+                                MaskType.RADIAL_GRADIENT -> {
+                                    val distCenter = sqrt((initialNorm.x - layer.radialCenterX).pow(2) + (initialNorm.y - layer.radialCenterY).pow(2))
+                                    val distEdge = abs(distCenter - layer.radialRadiusX)
+                                    val tolCenter = 0.14f / zoomScale.coerceAtLeast(1f)
+                                    val tolEdge = 0.12f / zoomScale.coerceAtLeast(1f)
+                                    draggingTarget = if (distCenter < tolCenter) 1 else if (distEdge < tolEdge) 2 else 1
                                 }
-                            },
-                            onDragEnd = {
-                                onMaskLayersChange?.invoke(localMaskLayers.toList())
-                            },
-                            onDragCancel = {
-                                onMaskLayersChange?.invoke(localMaskLayers.toList())
-                            },
-                            onDrag = { change, dragAmount ->
-                                change.consume()
-                                val totalW = size.width.toFloat()
-                                val totalH = size.height.toFloat()
-                                if (totalW <= 0f || totalH <= 0f) return@detectDragGestures
-                                val imgW = (activeBitmap?.width ?: 1).toFloat()
-                                val imgH = (activeBitmap?.height ?: 1).toFloat()
-                                val fitted = calculateFittedRect(totalW, totalH, imgW, imgH)
-                                if (fitted.width <= 0f || fitted.height <= 0f) return@detectDragGestures
+                                MaskType.LINEAR_GRADIENT -> {
+                                    val distStart = sqrt((initialNorm.x - layer.linearStartX).pow(2) + (initialNorm.y - layer.linearStartY).pow(2))
+                                    val distEnd = sqrt((initialNorm.x - layer.linearEndX).pow(2) + (initialNorm.y - layer.linearEndY).pow(2))
+                                    draggingTarget = if (distStart < distEnd) 1 else 2
+                                }
+                                MaskType.BRUSH -> {
+                                    inProgressStrokes.clear()
+                                    inProgressStrokes.add(
+                                        BrushStrokePoint(
+                                            x = initialNorm.x,
+                                            y = initialNorm.y,
+                                            radius = brushRadius,
+                                            isEraser = isEraserMode
+                                        )
+                                    )
+                                }
+                                else -> {}
+                            }
 
-                                val dnx = dragAmount.x / fitted.width
-                                val dny = dragAmount.y / fitted.height
-                                
-                                val layer = currentActiveLayer ?: return@detectDragGestures
+                            var prevSinglePos = firstDown.position
 
-                                when (layer.type) {
-                                    MaskType.RADIAL_GRADIENT -> {
-                                        localMaskLayers = localMaskLayers.mapIndexed { i, l ->
-                                            if (i == selectedMaskIndex) {
-                                                if (draggingTarget == 1) {
-                                                    l.copy(
-                                                        radialCenterX = (l.radialCenterX + dnx).coerceIn(0.02f, 0.98f),
-                                                        radialCenterY = (l.radialCenterY + dny).coerceIn(0.02f, 0.98f)
-                                                    )
-                                                } else if (draggingTarget == 2) {
-                                                    l.copy(
-                                                        radialRadiusX = (l.radialRadiusX + dnx).coerceIn(0.05f, 0.85f),
-                                                        radialRadiusY = (l.radialRadiusY + dny).coerceIn(0.05f, 0.85f)
-                                                    )
-                                                } else l
-                                            } else l
-                                        }
+                            do {
+                                val event = awaitPointerEvent()
+                                val pressedPointers = event.changes.filter { it.pressed }
+
+                                if (pressedPointers.size >= 2) {
+                                    if (!isMultiTouch) {
+                                        isMultiTouch = true
+                                        inProgressStrokes.clear()
                                     }
-                                    MaskType.LINEAR_GRADIENT -> {
-                                        localMaskLayers = localMaskLayers.mapIndexed { i, l ->
-                                            if (i == selectedMaskIndex) {
-                                                if (draggingTarget == 1) {
-                                                    l.copy(
-                                                        linearStartX = (l.linearStartX + dnx).coerceIn(0.02f, 0.98f),
-                                                        linearStartY = (l.linearStartY + dny).coerceIn(0.02f, 0.98f)
-                                                    )
-                                                } else {
-                                                    l.copy(
-                                                        linearEndX = (l.linearEndX + dnx).coerceIn(0.02f, 0.98f),
-                                                        linearEndY = (l.linearEndY + dny).coerceIn(0.02f, 0.98f)
+                                    val p1 = pressedPointers[0].position
+                                    val p2 = pressedPointers[1].position
+                                    val centroid = (p1 + p2) / 2f
+                                    val span = (p1 - p2).getDistance()
+
+                                    if (prevSpan > 0f) {
+                                        val zoomFactor = span / prevSpan
+                                        val newScale = (zoomScale * zoomFactor).coerceIn(1.0f, 6.0f)
+                                        val panDelta = centroid - prevCentroid
+                                        zoomScale = newScale
+                                        panOffset = clampOffset(panOffset + panDelta, newScale, totalW, totalH)
+                                    }
+                                    prevCentroid = centroid
+                                    prevSpan = span
+                                    event.changes.forEach { it.consume() }
+
+                                } else if (pressedPointers.size == 1 && !isMultiTouch) {
+                                    val pointer = pressedPointers[0]
+                                    val currentPos = pointer.position
+                                    pointer.consume()
+
+                                    val norm = screenToNorm(currentPos)
+                                    val currentLayer = localMaskLayers.getOrNull(selectedMaskIndex)
+
+                                    if (currentLayer != null) {
+                                        when (currentLayer.type) {
+                                            MaskType.BRUSH -> {
+                                                val lastPt = inProgressStrokes.lastOrNull()
+                                                if (lastPt == null || abs(lastPt.x - norm.x) > 0.001f || abs(lastPt.y - norm.y) > 0.001f) {
+                                                    if (lastPt != null) {
+                                                        val dist = sqrt((norm.x - lastPt.x).pow(2) + (norm.y - lastPt.y).pow(2))
+                                                        val step = 0.008f / zoomScale.coerceAtLeast(1f)
+                                                        if (dist > step) {
+                                                            val steps = (dist / step).toInt().coerceAtMost(25)
+                                                            for (s in 1 until steps) {
+                                                                val t = s.toFloat() / steps
+                                                                inProgressStrokes.add(
+                                                                    BrushStrokePoint(
+                                                                        x = lastPt.x + (norm.x - lastPt.x) * t,
+                                                                        y = lastPt.y + (norm.y - lastPt.y) * t,
+                                                                        radius = brushRadius,
+                                                                        isEraser = isEraserMode
+                                                                    )
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                    inProgressStrokes.add(
+                                                        BrushStrokePoint(
+                                                            x = norm.x,
+                                                            y = norm.y,
+                                                            radius = brushRadius,
+                                                            isEraser = isEraserMode
+                                                        )
                                                     )
                                                 }
-                                            } else l
+                                            }
+                                            MaskType.RADIAL_GRADIENT -> {
+                                                val prevNorm = screenToNorm(prevSinglePos)
+                                                val dnx = norm.x - prevNorm.x
+                                                val dny = norm.y - prevNorm.y
+                                                localMaskLayers = localMaskLayers.mapIndexed { idx, l ->
+                                                    if (idx == selectedMaskIndex) {
+                                                        if (draggingTarget == 1) {
+                                                            l.copy(
+                                                                radialCenterX = (l.radialCenterX + dnx).coerceIn(0.02f, 0.98f),
+                                                                radialCenterY = (l.radialCenterY + dny).coerceIn(0.02f, 0.98f)
+                                                            )
+                                                        } else {
+                                                            l.copy(
+                                                                radialRadiusX = (l.radialRadiusX + dnx).coerceIn(0.05f, 0.85f),
+                                                                radialRadiusY = (l.radialRadiusY + dny).coerceIn(0.05f, 0.85f)
+                                                            )
+                                                        }
+                                                    } else l
+                                                }
+                                            }
+                                            MaskType.LINEAR_GRADIENT -> {
+                                                val prevNorm = screenToNorm(prevSinglePos)
+                                                val dnx = norm.x - prevNorm.x
+                                                val dny = norm.y - prevNorm.y
+                                                localMaskLayers = localMaskLayers.mapIndexed { idx, l ->
+                                                    if (idx == selectedMaskIndex) {
+                                                        if (draggingTarget == 1) {
+                                                            l.copy(
+                                                                linearStartX = (l.linearStartX + dnx).coerceIn(0.02f, 0.98f),
+                                                                linearStartY = (l.linearStartY + dny).coerceIn(0.02f, 0.98f)
+                                                            )
+                                                        } else {
+                                                            l.copy(
+                                                                linearEndX = (l.linearEndX + dnx).coerceIn(0.02f, 0.98f),
+                                                                linearEndY = (l.linearEndY + dny).coerceIn(0.02f, 0.98f)
+                                                            )
+                                                        }
+                                                    } else l
+                                                }
+                                            }
+                                            else -> {}
                                         }
                                     }
-                                    MaskType.BRUSH -> {
-                                        val nx = ((change.position.x - fitted.left) / fitted.width).coerceIn(0f, 1f)
-                                        val ny = ((change.position.y - fitted.top) / fitted.height).coerceIn(0f, 1f)
-                                        val updatedList = layer.brushStrokes + BrushStrokePoint(x = nx, y = ny, radius = layer.brushRadius)
-                                        localMaskLayers = localMaskLayers.mapIndexed { i, l ->
-                                            if (i == selectedMaskIndex) l.copy(brushStrokes = updatedList) else l
-                                        }
-                                    }
-                                    else -> {}
+                                    prevSinglePos = currentPos
                                 }
-                            }
-                        )
-                    }
-            ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val imgW = (activeBitmap?.width ?: 1).toFloat()
-                    val imgH = (activeBitmap?.height ?: 1).toFloat()
-                    val fitted = calculateFittedRect(size.width, size.height, imgW, imgH)
-                    val w = fitted.width
-                    val h = fitted.height
-                    val ox = fitted.left
-                    val oy = fitted.top
+                            } while (event.changes.any { it.pressed })
 
-                    val colApplied = overlayColor.color
-                    val colExcluded = Color(0x9900B0FF) // 欠けたところ（非対象エリア）は鮮明なシアン/ブルー
-
-                    // 両方色分けモードの場合、まず全面を「欠けたところの色」で塗る
-                    if (maskDisplayMode == MaskDisplayMode.DUAL_COLOR) {
-                        drawRect(
-                            color = colExcluded.copy(alpha = 0.28f),
-                            topLeft = Offset(ox, oy),
-                            size = Size(w, h)
-                        )
-                    } else if (maskDisplayMode == MaskDisplayMode.EXCLUDED) {
-                        drawRect(
-                            color = colApplied.copy(alpha = 0.35f),
-                            topLeft = Offset(ox, oy),
-                            size = Size(w, h)
-                        )
-                    }
-                    
-                    val layer = currentActiveLayer ?: return@Canvas
-
-                    when (layer.type) {
-                        MaskType.RADIAL_GRADIENT -> {
-                            val cx = ox + layer.radialCenterX * w
-                            val cy = oy + layer.radialCenterY * h
-                            val rx = layer.radialRadiusX * w
-                            val ry = layer.radialRadiusY * h
-
-                            val fillAlpha = when (maskDisplayMode) {
-                                MaskDisplayMode.APPLIED -> 0.42f
-                                MaskDisplayMode.EXCLUDED -> 0.05f
-                                MaskDisplayMode.DUAL_COLOR -> 0.48f
-                            }
-
-                            drawOval(
-                                color = colApplied.copy(alpha = fillAlpha),
-                                topLeft = Offset(cx - rx, cy - ry),
-                                size = Size(rx * 2f, ry * 2f)
-                            )
-                            drawOval(
-                                color = colApplied,
-                                topLeft = Offset(cx - rx, cy - ry),
-                                size = Size(rx * 2f, ry * 2f),
-                                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx())
-                            )
-
-                            // 中心移動ピン（大型化）
-                            drawCircle(color = colors.accentAmber, radius = 12.dp.toPx(), center = Offset(cx, cy))
-                            drawCircle(color = Color.Black, radius = 5.dp.toPx(), center = Offset(cx, cy))
-
-                            // 外周半径変更ピン（大型化）
-                            drawCircle(color = Color.White, radius = 9.dp.toPx(), center = Offset(cx + rx, cy))
-                            drawCircle(color = colors.accentAmber, radius = 4.dp.toPx(), center = Offset(cx + rx, cy))
-                        }
-
-                        MaskType.LINEAR_GRADIENT -> {
-                            val sx = ox + layer.linearStartX * w
-                            val sy = oy + layer.linearStartY * h
-                            val ex = ox + layer.linearEndX * w
-                            val ey = oy + layer.linearEndY * h
-
-                            drawLine(
-                                color = colApplied,
-                                start = Offset(sx, sy),
-                                end = Offset(ex, ey),
-                                strokeWidth = 3.dp.toPx()
-                            )
-                            // 開始ピン
-                            drawCircle(color = colors.accentAmber, radius = 12.dp.toPx(), center = Offset(sx, sy))
-                            drawCircle(color = Color.Black, radius = 5.dp.toPx(), center = Offset(sx, sy))
-
-                            // 終了ピン
-                            drawCircle(color = Color.White, radius = 10.dp.toPx(), center = Offset(ex, ey))
-                            drawCircle(color = colors.accentAmber, radius = 5.dp.toPx(), center = Offset(ex, ey))
-                        }
-
-                        MaskType.BRUSH -> {
-                            layer.brushStrokes.forEach { pt ->
-                                drawCircle(
-                                    color = colApplied.copy(alpha = 0.50f),
-                                    radius = pt.radius,
-                                    center = Offset(ox + pt.x * w, oy + pt.y * h)
-                                )
+                            // 指を離した時の確定処理
+                            if (!isMultiTouch && inProgressStrokes.isNotEmpty()) {
+                                val currentLayer = localMaskLayers.getOrNull(selectedMaskIndex)
+                                if (currentLayer != null && currentLayer.type == MaskType.BRUSH) {
+                                    val mergedStrokes = currentLayer.brushStrokes + inProgressStrokes.toList()
+                                    val updatedLayers = localMaskLayers.mapIndexed { idx, l ->
+                                        if (idx == selectedMaskIndex) l.copy(brushStrokes = mergedStrokes) else l
+                                    }
+                                    localMaskLayers = updatedLayers
+                                    onMaskLayersChange?.invoke(updatedLayers)
+                                }
+                                inProgressStrokes.clear()
+                            } else if (!isMultiTouch && layer.type != MaskType.BRUSH) {
+                                onMaskLayersChange?.invoke(localMaskLayers)
                             }
                         }
-
-                        else -> {}
                     }
-                }
-            }
+            )
+        }
 
-            // Top-left Mask Overlay Control HUD (ルビ色・欠けたところ色分け・全消去)
+        // Top-left Mask Overlay Control HUD (表示モード・ルビ色・ブラシ設定・全消去)
+        if (isMaskMode && currentActiveLayer != null && showMaskOverlay && compareMode == CompareMode.Off) {
             Row(
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -737,28 +919,71 @@ fun BeforeAfterOverlay(
                     )
                 }
 
-                // ブラシのときのストローク消去
                 val currentBrushLayer = localMaskLayers.getOrNull(selectedMaskIndex)
-                if (currentBrushLayer?.type == MaskType.BRUSH && currentBrushLayer.brushStrokes.isNotEmpty()) {
+                if (currentBrushLayer?.type == MaskType.BRUSH) {
+                    // ペン / 消しゴム 切替
                     Box(
                         modifier = Modifier
-                            .background(Color(0xFF882222), RoundedCornerShape(2.dp))
-                            .clickable {
-                                val updatedLayers = localMaskLayers.mapIndexed { idx, l ->
-                                    if (idx == selectedMaskIndex) l.copy(brushStrokes = emptyList()) else l
-                                }
-                                localMaskLayers = updatedLayers
-                                onMaskLayersChange?.invoke(updatedLayers)
-                            }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .background(if (isEraserMode) colors.accentAmber else colors.surfacePressed, RoundedCornerShape(2.dp))
+                            .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
+                            .clickable { isEraserMode = !isEraserMode }
+                            .padding(horizontal = 8.dp, vertical = 5.dp)
                     ) {
                         Text(
-                            text = "クリア",
+                            text = if (isEraserMode) "消しゴム" else "ペン",
                             fontFamily = FontFamily.SansSerif,
                             fontSize = 12.sp,
-                            color = Color.White,
+                            color = if (isEraserMode) Color.Black else colors.textPrimary,
                             fontWeight = FontWeight.Bold
                         )
+                    }
+
+                    // ブラシサイズ切替 (15 -> 28 -> 45 -> 70 -> 15)
+                    Box(
+                        modifier = Modifier
+                            .background(colors.surfacePressed, RoundedCornerShape(2.dp))
+                            .border(1.dp, colors.borderSubtle, RoundedCornerShape(2.dp))
+                            .clickable {
+                                brushRadius = when (brushRadius.toInt()) {
+                                    15 -> 28.0f
+                                    28 -> 45.0f
+                                    45 -> 70.0f
+                                    else -> 15.0f
+                                }
+                            }
+                            .padding(horizontal = 8.dp, vertical = 5.dp)
+                    ) {
+                        Text(
+                            text = "太さ ${brushRadius.toInt()}",
+                            fontFamily = FontFamily.SansSerif,
+                            fontSize = 12.sp,
+                            color = colors.accentAmber,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    // ストローク消去ボタン
+                    if (currentBrushLayer.brushStrokes.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFF882222), RoundedCornerShape(2.dp))
+                                .clickable {
+                                    val updatedLayers = localMaskLayers.mapIndexed { idx, l ->
+                                        if (idx == selectedMaskIndex) l.copy(brushStrokes = emptyList()) else l
+                                    }
+                                    localMaskLayers = updatedLayers
+                                    onMaskLayersChange?.invoke(updatedLayers)
+                                }
+                                .padding(horizontal = 8.dp, vertical = 5.dp)
+                        ) {
+                            Text(
+                                text = "クリア",
+                                fontFamily = FontFamily.SansSerif,
+                                fontSize = 12.sp,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
@@ -784,27 +1009,60 @@ fun BeforeAfterOverlay(
             }
         }
 
-        // Compare Mode Controller Bar (Top Right)
+        // Compare Mode Controller Bar & Zoom Toggle (Top Right)
         Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(10.dp)
-                .background(colors.surface.copy(alpha = 0.85f), RoundedCornerShape(3.dp))
-                .border(1.dp, colors.borderSubtle, RoundedCornerShape(3.dp))
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                .padding(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            CompareTabButton("オフ", active = compareMode == CompareMode.Off) {
-                onCompareModeChange(CompareMode.Off)
+            // ズーム倍率ボタン (タップで 1.0x 全体 ⇔ 2.5x 等倍 を切替)
+            Box(
+                modifier = Modifier
+                    .background(
+                        if (zoomScale > 1.1f) colors.accentAmber else colors.surface.copy(alpha = 0.85f),
+                        RoundedCornerShape(3.dp)
+                    )
+                    .border(1.dp, if (zoomScale > 1.1f) colors.accentAmber else colors.borderSubtle, RoundedCornerShape(3.dp))
+                    .clickable {
+                        if (zoomScale > 1.1f) {
+                            zoomScale = 1.0f
+                            panOffset = Offset.Zero
+                        } else {
+                            zoomScale = 2.5f
+                        }
+                    }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = "${"%.1f".format(zoomScale)}x ${if (zoomScale > 1.1f) "等倍" else "全体"}",
+                    fontFamily = FontFamily.SansSerif,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    color = if (zoomScale > 1.1f) Color.Black else colors.textPrimary
+                )
             }
-            CompareTabButton("左右分割", active = compareMode == CompareMode.SplitVertical) {
-                onCompareModeChange(CompareMode.SplitVertical)
-            }
-            CompareTabButton("上下分割", active = compareMode == CompareMode.SplitHorizontal) {
-                onCompareModeChange(CompareMode.SplitHorizontal)
-            }
-            CompareTabButton("並列", active = compareMode == CompareMode.SideBySide) {
-                onCompareModeChange(CompareMode.SideBySide)
+
+            Row(
+                modifier = Modifier
+                    .background(colors.surface.copy(alpha = 0.85f), RoundedCornerShape(3.dp))
+                    .border(1.dp, colors.borderSubtle, RoundedCornerShape(3.dp))
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                CompareTabButton("オフ", active = compareMode == CompareMode.Off) {
+                    onCompareModeChange(CompareMode.Off)
+                }
+                CompareTabButton("左右分割", active = compareMode == CompareMode.SplitVertical) {
+                    onCompareModeChange(CompareMode.SplitVertical)
+                }
+                CompareTabButton("上下分割", active = compareMode == CompareMode.SplitHorizontal) {
+                    onCompareModeChange(CompareMode.SplitHorizontal)
+                }
+                CompareTabButton("並列", active = compareMode == CompareMode.SideBySide) {
+                    onCompareModeChange(CompareMode.SideBySide)
+                }
             }
         }
     }

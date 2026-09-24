@@ -49,6 +49,7 @@ class ExportService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private val executor: ExecutorService = Executors.newSingleThreadExecutor()
     private val activeTasks = java.util.concurrent.atomic.AtomicInteger(0)
+    @Volatile private var isDestroyed = false
 
     override fun onCreate() {
         super.onCreate()
@@ -70,30 +71,39 @@ class ExportService : Service() {
                     DevelopmentParams()
                 }
                 if (inputPath.isNotEmpty() && outputPath.isNotEmpty()) {
-                    executeExport(inputPath, outputPath, params)
+                    acquireWakeLock()
+                    executeExport(inputPath, outputPath, params, startId)
                 } else {
                     stopForegroundCompat()
-                    stopSelf()
+                    stopSelf(startId)
                 }
             }
             ACTION_CANCEL_EXPORT -> {
                 stopForegroundCompat()
-                stopSelf()
+                stopSelf(startId)
             }
             else -> {
                 stopForegroundCompat()
-                stopSelf()
+                stopSelf(startId)
             }
         }
         return START_NOT_STICKY
     }
 
+    @Synchronized
     private fun acquireWakeLock() {
-        val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
-        wakeLock = powerManager?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "LightRumor::ExportWakeLock")
-        wakeLock?.acquire(60 * 60 * 1000L) // 1 hour max timeout
+        if (wakeLock == null) {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            wakeLock = powerManager?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "LightRumor::ExportWakeLock")?.apply {
+                setReferenceCounted(false)
+            }
+        }
+        if (wakeLock?.isHeld != true) {
+            wakeLock?.acquire(60 * 60 * 1000L) // 1 hour max timeout
+        }
     }
 
+    @Synchronized
     private fun releaseWakeLock() {
         if (wakeLock?.isHeld == true) {
             wakeLock?.release()
@@ -150,7 +160,7 @@ class ExportService : Service() {
         manager.notify(NOTIFICATION_ID, buildProgressNotification(progress, statusText))
     }
 
-    private fun executeExport(inputPath: String, outputPath: String, params: DevelopmentParams) {
+    private fun executeExport(inputPath: String, outputPath: String, params: DevelopmentParams, startId: Int) {
         activeTasks.incrementAndGet()
 
         executor.execute {
@@ -190,16 +200,20 @@ class ExportService : Service() {
                             outputPath.endsWith(".webp", ignoreCase = true) -> "image/webp"
                             else -> null
                         }
-                        android.media.MediaScannerConnection.scanFile(
-                            this@ExportService,
-                            arrayOf(outputPath),
-                            if (mimeType != null) arrayOf(mimeType) else null,
-                            null
-                        )
+                        if (!isDestroyed) {
+                            android.media.MediaScannerConnection.scanFile(
+                                this@ExportService,
+                                arrayOf(outputPath),
+                                if (mimeType != null) arrayOf(mimeType) else null,
+                                null
+                            )
+                        }
                     } catch (e: Exception) {
                         e.printStackTrace()
                     }
-                    showCompletionNotification(outputPath)
+                    if (!isDestroyed) {
+                        showCompletionNotification(outputPath)
+                    }
                 } else {
                     try {
                         val file = File(outputPath)
@@ -253,9 +267,10 @@ class ExportService : Service() {
     }
 
     override fun onDestroy() {
+        isDestroyed = true
         super.onDestroy()
         releaseWakeLock()
-        executor.shutdown()
+        executor.shutdownNow()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

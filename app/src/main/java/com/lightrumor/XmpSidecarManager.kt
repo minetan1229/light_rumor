@@ -132,10 +132,12 @@ object XmpSidecarManager {
     ) {
         if (imageFilePath.isEmpty()) return
 
-        debounceJobs[imageFilePath]?.cancel()
-        debounceJobs[imageFilePath] = scope.launch {
-            delay(debounceMs)
-            writeSidecarDirect(imageFilePath, meta, params, modifiedFields)
+        synchronized(debounceJobs) {
+            debounceJobs[imageFilePath]?.cancel()
+            debounceJobs[imageFilePath] = scope.launch {
+                delay(debounceMs)
+                writeSidecarDirect(imageFilePath, meta, params, modifiedFields)
+            }
         }
     }
 
@@ -156,6 +158,89 @@ object XmpSidecarManager {
                 PickStatus.NONE -> 0
             }
 
+            // Map of attributes to update/insert
+            val updates = mutableMapOf<String, String>()
+            updates["xmp:Rating"] = "${meta.rating}"
+            if (meta.colorLabel != ColorLabel.NONE) {
+                updates["xmp:Label"] = escapeXml(meta.colorLabel.labelName)
+            }
+            updates["photoshop:Urgency"] = "$pickVal"
+            updates["crs:Pick"] = "$pickVal"
+
+            if (modifiedFields.contains("captureDate") && meta.captureDate.isNotEmpty()) {
+                val escapedDate = escapeXml(meta.captureDate)
+                updates["xmp:CreateDate"] = escapedDate
+                updates["photoshop:DateCreated"] = escapedDate
+                updates["exif:DateTimeOriginal"] = escapedDate
+            }
+            if (modifiedFields.contains("cameraModel") && meta.cameraModel.isNotEmpty()) {
+                updates["tiff:Model"] = escapeXml(meta.cameraModel)
+            }
+            if (modifiedFields.contains("cameraMake") && meta.cameraMake.isNotEmpty()) {
+                updates["tiff:Make"] = escapeXml(meta.cameraMake)
+            }
+            if (modifiedFields.contains("lensModel") && meta.lensModel.isNotEmpty()) {
+                updates["aux:Lens"] = escapeXml(meta.lensModel)
+            }
+            if (modifiedFields.contains("fNumber") && meta.fNumber.isNotEmpty()) {
+                updates["exif:FNumber"] = meta.fNumber.removePrefix("f/")
+            }
+            if (modifiedFields.contains("exposureTime") && meta.exposureTime.isNotEmpty()) {
+                updates["exif:ExposureTime"] = meta.exposureTime.removeSuffix("s")
+            }
+            if (modifiedFields.contains("isoSpeed") && meta.isoSpeed.isNotEmpty()) {
+                updates["exif:ISOSpeedRatings"] = meta.isoSpeed.replace(Regex("[^0-9]"), "")
+            }
+            if (modifiedFields.contains("focalLength") && meta.focalLength.isNotEmpty()) {
+                updates["exif:FocalLength"] = meta.focalLength.replace(Regex("[^0-9.]"), "")
+            }
+
+            updates["crs:Temperature"] = "${params.kelvin.toInt()}"
+            updates["crs:Tint"] = String.format(java.util.Locale.US, "%.1f", params.tint)
+            updates["crs:Exposure2012"] = String.format(java.util.Locale.US, "%+.2f", params.exposureEV)
+            updates["crs:Contrast2012"] = "${params.contrast.toInt()}"
+            updates["crs:Highlights2012"] = "${params.highlights.toInt()}"
+            updates["crs:Shadows2012"] = "${params.shadows.toInt()}"
+            updates["crs:Whites2012"] = "${params.whites.toInt()}"
+            updates["crs:Blacks2012"] = "${params.blacks.toInt()}"
+            updates["crs:Vibrance"] = "${params.vibrance.toInt()}"
+            updates["crs:Saturation"] = "${params.saturation.toInt()}"
+            updates["crs:Clarity2012"] = "${params.clarity.toInt()}"
+            updates["crs:Dehaze"] = "${params.dehaze.toInt()}"
+            if (params.colorProfile.isNotEmpty()) {
+                updates["crs:CameraProfile"] = escapeXml(params.colorProfile)
+            }
+            updates["crs:Sharpness"] = "${params.sharpeningAmount.toInt()}"
+            updates["crs:LuminanceSmoothing"] = "${params.luminanceNR.toInt()}"
+
+            if (sidecar.exists()) {
+                val existingXml = sidecar.readText()
+                if (existingXml.contains("<rdf:Description")) {
+                    var mergedXml = existingXml
+                    for ((attr, value) in updates) {
+                        val regexAttr = Regex("""\b$attr="[^"]*"""")
+                        val regexElem = Regex("""<$attr>([^<]*)</$attr>""")
+                        if (regexAttr.containsMatchIn(mergedXml)) {
+                            mergedXml = regexAttr.replace(mergedXml, "$attr=\"$value\"")
+                        } else if (regexElem.containsMatchIn(mergedXml)) {
+                            mergedXml = regexElem.replace(mergedXml, "<$attr>$value</$attr>")
+                        } else {
+                            // Insert before closing tag of rdf:Description
+                            val descRegex = Regex("""(<rdf:Description[^>]*?)(\s*(?:/>|>))""")
+                            val match = descRegex.find(mergedXml)
+                            if (match != null) {
+                                val prefix = match.groupValues[1]
+                                val suffix = match.groupValues[2]
+                                mergedXml = mergedXml.replaceRange(match.range, "$prefix\n   $attr=\"$value\"$suffix")
+                            }
+                        }
+                    }
+                    sidecar.writeText(mergedXml)
+                    return@withContext
+                }
+            }
+
+            // Create new clean XMP packet if sidecar doesn't exist
             val xmpPacket = buildString {
                 append("<?xpacket begin=\"\uFEFF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n")
                 append("<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n")
@@ -167,59 +252,10 @@ object XmpSidecarManager {
                 append("    xmlns:exif=\"http://ns.adobe.com/exif/1.0/\"\n")
                 append("    xmlns:tiff=\"http://ns.adobe.com/tiff/1.0/\"\n")
                 append("    xmlns:aux=\"http://ns.adobe.com/exif/1.0/aux/\"\n")
-                append("   xmp:Rating=\"${meta.rating}\"\n")
-                if (meta.colorLabel != ColorLabel.NONE) {
-                    append("   xmp:Label=\"${escapeXml(meta.colorLabel.labelName)}\"\n")
+                for ((k, v) in updates) {
+                    append("   $k=\"$v\"\n")
                 }
-                append("   photoshop:Urgency=\"$pickVal\"\n")
-                append("   crs:Pick=\"$pickVal\"\n")
-                
-                if (modifiedFields.contains("captureDate") && meta.captureDate.isNotEmpty()) {
-                    append("   xmp:CreateDate=\"${escapeXml(meta.captureDate)}\"\n")
-                    append("   photoshop:DateCreated=\"${escapeXml(meta.captureDate)}\"\n")
-                    append("   exif:DateTimeOriginal=\"${escapeXml(meta.captureDate)}\"\n")
-                }
-                if (modifiedFields.contains("cameraModel") && meta.cameraModel.isNotEmpty()) {
-                    append("   tiff:Model=\"${escapeXml(meta.cameraModel)}\"\n")
-                }
-                if (modifiedFields.contains("cameraMake") && meta.cameraMake.isNotEmpty()) {
-                    append("   tiff:Make=\"${escapeXml(meta.cameraMake)}\"\n")
-                }
-                if (modifiedFields.contains("lensModel") && meta.lensModel.isNotEmpty()) {
-                    append("   aux:Lens=\"${escapeXml(meta.lensModel)}\"\n")
-                }
-                if (modifiedFields.contains("fNumber") && meta.fNumber.isNotEmpty()) {
-                    append("   exif:FNumber=\"${meta.fNumber.removePrefix("f/")}\"\n")
-                }
-                if (modifiedFields.contains("exposureTime") && meta.exposureTime.isNotEmpty()) {
-                    append("   exif:ExposureTime=\"${meta.exposureTime.removeSuffix("s")}\"\n")
-                }
-                if (modifiedFields.contains("isoSpeed") && meta.isoSpeed.isNotEmpty()) {
-                    val isoVal = meta.isoSpeed.replace(Regex("[^0-9]"), "")
-                    append("   exif:ISOSpeedRatings=\"$isoVal\"\n")
-                }
-                if (modifiedFields.contains("focalLength") && meta.focalLength.isNotEmpty()) {
-                    val focalVal = meta.focalLength.replace(Regex("[^0-9.]"), "")
-                    append("   exif:FocalLength=\"$focalVal\"\n")
-                }
-
-                append("   crs:Temperature=\"${params.kelvin.toInt()}\"\n")
-                append("   crs:Tint=\"${String.format(java.util.Locale.US, "%.1f", params.tint)}\"\n")
-                append("   crs:Exposure2012=\"${String.format(java.util.Locale.US, "%+.2f", params.exposureEV)}\"\n")
-                append("   crs:Contrast2012=\"${params.contrast.toInt()}\"\n")
-                append("   crs:Highlights2012=\"${params.highlights.toInt()}\"\n")
-                append("   crs:Shadows2012=\"${params.shadows.toInt()}\"\n")
-                append("   crs:Whites2012=\"${params.whites.toInt()}\"\n")
-                append("   crs:Blacks2012=\"${params.blacks.toInt()}\"\n")
-                append("   crs:Vibrance=\"${params.vibrance.toInt()}\"\n")
-                append("   crs:Saturation=\"${params.saturation.toInt()}\"\n")
-                append("   crs:Clarity2012=\"${params.clarity.toInt()}\"\n")
-                append("   crs:Dehaze=\"${params.dehaze.toInt()}\"\n")
-                if (params.colorProfile.isNotEmpty()) {
-                    append("   crs:CameraProfile=\"${escapeXml(params.colorProfile)}\"\n")
-                }
-                append("   crs:Sharpness=\"${params.sharpeningAmount.toInt()}\"\n")
-                append("   crs:LuminanceSmoothing=\"${params.luminanceNR.toInt()}\">\n")
+                append("  >\n")
                 append("  </rdf:Description>\n")
                 append(" </rdf:RDF>\n")
                 append("</x:xmpmeta>\n")

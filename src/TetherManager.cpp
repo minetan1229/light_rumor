@@ -315,15 +315,18 @@ bool TetherManager::handlePtpDataPacket(const uint8_t* packetData, size_t length
         }
         else if (header.code == ptp::EVENT_DEVICE_PROP_CHG) {
             std::cout << "[TetherManager] Received PTP Event: DevicePropChanged" << std::endl;
+            
+            // コールバック発火前にカメラから最新の設定を取得して m_impl->settings を更新する
+            CameraExposureSettings latestSettings = getCameraSettings();
+            
             SettingsCallback cb;
-            CameraExposureSettings settings;
             {
                 std::lock_guard<std::mutex> lock(m_impl->mutex);
+                m_impl->settings = latestSettings;
                 cb = m_impl->settingsCallback;
-                settings = m_impl->settings;
             }
             if (cb) {
-                cb(settings);
+                cb(latestSettings);
             }
         }
     }

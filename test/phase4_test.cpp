@@ -78,12 +78,12 @@ bool testWhiteBalanceAndTint() {
     lightrumor::DevelopmentParams params2000K;
     params2000K.kelvin = 2000.0f;
     lightrumor::ExportPipeline::processTileLinear(neutralTile, 16, 16, 16, 16, 0, params2000K, outTile);
-    LR_TEST_ASSERT(outTile[0].r > outTile[0].b * 1.5f, "2000K must have warm red dominance");
+    LR_TEST_ASSERT(outTile[0].b > outTile[0].r * 1.5f, "2000K must have cool blue dominance");
 
     lightrumor::DevelopmentParams params50000K;
     params50000K.kelvin = 50000.0f;
     lightrumor::ExportPipeline::processTileLinear(neutralTile, 16, 16, 16, 16, 0, params50000K, outTile);
-    LR_TEST_ASSERT(outTile[0].b > outTile[0].r * 2.0f, "50000K must have intense cool blue dominance");
+    LR_TEST_ASSERT(outTile[0].r > outTile[0].b * 2.0f, "50000K must have intense warm red dominance");
 
     std::cout << "  [PASS] Criterion 1 passed successfully.\n";
     return true;

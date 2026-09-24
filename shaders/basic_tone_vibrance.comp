@@ -48,21 +48,34 @@ layout(std430, set = 0, binding = 2) readonly buffer ToneCurveBuffer {
     float toneCurveLUT[256];
 };
 
-// Fast RGB to HSL
+// Fast RGB to HSL (HDR-safe)
 vec3 rgbToHsl(vec3 c) {
-    float cMin = min(min(c.r, c.g), c.b);
-    float cMax = max(max(c.r, c.g), c.b);
+    vec3 safeC = max(c, vec3(0.0));
+    float cMin = min(min(safeC.r, safeC.g), safeC.b);
+    float cMax = max(max(safeC.r, safeC.g), safeC.b);
     float delta = cMax - cMin;
     vec3 hsl = vec3(0.0, 0.0, (cMax + cMin) * 0.5);
 
-    if (delta > 1e-6) {
-        hsl.y = hsl.z < 0.5 ? (delta / (cMax + cMin)) : (delta / (2.0 - cMax - cMin));
-        if (c.r == cMax) {
-            hsl.x = (c.g - c.b) / delta + (c.g < c.b ? 6.0 : 0.0);
-        } else if (c.g == cMax) {
-            hsl.x = (c.b - c.r) / delta + 2.0;
+    if (delta > 1e-6 && cMax > 1e-6) {
+        if (hsl.z < 0.5) {
+            float denom = cMax + cMin;
+            hsl.y = delta / max(denom, 1e-5);
         } else {
-            hsl.x = (c.r - c.g) / delta + 4.0;
+            float denom = 2.0 - cMax - cMin;
+            if (denom <= 1e-5) {
+                hsl.y = delta / max(cMax, 1e-5);
+            } else {
+                hsl.y = delta / denom;
+            }
+        }
+        hsl.y = clamp(hsl.y, 0.0, 1.0);
+
+        if (safeC.r == cMax) {
+            hsl.x = (safeC.g - safeC.b) / delta + (safeC.g < safeC.b ? 6.0 : 0.0);
+        } else if (safeC.g == cMax) {
+            hsl.x = (safeC.b - safeC.r) / delta + 2.0;
+        } else {
+            hsl.x = (safeC.r - safeC.g) / delta + 4.0;
         }
         hsl.x /= 6.0;
     }

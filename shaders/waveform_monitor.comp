@@ -72,7 +72,7 @@ void main() {
 
     if (params.mode == 0) {
         // Mode 0: RGB Overlay (All channels across full width W)
-        int col = clamp(int((float(pixelCoord.x) / float(params.imageWidth)) * float(W)), 0, W - 1);
+        int col = clamp(int((float(pixelCoord.x) / float(max(1, params.imageWidth))) * float(W)), 0, W - 1);
         atomicAdd(waveR[yR * W + col], 1u);
         atomicAdd(waveG[yG * W + col], 1u);
         atomicAdd(waveB[yB * W + col], 1u);
@@ -80,7 +80,7 @@ void main() {
     else if (params.mode == 1) {
         // Mode 1: RGB Parade (Screen split horizontally into 3 partitions: Red, Green, Blue)
         int subW = W / 3;
-        int subCol = clamp(int((float(pixelCoord.x) / float(params.imageWidth)) * float(subW)), 0, subW - 1);
+        int subCol = clamp(int((float(pixelCoord.x) / float(max(1, params.imageWidth))) * float(subW)), 0, subW - 1);
         
         int colR = subCol;
         int colG = subW + subCol;
@@ -106,7 +106,7 @@ void main() {
         float luma = rgbToLuma(c);
         int yL = clamp(int(luma * float(H - 1)), 0, H - 1);
         yL = (H - 1) - yL;
-        int col = clamp(int((float(pixelCoord.x) / float(params.imageWidth)) * float(W)), 0, W - 1);
+        int col = clamp(int((float(pixelCoord.x) / float(max(1, params.imageWidth))) * float(W)), 0, W - 1);
         atomicAdd(waveR[yL * W + col], 1u);
         atomicAdd(waveG[yL * W + col], 1u);
         atomicAdd(waveB[yL * W + col], 1u);

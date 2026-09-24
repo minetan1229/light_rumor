@@ -524,10 +524,23 @@ bool testSoftProofingAndMasterExport() {
     LR_TEST_ASSERT(jpegOk, "Failed to write JPEG.");
     LR_TEST_ASSERT(std::filesystem::exists(jpegPath), "JPEG file does not exist.");
 
+    // Recipe D: Linear DNG Master
+    std::string dngPath = outDir + "/master_linear.dng";
+    bool dngOk = lightrumor::ImageWriter::writeLinearDNG(dngPath, rgb16.data(), width, height, &meta);
+    LR_TEST_ASSERT(dngOk, "Failed to write Linear DNG.");
+    LR_TEST_ASSERT(std::filesystem::exists(dngPath), "DNG file does not exist.");
+
+    // Verify DNG decodability via RawDecoder
+    lightrumor::RawDecoder dngDecoder;
+    bool readOk = dngDecoder.openFile(dngPath);
+    LR_TEST_ASSERT(readOk, "Failed to decode generated Linear DNG file via RawDecoder.");
+    LR_TEST_ASSERT(dngDecoder.getWidth() == width && dngDecoder.getHeight() == height, "DNG dimensions mismatch.");
+
     std::cout << "  ✓ Multi-Export Parallel Recipes Generated:\n";
     std::cout << "    - [1] 16-bit Master TIFF (AdobeRGB): " << tiffPath << " (" << std::filesystem::file_size(tiffPath) << " bytes)\n";
     std::cout << "    - [2] Web Master WebP (sRGB):        " << webpPath << " (" << std::filesystem::file_size(webpPath) << " bytes)\n";
     std::cout << "    - [3] SNS Watermarked JPEG (2048px): " << jpegPath << " (" << std::filesystem::file_size(jpegPath) << " bytes)\n";
+    std::cout << "    - [4] Linear DNG (TIFF-EP Raw):      " << dngPath << " (" << std::filesystem::file_size(dngPath) << " bytes)\n";
 
     std::cout << "  [PASS] Criterion 6 passed successfully.\n";
     return true;

@@ -102,6 +102,58 @@ struct JniGlobalRefGuard {
     }
 };
 
+template <typename JArrayType, typename JElementType>
+struct JniArrayGuard {
+    JNIEnv* env = nullptr;
+    JArrayType jarray = nullptr;
+    JElementType* elements = nullptr;
+    jint mode = JNI_ABORT;
+
+    JniArrayGuard(JNIEnv* e, JArrayType a, jint m = JNI_ABORT) : env(e), jarray(a), mode(m) {
+        if (env && jarray) {
+            init();
+        }
+    }
+    ~JniArrayGuard() {
+        release();
+    }
+    void init();
+    void release();
+    
+    JElementType* get() const { return elements; }
+    explicit operator bool() const { return elements != nullptr; }
+
+    JniArrayGuard(const JniArrayGuard&) = delete;
+    JniArrayGuard& operator=(const JniArrayGuard&) = delete;
+    JniArrayGuard(JniArrayGuard&& other) noexcept : env(other.env), jarray(other.jarray), elements(other.elements), mode(other.mode) {
+        other.elements = nullptr;
+        other.jarray = nullptr;
+        other.env = nullptr;
+    }
+    JniArrayGuard& operator=(JniArrayGuard&& other) noexcept {
+        if (this != &other) {
+            release();
+            env = other.env;
+            jarray = other.jarray;
+            elements = other.elements;
+            mode = other.mode;
+            other.elements = nullptr;
+            other.jarray = nullptr;
+            other.env = nullptr;
+        }
+        return *this;
+    }
+};
+
+template<> void JniArrayGuard<jbyteArray, jbyte>::init() { elements = env->GetByteArrayElements(jarray, nullptr); }
+template<> void JniArrayGuard<jbyteArray, jbyte>::release() { if (env && jarray && elements) { env->ReleaseByteArrayElements(jarray, elements, mode); elements = nullptr; } }
+
+template<> void JniArrayGuard<jintArray, jint>::init() { elements = env->GetIntArrayElements(jarray, nullptr); }
+template<> void JniArrayGuard<jintArray, jint>::release() { if (env && jarray && elements) { env->ReleaseIntArrayElements(jarray, elements, mode); elements = nullptr; } }
+
+template<> void JniArrayGuard<jfloatArray, jfloat>::init() { elements = env->GetFloatArrayElements(jarray, nullptr); }
+template<> void JniArrayGuard<jfloatArray, jfloat>::release() { if (env && jarray && elements) { env->ReleaseFloatArrayElements(jarray, elements, mode); elements = nullptr; } }
+
 jboolean Impl_nativeInit(JNIEnv* /*env*/, jobject /*thiz*/) {
     try {
         std::cout << "[JNI] LightRumorNativeEngine initialized." << std::endl;
@@ -123,6 +175,9 @@ jboolean Impl_nativeProcessRaw(
     jint jChromaSubsampling,
     jfloat jKelvin,
     jfloat jTint,
+    jfloat jShadowTintR,
+    jfloat jShadowTintG,
+    jfloat jShadowTintB,
     jfloat jExposureEV,
     jfloat jContrast,
     jfloat jHighlights,
@@ -131,12 +186,47 @@ jboolean Impl_nativeProcessRaw(
     jfloat jBlacks,
     jfloat jVibrance,
     jfloat jSaturation,
+    jfloat jDehaze,
+    jfloat jClarity,
+    jfloat jTexture,
     jboolean jIsMonochrome,
+    jfloatArray jMonochromeWeights,
+    jfloatArray jHslBands,
+    jfloatArray jPrimaryCalibration,
+    jfloatArray jSplitToning,
+    jfloatArray jToneCurveLUT,
     jfloat jLuminanceNR,
+    jfloat jLuminanceNRDetail,
+    jfloat jLuminanceNRContrast,
     jfloat jChromaNR,
+    jfloat jChromaNRDetail,
+    jfloat jChromaNRSmoothness,
     jfloat jSharpeningAmount,
+    jfloat jSharpeningRadius,
+    jfloat jSharpeningDetail,
+    jfloat jSharpeningMasking,
     jint jOutputColorSpace,
     jboolean jEnableDithering,
+    jboolean jEnableLensCorrection,
+    jfloat jDistortionCorrection,
+    jfloat jVignettingCorrection,
+    jfloat jChromaticAberration,
+    jfloat jDefringePurple,
+    jfloat jDefringeGreen,
+    jfloat jCropX,
+    jfloat jCropY,
+    jfloat jCropW,
+    jfloat jCropH,
+    jfloat jRotationDegrees,
+    jint jRotationSteps,
+    jboolean jFlipHorizontal,
+    jboolean jFlipVertical,
+    jfloat jPerspectiveVertical,
+    jfloat jPerspectiveHorizontal,
+    jfloat jDistortion,
+    jint jMaxLongEdge,
+    jboolean jEnableWatermark,
+    jstring jWatermarkText,
     jobject jCallback) {
 
     try {
@@ -162,6 +252,9 @@ jboolean Impl_nativeProcessRaw(
         light_rumor::DevelopmentParams params;
         params.kelvin = jKelvin;
         params.tint = jTint;
+        params.shadowTintR = jShadowTintR;
+        params.shadowTintG = jShadowTintG;
+        params.shadowTintB = jShadowTintB;
         params.exposureEV = jExposureEV;
         params.contrast = jContrast;
         params.highlights = jHighlights;
@@ -170,12 +263,112 @@ jboolean Impl_nativeProcessRaw(
         params.blacks = jBlacks;
         params.vibrance = jVibrance;
         params.saturation = jSaturation;
+        params.dehaze = jDehaze;
+        params.clarity = jClarity;
+        params.texture = jTexture;
         params.isMonochrome = (jIsMonochrome == JNI_TRUE);
+
+        if (jMonochromeWeights) {
+            jsize len = env->GetArrayLength(jMonochromeWeights);
+            if (len >= 8) {
+                JniArrayGuard<jfloatArray, jfloat> mwGuard(env, jMonochromeWeights);
+                if (mwGuard) {
+                    const jfloat* data = mwGuard.get();
+                    for (size_t i = 0; i < 8; ++i) {
+                        params.monochromeWeights[i] = data[i];
+                    }
+                }
+            }
+        }
+
+        if (jHslBands) {
+            jsize len = env->GetArrayLength(jHslBands);
+            if (len >= 24) {
+                JniArrayGuard<jfloatArray, jfloat> hslGuard(env, jHslBands);
+                if (hslGuard) {
+                    const jfloat* data = hslGuard.get();
+                    for (size_t i = 0; i < 8; ++i) {
+                        params.hslBands[i].hueShift = data[i * 3 + 0];
+                        params.hslBands[i].saturation = data[i * 3 + 1];
+                        params.hslBands[i].luminance = data[i * 3 + 2];
+                    }
+                }
+            }
+        }
+
+        if (jPrimaryCalibration) {
+            jsize len = env->GetArrayLength(jPrimaryCalibration);
+            if (len >= 6) {
+                JniArrayGuard<jfloatArray, jfloat> pcGuard(env, jPrimaryCalibration);
+                if (pcGuard) {
+                    const jfloat* data = pcGuard.get();
+                    params.primaryRed.hueShift = data[0];
+                    params.primaryRed.saturationShift = data[1];
+                    params.primaryGreen.hueShift = data[2];
+                    params.primaryGreen.saturationShift = data[3];
+                    params.primaryBlue.hueShift = data[4];
+                    params.primaryBlue.saturationShift = data[5];
+                }
+            }
+        }
+
+        if (jSplitToning) {
+            jsize len = env->GetArrayLength(jSplitToning);
+            if (len >= 5) {
+                JniArrayGuard<jfloatArray, jfloat> stGuard(env, jSplitToning);
+                if (stGuard) {
+                    const jfloat* data = stGuard.get();
+                    params.splitToning.highlightsHue = data[0];
+                    params.splitToning.highlightsSat = data[1];
+                    params.splitToning.shadowsHue = data[2];
+                    params.splitToning.shadowsSat = data[3];
+                    params.splitToning.balance = data[4];
+                }
+            }
+        }
+
+        if (jToneCurveLUT) {
+            jsize len = env->GetArrayLength(jToneCurveLUT);
+            if (len > 0) {
+                JniArrayGuard<jfloatArray, jfloat> tcGuard(env, jToneCurveLUT);
+                if (tcGuard) {
+                    const jfloat* data = tcGuard.get();
+                    params.toneCurveLUT.assign(data, data + len);
+                }
+            }
+        }
+
         params.luminanceNR = jLuminanceNR;
+        params.luminanceNRDetail = jLuminanceNRDetail;
+        params.luminanceNRContrast = jLuminanceNRContrast;
         params.chromaNR = jChromaNR;
+        params.chromaNRDetail = jChromaNRDetail;
+        params.chromaNRSmoothness = jChromaNRSmoothness;
         params.sharpeningAmount = jSharpeningAmount;
+        params.sharpeningRadius = jSharpeningRadius;
+        params.sharpeningDetail = jSharpeningDetail;
+        params.sharpeningMasking = jSharpeningMasking;
         params.outputColorSpace = static_cast<light_rumor::ColorSpace>(jOutputColorSpace);
         params.enableDithering = (jEnableDithering == JNI_TRUE);
+
+        params.lensCorrection.enableProfileCorrection = (jEnableLensCorrection == JNI_TRUE);
+        params.lensCorrection.distortionCorrection = jDistortionCorrection;
+        params.lensCorrection.vignettingCorrection = jVignettingCorrection;
+        params.lensCorrection.chromaticAberration = jChromaticAberration;
+        params.lensCorrection.defringePurple = jDefringePurple;
+        params.lensCorrection.defringeGreen = jDefringeGreen;
+
+        params.geometry.cropX = jCropX;
+        params.geometry.cropY = jCropY;
+        params.geometry.cropW = jCropW;
+        params.geometry.cropH = jCropH;
+        params.geometry.rotationDegrees = jRotationDegrees;
+        params.geometry.rotationSteps = jRotationSteps;
+        params.geometry.flipHorizontal = (jFlipHorizontal == JNI_TRUE);
+        params.geometry.flipVertical = (jFlipVertical == JNI_TRUE);
+        params.geometry.perspectiveVertical = jPerspectiveVertical;
+        params.geometry.perspectiveHorizontal = jPerspectiveHorizontal;
+        params.geometry.distortion = jDistortion;
 
         light_rumor::ExportOptions options;
         options.format = static_cast<light_rumor::ExportFormat>(jFormat);
@@ -184,6 +377,14 @@ jboolean Impl_nativeProcessRaw(
         options.embedExif = true;
         options.tileSize = 2048;
         options.tilePadding = 16;
+        options.maxLongEdge = jMaxLongEdge;
+        options.enableWatermark = (jEnableWatermark == JNI_TRUE);
+        if (jWatermarkText) {
+            JniStringUtfGuard watermarkChars(env, jWatermarkText);
+            if (watermarkChars) {
+                options.watermarkText = watermarkChars.c_str();
+            }
+        }
 
         jclass callbackClass = nullptr;
         jmethodID onProgressMethod = nullptr;
@@ -195,6 +396,10 @@ jboolean Impl_nativeProcessRaw(
             callbackClass = env->GetObjectClass(jCallback);
             if (callbackClass) {
                 onProgressMethod = env->GetMethodID(callbackClass, "onProgress", "(FLjava/lang/String;)V");
+                if (env->ExceptionCheck()) {
+                    env->ExceptionClear();
+                    onProgressMethod = nullptr;
+                }
                 env->DeleteLocalRef(callbackClass);
             }
             if (onProgressMethod && jvm) {
@@ -290,8 +495,9 @@ jintArray Impl_nativeComputeWaveform(
         int64_t requiredBytes = static_cast<int64_t>(jWidth) * static_cast<int64_t>(jHeight) * 4;
         if (static_cast<int64_t>(len) < requiredBytes) return nullptr;
 
-        jbyte* bytes = env->GetByteArrayElements(jRgbaBytes, nullptr);
-        if (!bytes) return nullptr;
+        JniArrayGuard<jbyteArray, jbyte> bytesGuard(env, jRgbaBytes, JNI_ABORT);
+        if (!bytesGuard) return nullptr;
+        jbyte* bytes = bytesGuard.get();
 
         light_rumor::WaveformEngine engine;
         light_rumor::WaveformData outData;
@@ -302,8 +508,6 @@ jintArray Impl_nativeComputeWaveform(
             jWaveW, jWaveH,
             outData
         );
-
-        env->ReleaseByteArrayElements(jRgbaBytes, bytes, JNI_ABORT);
 
         if (outData.rgbaPixels.empty()) return nullptr;
 
@@ -371,8 +575,9 @@ jintArray Impl_nativeApplyPoissonHeal(
         int64_t requiredPixels = static_cast<int64_t>(jWidth) * static_cast<int64_t>(jHeight);
         if (static_cast<int64_t>(len) < requiredPixels) return nullptr;
 
-        jint* pData = env->GetIntArrayElements(jPixels, nullptr);
-        if (!pData) return nullptr;
+        JniArrayGuard<jintArray, jint> pixelsGuard(env, jPixels, JNI_ABORT);
+        if (!pixelsGuard) return nullptr;
+        jint* pData = pixelsGuard.get();
 
         std::vector<light_rumor::FloatRGBA> fPixels(static_cast<size_t>(jWidth) * jHeight);
         for (size_t i = 0; i < fPixels.size(); ++i) {
@@ -383,7 +588,6 @@ jintArray Impl_nativeApplyPoissonHeal(
             float b = (c & 0xFF) / 255.0f;
             fPixels[i] = light_rumor::FloatRGBA(r, g, b, a);
         }
-        env->ReleaseIntArrayElements(jPixels, pData, JNI_ABORT);
 
         light_rumor::RetouchOperation op;
         op.isHeal = true;
@@ -433,8 +637,9 @@ jintArray Impl_nativeComputeFieldScope(
         int64_t requiredPixels = static_cast<int64_t>(jWidth) * static_cast<int64_t>(jHeight);
         if (static_cast<int64_t>(len) < requiredPixels) return nullptr;
 
-        jint* pData = env->GetIntArrayElements(jPixels, nullptr);
-        if (!pData) return nullptr;
+        JniArrayGuard<jintArray, jint> pixelsGuard(env, jPixels, JNI_ABORT);
+        if (!pixelsGuard) return nullptr;
+        jint* pData = pixelsGuard.get();
 
         size_t total = static_cast<size_t>(jWidth) * jHeight;
         std::vector<light_rumor::FloatRGBA> fPixels(total);
@@ -446,7 +651,6 @@ jintArray Impl_nativeComputeFieldScope(
             float b = (c & 0xFF) / 255.0f;
             fPixels[i] = light_rumor::FloatRGBA(r, g, b, a);
         }
-        env->ReleaseIntArrayElements(jPixels, pData, JNI_ABORT);
 
         std::vector<light_rumor::FloatRGBA> outPixels;
         if (jMode == 1) { // False Color
@@ -508,8 +712,9 @@ jintArray Impl_nativeApplySoftProof(
             }
         }
 
-        jint* pData = env->GetIntArrayElements(jPixels, nullptr);
-        if (!pData) return nullptr;
+        JniArrayGuard<jintArray, jint> pixelsGuard(env, jPixels, JNI_ABORT);
+        if (!pixelsGuard) return nullptr;
+        jint* pData = pixelsGuard.get();
 
         size_t total = static_cast<size_t>(jWidth) * jHeight;
         std::vector<light_rumor::FloatRGBA> fPixels(total);
@@ -521,7 +726,6 @@ jintArray Impl_nativeApplySoftProof(
             float b = (c & 0xFF) / 255.0f;
             fPixels[i] = light_rumor::FloatRGBA(r, g, b, a);
         }
-        env->ReleaseIntArrayElements(jPixels, pData, JNI_ABORT);
 
         light_rumor::SoftProofConfig config;
         config.paperProfilePath = profilePath;
@@ -635,17 +839,51 @@ JNIEXPORT jboolean JNICALL
 Java_com_lightrumor_LightRumorNativeEngine_nativeProcessRaw(
     JNIEnv* env, jobject thiz,
     jstring jInputPath, jstring jOutputPath, jint jFormat, jint jJpegQuality,
-    jint jChromaSubsampling, jfloat jKelvin, jfloat jTint, jfloat jExposureEV,
-    jfloat jContrast, jfloat jHighlights, jfloat jShadows, jfloat jWhites,
-    jfloat jBlacks, jfloat jVibrance, jfloat jSaturation, jboolean jIsMonochrome,
-    jfloat jLuminanceNR, jfloat jChromaNR, jfloat jSharpeningAmount,
-    jint jOutputColorSpace, jboolean jEnableDithering, jobject jCallback) {
+    jint jChromaSubsampling, jfloat jKelvin, jfloat jTint,
+    jfloat jShadowTintR, jfloat jShadowTintG, jfloat jShadowTintB,
+    jfloat jExposureEV, jfloat jContrast, jfloat jHighlights, jfloat jShadows,
+    jfloat jWhites, jfloat jBlacks, jfloat jVibrance, jfloat jSaturation,
+    jfloat jDehaze, jfloat jClarity, jfloat jTexture,
+    jboolean jIsMonochrome, jfloatArray jMonochromeWeights,
+    jfloatArray jHslBands, jfloatArray jPrimaryCalibration,
+    jfloatArray jSplitToning, jfloatArray jToneCurveLUT,
+    jfloat jLuminanceNR, jfloat jLuminanceNRDetail, jfloat jLuminanceNRContrast,
+    jfloat jChromaNR, jfloat jChromaNRDetail, jfloat jChromaNRSmoothness,
+    jfloat jSharpeningAmount, jfloat jSharpeningRadius,
+    jfloat jSharpeningDetail, jfloat jSharpeningMasking,
+    jint jOutputColorSpace, jboolean jEnableDithering,
+    jboolean jEnableLensCorrection, jfloat jDistortionCorrection,
+    jfloat jVignettingCorrection, jfloat jChromaticAberration,
+    jfloat jDefringePurple, jfloat jDefringeGreen,
+    jfloat jCropX, jfloat jCropY, jfloat jCropW, jfloat jCropH,
+    jfloat jRotationDegrees, jint jRotationSteps,
+    jboolean jFlipHorizontal, jboolean jFlipVertical,
+    jfloat jPerspectiveVertical, jfloat jPerspectiveHorizontal, jfloat jDistortion,
+    jint jMaxLongEdge, jboolean jEnableWatermark,
+    jstring jWatermarkText, jobject jCallback) {
     return Impl_nativeProcessRaw(env, thiz, jInputPath, jOutputPath, jFormat, jJpegQuality,
-                                jChromaSubsampling, jKelvin, jTint, jExposureEV,
-                                jContrast, jHighlights, jShadows, jWhites,
-                                jBlacks, jVibrance, jSaturation, jIsMonochrome,
-                                jLuminanceNR, jChromaNR, jSharpeningAmount,
-                                jOutputColorSpace, jEnableDithering, jCallback);
+                                jChromaSubsampling, jKelvin, jTint,
+                                jShadowTintR, jShadowTintG, jShadowTintB,
+                                jExposureEV, jContrast, jHighlights, jShadows,
+                                jWhites, jBlacks, jVibrance, jSaturation,
+                                jDehaze, jClarity, jTexture,
+                                jIsMonochrome, jMonochromeWeights,
+                                jHslBands, jPrimaryCalibration,
+                                jSplitToning, jToneCurveLUT,
+                                jLuminanceNR, jLuminanceNRDetail, jLuminanceNRContrast,
+                                jChromaNR, jChromaNRDetail, jChromaNRSmoothness,
+                                jSharpeningAmount, jSharpeningRadius,
+                                jSharpeningDetail, jSharpeningMasking,
+                                jOutputColorSpace, jEnableDithering,
+                                jEnableLensCorrection, jDistortionCorrection,
+                                jVignettingCorrection, jChromaticAberration,
+                                jDefringePurple, jDefringeGreen,
+                                jCropX, jCropY, jCropW, jCropH,
+                                jRotationDegrees, jRotationSteps,
+                                jFlipHorizontal, jFlipVertical,
+                                jPerspectiveVertical, jPerspectiveHorizontal, jDistortion,
+                                jMaxLongEdge, jEnableWatermark,
+                                jWatermarkText, jCallback);
 }
 
 JNIEXPORT jbyteArray JNICALL

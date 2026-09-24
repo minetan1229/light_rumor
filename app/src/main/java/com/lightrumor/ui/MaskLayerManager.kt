@@ -209,9 +209,9 @@ fun MaskLayerManager(
                     val selectedLayer = maskLayers.getOrNull(selectedLayerIndex)
                     StylusBrushCanvas(
                         activeLayer = selectedLayer,
-                        onStrokeAdded = { stroke ->
+                        onStrokeFinished = { newStrokes ->
                             if (selectedLayer != null) {
-                                val updatedStrokes = selectedLayer.brushStrokes + stroke
+                                val updatedStrokes = selectedLayer.brushStrokes + newStrokes
                                 val updatedLayer = selectedLayer.copy(
                                     type = MaskType.BRUSH,
                                     brushStrokes = updatedStrokes
@@ -564,13 +564,14 @@ private fun LocalSliderMini(
 @Composable
 private fun StylusBrushCanvas(
     activeLayer: MaskLayerState?,
-    onStrokeAdded: (BrushStrokePoint) -> Unit,
+    onStrokeFinished: (List<BrushStrokePoint>) -> Unit,
     onClearStrokes: () -> Unit
 ) {
     val colors = LightRumorTheme.colors
     var isEraserMode by remember { mutableStateOf(false) }
     var currentPressure by remember { mutableStateOf(1.0f) }
     var currentRadius by remember { mutableStateOf(25.0f) }
+    val currentStroke = remember { mutableStateListOf<BrushStrokePoint>() }
 
     Column(modifier = Modifier.fillMaxSize().padding(6.dp)) {
         Row(
@@ -646,6 +647,9 @@ private fun StylusBrushCanvas(
                         val action = motionEvent.actionMasked
 
                         if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_MOVE) {
+                            if (action == MotionEvent.ACTION_DOWN) {
+                                currentStroke.clear()
+                            }
                             val cw = canvasSize.width.toFloat()
                             val ch = canvasSize.height.toFloat()
                             if (cw > 10f && ch > 10f) {
@@ -659,7 +663,12 @@ private fun StylusBrushCanvas(
                                     flow = 0.8f,
                                     isEraser = isEraserMode
                                 )
-                                onStrokeAdded(stroke)
+                                currentStroke.add(stroke)
+                            }
+                        } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                            if (currentStroke.isNotEmpty()) {
+                                onStrokeFinished(currentStroke.toList())
+                                currentStroke.clear()
                             }
                         }
                         true
@@ -667,7 +676,7 @@ private fun StylusBrushCanvas(
             ) {
                 val cw = size.width
                 val ch = size.height
-                activeLayer?.brushStrokes?.forEach { pt ->
+                val drawPoint: (BrushStrokePoint) -> Unit = { pt ->
                     val effRadius = pt.radius * pt.pressure
                     val effAlpha = (pt.flow * pt.pressure).coerceIn(0.1f, 1.0f)
                     drawCircle(
@@ -676,6 +685,8 @@ private fun StylusBrushCanvas(
                         center = Offset(pt.x * cw, pt.y * ch)
                     )
                 }
+                activeLayer?.brushStrokes?.forEach(drawPoint)
+                currentStroke.forEach(drawPoint)
             }
         }
     }

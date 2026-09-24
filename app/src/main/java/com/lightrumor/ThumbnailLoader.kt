@@ -19,7 +19,8 @@ data class PhotoItem(
     val fileName: String = "",
     val isRaw: Boolean = false,
     var metadata: CullingItemMetadata = CullingItemMetadata(id = uri.toString(), filePath = filePath),
-    var developParams: DevelopmentParams = DevelopmentParams()
+    var developParams: DevelopmentParams = DevelopmentParams(),
+    var maskLayers: List<MaskLayerState> = emptyList()
 )
 
 data class CullingItemMetadata(
@@ -229,6 +230,7 @@ object ThumbnailLoader {
                     pfd.use {
                         val fd = it.fileDescriptor
                         BitmapFactory.decodeFileDescriptor(fd, null, options)
+                        android.system.Os.lseek(fd, 0, android.system.OsConstants.SEEK_SET)
                         options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight)
                         options.inJustDecodeBounds = false
                         options.inPreferredConfig = Bitmap.Config.ARGB_8888

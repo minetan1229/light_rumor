@@ -56,6 +56,7 @@ data class MultiExportProgress(
 class MultiExportRecipeManager(
     private val coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 ) {
+    private val isCancelled = java.util.concurrent.atomic.AtomicBoolean(false)
 
     companion object {
         // Standard Triple-Master Recipe Preset
@@ -118,7 +119,7 @@ class MultiExportRecipeManager(
 
             // Run recipes sequentially to prevent LMK (Low Memory Killer) kill on mobile
             for (recipe in recipes) {
-                if (!coroutineScope.isActive) break
+                if (!coroutineScope.isActive || isCancelled.get()) break
                 val ext = when (recipe.format) {
                     ExportFormat.TIFF16, ExportFormat.TIFF8 -> "tif"
                     ExportFormat.WebP -> "webp"
@@ -150,7 +151,10 @@ class MultiExportRecipeManager(
                     jpegQuality = recipe.quality,
                     chromaSubsampling = ChromaSubsampling.YUV444,
                     tileSize = 2048,
-                    tilePadding = 16
+                    tilePadding = 16,
+                    maxLongEdge = recipe.maxDimension,
+                    enableWatermark = recipe.enableWatermark,
+                    watermarkText = if (recipe.enableWatermark) watermark.formatExposureLine() else ""
                 )
 
                 // Execute export with full development parameters
@@ -161,7 +165,7 @@ class MultiExportRecipeManager(
                     params = recipeParams,
                     callback = object : ProgressCallback {
                         override fun onProgress(progressPercent: Float, statusMessage: String) {
-                            if (!coroutineScope.isActive) return
+                            if (!coroutineScope.isActive || isCancelled.get()) return
                             coroutineScope.launch(Dispatchers.Main) {
                                 progressListener(
                                     MultiExportProgress(
@@ -215,6 +219,7 @@ class MultiExportRecipeManager(
      * Cancels any running multi-export jobs and releases coroutine resources.
      */
     fun cancel() {
+        isCancelled.set(true)
         coroutineScope.cancel()
     }
 }

@@ -173,43 +173,14 @@ bool FocusStacker::stackMedian(const std::vector<std::vector<FloatRGBA>>& frames
 
     const size_t midIdx = numFrames / 2;
 
-    int numThreads = omp_get_max_threads();
-    std::vector<std::vector<float>> threadRVals(numThreads);
-    std::vector<std::vector<float>> threadGVals(numThreads);
-    std::vector<std::vector<float>> threadBVals(numThreads);
-    if (numFrames > 128) {
-        for (int i = 0; i < numThreads; ++i) {
-            threadRVals[i].resize(numFrames);
-            threadGVals[i].resize(numFrames);
-            threadBVals[i].resize(numFrames);
-        }
-    }
+    #pragma omp parallel
+    {
+        std::vector<float> rVals(numFrames);
+        std::vector<float> gVals(numFrames);
+        std::vector<float> bVals(numFrames);
 
-    #pragma omp parallel for schedule(static)
-    for (int64_t idx = 0; idx < static_cast<int64_t>(total); ++idx) {
-        if (numFrames <= 128) {
-            float rVals[128];
-            float gVals[128];
-            float bVals[128];
-
-            for (size_t i = 0; i < numFrames; ++i) {
-                const auto& p = frames[i][idx];
-                rVals[i] = p.r;
-                gVals[i] = p.g;
-                bVals[i] = p.b;
-            }
-
-            std::nth_element(rVals, rVals + midIdx, rVals + numFrames);
-            std::nth_element(gVals, gVals + midIdx, gVals + numFrames);
-            std::nth_element(bVals, bVals + midIdx, bVals + numFrames);
-
-            outComposite[idx] = FloatRGBA(rVals[midIdx], gVals[midIdx], bVals[midIdx], 1.0f);
-        } else {
-            int tid = std::clamp(omp_get_thread_num(), 0, static_cast<int>(threadRVals.size()) - 1);
-            auto& rVals = threadRVals[tid];
-            auto& gVals = threadGVals[tid];
-            auto& bVals = threadBVals[tid];
-
+        #pragma omp for schedule(static)
+        for (int64_t idx = 0; idx < static_cast<int64_t>(total); ++idx) {
             for (size_t i = 0; i < numFrames; ++i) {
                 const auto& p = frames[i][idx];
                 rVals[i] = p.r;

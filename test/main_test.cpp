@@ -171,18 +171,18 @@ bool testColorToneAndDithering() {
     std::vector<lightrumor::FloatRGBA> inTile(9, neutralPixel);
     std::vector<lightrumor::FloatRGBA> outTile;
 
-    // Test Kelvin change: Warm (3500K) vs Cool (8000K)
+    // Test Kelvin change: Warm (8000K) vs Cool (3500K)
     lightrumor::DevelopmentParams warmParams;
-    warmParams.kelvin = 3500.0f; // Warm -> Red higher, Blue lower
+    warmParams.kelvin = 8000.0f; // Warm -> Red higher, Blue lower
     lightrumor::ExportPipeline::processTileLinear(inTile, 3, 3, 1, 1, 1, warmParams, outTile);
-    LR_TEST_ASSERT(outTile[0].r > outTile[0].b, "Warm WB should have higher Red gain than Blue");
-    std::cout << "  ✓ Warm WB (3500K): R=" << outTile[0].r << ", B=" << outTile[0].b << " (R > B confirmed)\n";
+    LR_TEST_ASSERT(outTile[0].r > outTile[0].b, "Warm WB (8000K) should have higher Red gain than Blue");
+    std::cout << "  ✓ Warm WB (8000K): R=" << outTile[0].r << ", B=" << outTile[0].b << " (R > B confirmed)\n";
 
     lightrumor::DevelopmentParams coolParams;
-    coolParams.kelvin = 8000.0f; // Cool -> Blue higher, Red lower
+    coolParams.kelvin = 3500.0f; // Cool -> Blue higher, Red lower
     lightrumor::ExportPipeline::processTileLinear(inTile, 3, 3, 1, 1, 1, coolParams, outTile);
-    LR_TEST_ASSERT(outTile[0].b > outTile[0].r, "Cool WB should have higher Blue gain than Red");
-    std::cout << "  ✓ Cool WB (8000K): R=" << outTile[0].r << ", B=" << outTile[0].b << " (B > R confirmed)\n";
+    LR_TEST_ASSERT(outTile[0].b > outTile[0].r, "Cool WB (3500K) should have higher Blue gain than Red");
+    std::cout << "  ✓ Cool WB (3500K): R=" << outTile[0].r << ", B=" << outTile[0].b << " (B > R confirmed)\n";
 
     // Test Exposure: +1 EV should double linear value
     lightrumor::DevelopmentParams expParams;
@@ -466,11 +466,73 @@ bool testTileRenderingOOMAvoidance() {
 }
 
 // -------------------------------------------------------------------------
+// Test 7: Export with Rotation, Flip, ToneCurve & Primary Calibration
+// -------------------------------------------------------------------------
+bool testExportWithRotationAndFullParams() {
+    std::cout << "\n=======================================================\n";
+    std::cout << "▶ [Test 7/7] Export with Rotation, Flip, ToneCurve & Primary Calibration\n";
+    std::cout << "=======================================================\n";
+
+    int testW = 256;
+    int testH = 128;
+    lightrumor::RawDecoder decoder;
+    lightrumor::ExifMetadata meta;
+    meta.make = "Sony";
+    meta.model = "ILCE-7RM5";
+    bool genOk = decoder.generateSyntheticRaw(testW, testH, meta);
+    LR_TEST_ASSERT(genOk, "Failed to generate synthetic RAW");
+
+    lightrumor::DevelopmentParams params;
+    params.geometry.cropX = 0.1f;
+    params.geometry.cropY = 0.1f;
+    params.geometry.cropW = 0.8f;
+    params.geometry.cropH = 0.8f;
+    params.geometry.flipHorizontal = true;
+    params.geometry.flipVertical = true;
+    params.geometry.rotationSteps = 1; // 90° CW
+    params.geometry.rotationDegrees = 5.0f;
+
+    // Extended develop params
+    params.primaryRed.hueShift = 10.0f;
+    params.primaryRed.saturationShift = 15.0f;
+    params.primaryGreen.hueShift = -5.0f;
+    params.primaryBlue.saturationShift = 8.0f;
+    params.toneCurveLUT.resize(256);
+    for (int i = 0; i < 256; ++i) {
+        params.toneCurveLUT[i] = std::pow(i / 255.0f, 1.2f);
+    }
+    params.sharpeningAmount = 50.0f;
+    params.sharpeningRadius = 1.2f;
+    params.sharpeningDetail = 30.0f;
+    params.sharpeningMasking = 25.0f;
+
+    lightrumor::ExportPipeline pipeline;
+    lightrumor::ExportOptions opt;
+    opt.format = lightrumor::ExportFormat::JPEG;
+    opt.jpegQuality = 95;
+    std::string outPath = "test_output_geom_params.jpg";
+
+    bool ok = pipeline.processImage(decoder, params, opt, outPath);
+    LR_TEST_ASSERT(ok, "Export with rotation/flip/params failed");
+
+    std::ifstream outF(outPath, std::ios::binary | std::ios::ate);
+    LR_TEST_ASSERT(outF.is_open(), "Could not open generated output JPEG");
+    size_t outSize = static_cast<size_t>(outF.tellg());
+    LR_TEST_ASSERT(outSize > 1000, "Output JPEG too small");
+    std::cout << "  ✓ Verified export with Flip, 90° rotation, fine tilt and tone curve! Size: " << outSize << " bytes\n";
+
+    std::remove(outPath.c_str());
+
+    std::cout << "  [PASS] Test 7 passed successfully.\n";
+    return true;
+}
+
+// -------------------------------------------------------------------------
 // Main Entry Point
 // -------------------------------------------------------------------------
 int main() {
     std::cout << "=======================================================\n";
-    std::cout << "  light_rumor - PHASE 1 VERIFICATION SUITE\n";
+    std::cout << "  light_rumor - PHASE 1 ARCHITECTURAL VERIFICATION\n";
     std::cout << "=======================================================\n";
 
     bool allPassed = true;
@@ -505,9 +567,14 @@ int main() {
         allPassed = false;
     }
 
+    if (!testExportWithRotationAndFullParams()) {
+        std::cerr << "FAILED: Test 7 (Export with Rotation, Flip, ToneCurve & Primary Calibration)\n";
+        allPassed = false;
+    }
+
     std::cout << "\n=======================================================\n";
     if (allPassed) {
-        std::cout << "  ★ ALL 6 PHASE 1 ACCEPTANCE CRITERIA PASSED! ★\n";
+        std::cout << "  ★ ALL TESTS (INCLUDING ROTATION/PARAMS EXPORT) PASSED! ★\n";
         std::cout << "=======================================================\n";
         return 0;
     } else {

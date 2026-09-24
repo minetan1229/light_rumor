@@ -14,22 +14,37 @@ inline float smoothstep(float edge0, float edge1, float x) {
 }
 
 inline void rgbToHsl(float r, float g, float b, float& h, float& s, float& l) {
-    float maxVal = std::max({r, g, b});
-    float minVal = std::min({r, g, b});
+    float safeR = std::max(0.0f, r);
+    float safeG = std::max(0.0f, g);
+    float safeB = std::max(0.0f, b);
+    float maxVal = std::max({safeR, safeG, safeB});
+    float minVal = std::min({safeR, safeG, safeB});
     float delta = maxVal - minVal;
     l = (maxVal + minVal) * 0.5f;
 
-    if (delta < 1e-6f) {
+    if (delta < 1e-6f || maxVal < 1e-6f) {
         h = 0.0f;
         s = 0.0f;
     } else {
-        s = (l < 0.5f) ? (delta / (maxVal + minVal)) : (delta / (2.0f - maxVal - minVal));
-        if (r == maxVal) {
-            h = (g - b) / delta + (g < b ? 6.0f : 0.0f);
-        } else if (g == maxVal) {
-            h = (b - r) / delta + 2.0f;
+        if (l < 0.5f) {
+            float denom = maxVal + minVal;
+            s = delta / std::max(denom, 1e-5f);
         } else {
-            h = (r - g) / delta + 4.0f;
+            float denom = 2.0f - maxVal - minVal;
+            if (denom <= 1e-5f) {
+                s = delta / std::max(maxVal, 1e-5f);
+            } else {
+                s = delta / denom;
+            }
+        }
+        s = std::clamp(s, 0.0f, 1.0f);
+
+        if (safeR == maxVal) {
+            h = (safeG - safeB) / delta + (safeG < safeB ? 6.0f : 0.0f);
+        } else if (safeG == maxVal) {
+            h = (safeB - safeR) / delta + 2.0f;
+        } else {
+            h = (safeR - safeG) / delta + 4.0f;
         }
         h *= 60.0f; // 0 to 360 degrees
     }

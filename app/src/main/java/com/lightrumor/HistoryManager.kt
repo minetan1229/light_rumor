@@ -37,7 +37,14 @@ data class HistoryBranch(
  * - Snapshot Branching: previous edits are NEVER destroyed when branching from a past step
  * - Zero AI dependencies, zero emojis.
  */
-class HistoryManager(initialParams: DevelopmentParams = DevelopmentParams()) {
+class HistoryManager(
+    initialParams: DevelopmentParams = DevelopmentParams(),
+    initialMasks: List<MaskLayerState> = emptyList()
+) {
+
+    companion object {
+        const val MAX_HISTORY_SIZE = 100
+    }
 
     private val nodes = mutableMapOf<String, HistoryNode>()
     private val branches = mutableListOf<HistoryBranch>()
@@ -50,7 +57,7 @@ class HistoryManager(initialParams: DevelopmentParams = DevelopmentParams()) {
             parentId = null,
             actionLabel = "Initial State",
             params = initialParams.deepCopy(),
-            masks = emptyList(),
+            masks = initialMasks.map { it.deepCopy() },
             branchId = 0,
             stepIndex = 0
         )
@@ -113,6 +120,8 @@ class HistoryManager(initialParams: DevelopmentParams = DevelopmentParams()) {
         // Update branch leaf
         branches.find { it.branchId == assignedBranchId }?.activeLeafNodeId = newNode.id
 
+        evictNodesIfNeeded()
+
         return newNode
     }
 
@@ -153,7 +162,8 @@ class HistoryManager(initialParams: DevelopmentParams = DevelopmentParams()) {
         var curr = getCurrentNode()
         var count = 0
         while (curr != null && curr.parentId != null && count < steps) {
-            curr = nodes[curr.parentId]
+            val parent = nodes[curr.parentId] ?: break
+            curr = parent
             count++
         }
         if (curr != null) {
@@ -185,7 +195,10 @@ class HistoryManager(initialParams: DevelopmentParams = DevelopmentParams()) {
 
     fun getCurrentNode(): HistoryNode? = nodes[currentNodeId]
 
-    fun canUndo(): Boolean = (nodes[currentNodeId]?.parentId != null)
+    fun canUndo(): Boolean {
+        val parentId = nodes[currentNodeId]?.parentId ?: return false
+        return nodes.containsKey(parentId)
+    }
 
     fun canRedo(): Boolean = (nodes[currentNodeId]?.childrenIds?.isNotEmpty() == true)
 
@@ -227,5 +240,39 @@ class HistoryManager(initialParams: DevelopmentParams = DevelopmentParams()) {
     }
 
     fun getTotalNodeCount(): Int = nodes.size
+
+    private fun evictNodesIfNeeded() {
+        if (nodes.size <= MAX_HISTORY_SIZE) return
+
+        // MAX_HISTORY_SIZE を超えた場合のみ、最も古いノードから退避
+        val sortedNodes = nodes.values
+            .filter { it.id != currentNodeId }
+            .sortedBy { it.timestamp }
+
+        val excess = nodes.size - MAX_HISTORY_SIZE
+        for (i in 0 until excess) {
+            if (i >= sortedNodes.size) break
+            val nodeToRemove = sortedNodes[i]
+            val nodeId = nodeToRemove.id
+            nodes.remove(nodeId)
+
+            // 親ノードの childrenIds から削除対象を除去
+            nodeToRemove.parentId?.let { pid ->
+                nodes[pid]?.let { parent ->
+                    nodes[pid] = parent.copy(childrenIds = parent.childrenIds - nodeId)
+                }
+            }
+
+            // 子ノードの parentId をクリア
+            nodeToRemove.childrenIds.forEach { cid ->
+                nodes[cid]?.let { child ->
+                    nodes[cid] = child.copy(parentId = null)
+                }
+            }
+        }
+
+        // 存在しなくなったノードを指すブランチを整理
+        branches.removeAll { !nodes.containsKey(it.activeLeafNodeId) && !nodes.containsKey(it.rootForkNodeId) }
+    }
 }
 

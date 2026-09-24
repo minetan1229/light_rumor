@@ -134,12 +134,20 @@ fun CullingScreen(
         mutableStateOf(cacheManager.getFromMemory(currentItem))
     }
     var metaUpdateTrigger by remember(currentIndex) { mutableStateOf(0) }
+    val activeUri by rememberUpdatedState(currentItem.uri)
 
-    // Load and prefetch whenever index changes
-    LaunchedEffect(currentIndex) {
+    // Load and prefetch whenever currentItem changes
+    LaunchedEffect(currentItem.uri) {
+        val targetUri = currentItem.uri
+        val mem = cacheManager.getFromMemory(currentItem)
+        currentBitmap = mem
         cacheManager.prefetchAround(currentIndex, items, windowSize = 5)
-        cacheManager.loadBitmap(currentItem) { bmp ->
-            currentBitmap = bmp
+        if (mem == null) {
+            cacheManager.loadBitmap(currentItem) { bmp ->
+                if (activeUri == targetUri) {
+                    currentBitmap = bmp
+                }
+            }
         }
     }
 
@@ -338,6 +346,7 @@ fun CullingScreen(
                 .padding(horizontal = 14.dp, vertical = 8.dp)
         ) {
             // Metadata EXIF telemetry strip
+            val trigger = metaUpdateTrigger
             val meta = currentItem.metadata
             var editingField by remember { mutableStateOf<String?>(null) }
             var editValue by remember { mutableStateOf("") }

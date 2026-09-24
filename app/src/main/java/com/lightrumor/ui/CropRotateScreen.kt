@@ -396,6 +396,16 @@ fun CropRotateScreen(
                     },
                 contentAlignment = Alignment.Center
             ) {
+                androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                    if (rulerStart != Offset.Zero || rulerCurrent != Offset.Zero) {
+                        drawLine(
+                            color = colors.accentAmber,
+                            start = rulerStart,
+                            end = rulerCurrent,
+                            strokeWidth = 3.dp.toPx()
+                        )
+                    }
+                }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = "傾いた水平線に沿ってドラッグ",

@@ -40,149 +40,261 @@ void RawDecoder::close() {
 #endif
 }
 
+namespace {
+
+inline uint16_t readU16(const uint8_t* p, bool le) {
+    return le ? static_cast<uint16_t>(p[0] | (p[1] << 8))
+              : static_cast<uint16_t>((p[0] << 8) | p[1]);
+}
+
+inline uint32_t readU32(const uint8_t* p, bool le) {
+    return le ? (static_cast<uint32_t>(p[0]) |
+                (static_cast<uint32_t>(p[1]) << 8) |
+                (static_cast<uint32_t>(p[2]) << 16) |
+                (static_cast<uint32_t>(p[3]) << 24))
+              : ((static_cast<uint32_t>(p[0]) << 24) |
+                (static_cast<uint32_t>(p[1]) << 16) |
+                (static_cast<uint32_t>(p[2]) << 8) |
+                static_cast<uint32_t>(p[3]));
+}
+
+bool decodeTiffDngInternal(const uint8_t* data, size_t size,
+                           int32_t& outW, int32_t& outH,
+                           std::vector<FloatRGBA>& outLinearBuffer,
+                           ExifMetadata& outMeta) {
+    if (!data || size < 16) return false;
+    bool le = false;
+    if (data[0] == 'I' && data[1] == 'I' && data[2] == 0x2A && data[3] == 0x00) {
+        le = true;
+    } else if (data[0] == 'M' && data[1] == 'M' && data[2] == 0x00 && data[3] == 0x2A) {
+        le = false;
+    } else {
+        return false;
+    }
+
+    size_t ifdOffset = static_cast<size_t>(readU32(data + 4, le));
+    if (ifdOffset > size || ifdOffset + 2 > size) return false;
+
+    uint16_t numEntries = readU16(data + ifdOffset, le);
+    size_t ifdEntriesSize = static_cast<size_t>(numEntries) * 12;
+    if (ifdOffset + 2 > size || ifdOffset + 2 + ifdEntriesSize > size) return false;
+
+    uint32_t width = 0, height = 0;
+    uint32_t bitsPerSample = 8;
+    uint32_t samplesPerPixel = 3;
+    uint32_t stripOffset = 0;
+    uint32_t compression = 1;
+
+    for (uint16_t i = 0; i < numEntries; ++i) {
+        const uint8_t* entry = data + ifdOffset + 2 + static_cast<size_t>(i) * 12;
+        uint16_t tag = readU16(entry, le);
+        uint16_t type = readU16(entry + 2, le);
+        uint32_t count = readU32(entry + 4, le);
+        uint32_t val = (type == 3) ? readU16(entry + 8, le) : readU32(entry + 8, le);
+
+        if (tag == 0x0100) width = val;
+        else if (tag == 0x0101) height = val;
+        else if (tag == 0x0102) {
+            if (count == 1) bitsPerSample = val;
+            else if (static_cast<size_t>(val) + 2 <= size) bitsPerSample = readU16(data + val, le);
+        }
+        else if (tag == 0x0103) compression = val;
+        else if (tag == 0x0111) stripOffset = val;
+        else if (tag == 0x0115) samplesPerPixel = val;
+    }
+
+    if (width == 0 || height == 0 || compression != 1) return false;
+    if (width > 16384 || height > 16384) return false;
+    if (samplesPerPixel == 0 || samplesPerPixel > 4) return false;
+    if (bitsPerSample != 8 && bitsPerSample != 16) return false;
+
+    uint64_t totalPixels = static_cast<uint64_t>(width) * static_cast<uint64_t>(height);
+    if (totalPixels > 200000000ULL) return false;
+
+    size_t pixelCount = static_cast<size_t>(totalPixels);
+    size_t bytesPerSample = (bitsPerSample <= 8) ? 1 : 2;
+    uint64_t reqBytes64 = totalPixels * samplesPerPixel * bytesPerSample;
+    if (static_cast<size_t>(stripOffset) > size || reqBytes64 > static_cast<uint64_t>(size - stripOffset)) return false;
+
+    outLinearBuffer.resize(pixelCount);
+    const uint8_t* src = data + stripOffset;
+
+    if (bytesPerSample == 2) {
+        for (size_t i = 0; i < pixelCount; ++i) {
+            if (samplesPerPixel >= 3) {
+                float r = static_cast<float>(readU16(src + (i * samplesPerPixel + 0) * 2, le)) / 65535.0f;
+                float g = static_cast<float>(readU16(src + (i * samplesPerPixel + 1) * 2, le)) / 65535.0f;
+                float b = static_cast<float>(readU16(src + (i * samplesPerPixel + 2) * 2, le)) / 65535.0f;
+                outLinearBuffer[i] = FloatRGBA(r, g, b, 1.0f);
+            } else {
+                float v = static_cast<float>(readU16(src + i * 2, le)) / 65535.0f;
+                outLinearBuffer[i] = FloatRGBA(v, v, v, 1.0f);
+            }
+        }
+    } else {
+        for (size_t i = 0; i < pixelCount; ++i) {
+            if (samplesPerPixel >= 3) {
+                float r = static_cast<float>(src[i * samplesPerPixel + 0]) / 255.0f;
+                float g = static_cast<float>(src[i * samplesPerPixel + 1]) / 255.0f;
+                float b = static_cast<float>(src[i * samplesPerPixel + 2]) / 255.0f;
+                outLinearBuffer[i] = FloatRGBA(r, g, b, 1.0f);
+            } else {
+                float v = static_cast<float>(src[i]) / 255.0f;
+                outLinearBuffer[i] = FloatRGBA(v, v, v, 1.0f);
+            }
+        }
+    }
+
+    outW = static_cast<int32_t>(width);
+    outH = static_cast<int32_t>(height);
+    outMeta.make = "DNG/TIFF";
+    outMeta.model = "LinearRaw";
+    return true;
+}
+
+} // namespace
+
 bool RawDecoder::openFile(const std::string& filePath) {
     close();
 
 #if defined(LIGHT_RUMOR_ENABLE_LIBRAW)
     int ret = m_impl->rawProcessor.open_file(filePath.c_str());
-    if (ret != LIBRAW_SUCCESS) {
-        std::cerr << "[RawDecoder] LibRaw open_file failed: " << libraw_strerror(ret) << std::endl;
-        return false;
+    if (ret == LIBRAW_SUCCESS) {
+        ret = m_impl->rawProcessor.unpack();
+        if (ret == LIBRAW_SUCCESS) {
+            const auto& idata = m_impl->rawProcessor.imgdata.idata;
+            const auto& other = m_impl->rawProcessor.imgdata.other;
+            const auto& lens = m_impl->rawProcessor.imgdata.lens;
+
+            m_metadata.make = idata.make ? idata.make : "Camera";
+            m_metadata.model = idata.model ? idata.model : "RawModel";
+            m_metadata.lensModel = lens.Lens ? lens.Lens : "Standard Lens";
+            m_metadata.isoSpeed = static_cast<uint32_t>(other.iso_speed);
+            m_metadata.exposureTime = other.shutter > 0 ? other.shutter : 1.0 / 250.0;
+            m_metadata.fNumber = other.aperture > 0 ? other.aperture : 2.8;
+            m_metadata.focalLength = other.focal_len > 0 ? other.focal_len : 50.0;
+
+            m_impl->rawProcessor.imgdata.params.output_bps = 16;
+            m_impl->rawProcessor.imgdata.params.gamm[0] = 1.0f;
+            m_impl->rawProcessor.imgdata.params.gamm[1] = 1.0f;
+            m_impl->rawProcessor.imgdata.params.no_auto_bright = 1;
+            m_impl->rawProcessor.imgdata.params.use_camera_wb = 0;
+            m_impl->rawProcessor.imgdata.params.output_color = 0;
+
+            ret = m_impl->rawProcessor.dcraw_process();
+            if (ret == LIBRAW_SUCCESS) {
+                libraw_processed_image_t* image = m_impl->rawProcessor.dcraw_make_mem_image(&ret);
+                if (image && image->type == LIBRAW_IMAGE_BITMAP) {
+                    m_width = image->width;
+                    m_height = image->height;
+                    m_rawWidth = m_width;
+                    m_rawHeight = m_height;
+
+                    const size_t totalPixels = static_cast<size_t>(m_width) * static_cast<size_t>(m_height);
+                    m_linearBuffer.resize(totalPixels);
+                    const uint16_t* src16 = reinterpret_cast<const uint16_t*>(image->data);
+
+                    for (size_t i = 0; i < totalPixels; ++i) {
+                        float r = static_cast<float>(src16[i * 3 + 0]) / 65535.0f;
+                        float g = static_cast<float>(src16[i * 3 + 1]) / 65535.0f;
+                        float b = static_cast<float>(src16[i * 3 + 2]) / 65535.0f;
+                        m_linearBuffer[i] = FloatRGBA(r, g, b, 1.0f);
+                    }
+
+                    LibRaw::dcraw_clear_mem(image);
+                    m_isLoaded = true;
+                    return true;
+                }
+                if (image) LibRaw::dcraw_clear_mem(image);
+            }
+        }
+        m_impl->rawProcessor.recycle();
     }
-
-    ret = m_impl->rawProcessor.unpack();
-    if (ret != LIBRAW_SUCCESS) {
-        std::cerr << "[RawDecoder] LibRaw unpack failed: " << libraw_strerror(ret) << std::endl;
-        return false;
-    }
-
-    // Extract Exif metadata
-    const auto& idata = m_impl->rawProcessor.imgdata.idata;
-    const auto& other = m_impl->rawProcessor.imgdata.other;
-    const auto& lens = m_impl->rawProcessor.imgdata.lens;
-
-    m_metadata.make = idata.make ? idata.make : "Camera";
-    m_metadata.model = idata.model ? idata.model : "RawModel";
-    m_metadata.lensModel = lens.Lens ? lens.Lens : "Standard Lens";
-    m_metadata.isoSpeed = static_cast<uint32_t>(other.iso_speed);
-    m_metadata.exposureTime = other.shutter > 0 ? other.shutter : 1.0 / 250.0;
-    m_metadata.fNumber = other.aperture > 0 ? other.aperture : 2.8;
-    m_metadata.focalLength = other.focal_len > 0 ? other.focal_len : 50.0;
-
-    // Configure 16-bit linear demosaic without camera tone curve
-    m_impl->rawProcessor.imgdata.params.output_bps = 16;
-    m_impl->rawProcessor.imgdata.params.gamm[0] = 1.0f; // Linear gamma
-    m_impl->rawProcessor.imgdata.params.gamm[1] = 1.0f;
-    m_impl->rawProcessor.imgdata.params.no_auto_bright = 1;
-    m_impl->rawProcessor.imgdata.params.use_camera_wb = 0; // Pure sensor linear
-    m_impl->rawProcessor.imgdata.params.output_color = 0;   // Raw color space
-
-    ret = m_impl->rawProcessor.dcraw_process();
-    if (ret != LIBRAW_SUCCESS) {
-        std::cerr << "[RawDecoder] dcraw_process failed: " << libraw_strerror(ret) << std::endl;
-        return false;
-    }
-
-    libraw_processed_image_t* image = m_impl->rawProcessor.dcraw_make_mem_image(&ret);
-    if (!image || image->type != LIBRAW_IMAGE_BITMAP) {
-        std::cerr << "[RawDecoder] dcraw_make_mem_image failed" << std::endl;
-        if (image) LibRaw::dcraw_clear_mem(image);
-        return false;
-    }
-
-    m_width = image->width;
-    m_height = image->height;
-    m_rawWidth = m_width;
-    m_rawHeight = m_height;
-
-    // Convert 16-bit linear RGB to 32-bit linear float RGBA [0.0, 1.0]
-    const size_t totalPixels = static_cast<size_t>(m_width) * static_cast<size_t>(m_height);
-    m_linearBuffer.resize(totalPixels);
-    const uint16_t* src16 = reinterpret_cast<const uint16_t*>(image->data);
-
-    for (size_t i = 0; i < totalPixels; ++i) {
-        float r = static_cast<float>(src16[i * 3 + 0]) / 65535.0f;
-        float g = static_cast<float>(src16[i * 3 + 1]) / 65535.0f;
-        float b = static_cast<float>(src16[i * 3 + 2]) / 65535.0f;
-        m_linearBuffer[i] = FloatRGBA(r, g, b, 1.0f);
-    }
-
-    LibRaw::dcraw_clear_mem(image);
-    m_isLoaded = true;
-    return true;
-#else
-    (void)filePath;
-    std::cerr << "[RawDecoder] LibRaw not enabled in this build. Please provide synthetic raw or enable LibRaw." << std::endl;
-    return false;
 #endif
+
+    // Fallback: Read file into memory and decode via built-in DNG/TIFF parser
+    std::ifstream file(filePath, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+        std::cerr << "[RawDecoder] Cannot open RAW file: " << filePath << std::endl;
+        return false;
+    }
+    std::streamsize size = file.tellg();
+    if (size <= 0) return false;
+    std::vector<uint8_t> buffer(static_cast<size_t>(size));
+    file.seekg(0);
+    file.read(reinterpret_cast<char*>(buffer.data()), size);
+    file.close();
+
+    return openBuffer(buffer.data(), buffer.size());
 }
 
 bool RawDecoder::openBuffer(const uint8_t* data, size_t size) {
     close();
 #if defined(LIGHT_RUMOR_ENABLE_LIBRAW)
     int ret = m_impl->rawProcessor.open_buffer(data, size);
-    if (ret != LIBRAW_SUCCESS) return false;
-    ret = m_impl->rawProcessor.unpack();
-    if (ret != LIBRAW_SUCCESS) return false;
+    if (ret == LIBRAW_SUCCESS) {
+        ret = m_impl->rawProcessor.unpack();
+        if (ret == LIBRAW_SUCCESS) {
+            const auto& idata = m_impl->rawProcessor.imgdata.idata;
+            const auto& other = m_impl->rawProcessor.imgdata.other;
+            const auto& lens = m_impl->rawProcessor.imgdata.lens;
 
-    // Extract Exif metadata
-    const auto& idata = m_impl->rawProcessor.imgdata.idata;
-    const auto& other = m_impl->rawProcessor.imgdata.other;
-    const auto& lens = m_impl->rawProcessor.imgdata.lens;
+            m_metadata.make = idata.make ? idata.make : "Camera";
+            m_metadata.model = idata.model ? idata.model : "RawModel";
+            m_metadata.lensModel = lens.Lens ? lens.Lens : "Standard Lens";
+            m_metadata.isoSpeed = static_cast<uint32_t>(other.iso_speed);
+            m_metadata.exposureTime = other.shutter > 0 ? other.shutter : 1.0 / 250.0;
+            m_metadata.fNumber = other.aperture > 0 ? other.aperture : 2.8;
+            m_metadata.focalLength = other.focal_len > 0 ? other.focal_len : 50.0;
 
-    m_metadata.make = idata.make ? idata.make : "Camera";
-    m_metadata.model = idata.model ? idata.model : "RawModel";
-    m_metadata.lensModel = lens.Lens ? lens.Lens : "Standard Lens";
-    m_metadata.isoSpeed = static_cast<uint32_t>(other.iso_speed);
-    m_metadata.exposureTime = other.shutter > 0 ? other.shutter : 1.0 / 250.0;
-    m_metadata.fNumber = other.aperture > 0 ? other.aperture : 2.8;
-    m_metadata.focalLength = other.focal_len > 0 ? other.focal_len : 50.0;
+            m_impl->rawProcessor.imgdata.params.output_bps = 16;
+            m_impl->rawProcessor.imgdata.params.gamm[0] = 1.0f;
+            m_impl->rawProcessor.imgdata.params.gamm[1] = 1.0f;
+            m_impl->rawProcessor.imgdata.params.no_auto_bright = 1;
+            m_impl->rawProcessor.imgdata.params.use_camera_wb = 0;
+            m_impl->rawProcessor.imgdata.params.output_color = 0;
 
-    // Configure 16-bit linear demosaic without camera tone curve
-    m_impl->rawProcessor.imgdata.params.output_bps = 16;
-    m_impl->rawProcessor.imgdata.params.gamm[0] = 1.0f; // Linear gamma
-    m_impl->rawProcessor.imgdata.params.gamm[1] = 1.0f;
-    m_impl->rawProcessor.imgdata.params.no_auto_bright = 1;
-    m_impl->rawProcessor.imgdata.params.use_camera_wb = 0; // Pure sensor linear
-    m_impl->rawProcessor.imgdata.params.output_color = 0;   // Raw color space
+            ret = m_impl->rawProcessor.dcraw_process();
+            if (ret == LIBRAW_SUCCESS) {
+                libraw_processed_image_t* image = m_impl->rawProcessor.dcraw_make_mem_image(&ret);
+                if (image && image->type == LIBRAW_IMAGE_BITMAP) {
+                    m_width = image->width;
+                    m_height = image->height;
+                    m_rawWidth = m_width;
+                    m_rawHeight = m_height;
 
-    ret = m_impl->rawProcessor.dcraw_process();
-    if (ret != LIBRAW_SUCCESS) {
-        std::cerr << "[RawDecoder] dcraw_process failed: " << libraw_strerror(ret) << std::endl;
-        return false;
+                    const size_t totalPixels = static_cast<size_t>(m_width) * static_cast<size_t>(m_height);
+                    m_linearBuffer.resize(totalPixels);
+                    const uint16_t* src16 = reinterpret_cast<const uint16_t*>(image->data);
+
+                    for (size_t i = 0; i < totalPixels; ++i) {
+                        float r = static_cast<float>(src16[i * 3 + 0]) / 65535.0f;
+                        float g = static_cast<float>(src16[i * 3 + 1]) / 65535.0f;
+                        float b = static_cast<float>(src16[i * 3 + 2]) / 65535.0f;
+                        m_linearBuffer[i] = FloatRGBA(r, g, b, 1.0f);
+                    }
+
+                    LibRaw::dcraw_clear_mem(image);
+                    m_isLoaded = true;
+                    return true;
+                }
+                if (image) LibRaw::dcraw_clear_mem(image);
+            }
+        }
+        m_impl->rawProcessor.recycle();
     }
-
-    libraw_processed_image_t* image = m_impl->rawProcessor.dcraw_make_mem_image(&ret);
-    if (!image || image->type != LIBRAW_IMAGE_BITMAP) {
-        std::cerr << "[RawDecoder] dcraw_make_mem_image failed" << std::endl;
-        if (image) LibRaw::dcraw_clear_mem(image);
-        return false;
-    }
-
-    m_width = image->width;
-    m_height = image->height;
-    m_rawWidth = m_width;
-    m_rawHeight = m_height;
-
-    // Convert 16-bit linear RGB to 32-bit linear float RGBA [0.0, 1.0]
-    const size_t totalPixels = static_cast<size_t>(m_width) * static_cast<size_t>(m_height);
-    m_linearBuffer.resize(totalPixels);
-    const uint16_t* src16 = reinterpret_cast<const uint16_t*>(image->data);
-
-    for (size_t i = 0; i < totalPixels; ++i) {
-        float r = static_cast<float>(src16[i * 3 + 0]) / 65535.0f;
-        float g = static_cast<float>(src16[i * 3 + 1]) / 65535.0f;
-        float b = static_cast<float>(src16[i * 3 + 2]) / 65535.0f;
-        m_linearBuffer[i] = FloatRGBA(r, g, b, 1.0f);
-    }
-
-    LibRaw::dcraw_clear_mem(image);
-    m_isLoaded = true;
-    return true;
-#else
-    (void)data; (void)size;
-    return false;
 #endif
+
+    // Built-in DNG/TIFF decode fallback
+    if (decodeTiffDngInternal(data, size, m_width, m_height, m_linearBuffer, m_metadata)) {
+        m_rawWidth = m_width;
+        m_rawHeight = m_height;
+        m_isLoaded = true;
+        return true;
+    }
+
+    std::cerr << "[RawDecoder] Failed to decode raw image from buffer." << std::endl;
+    return false;
 }
 
 bool RawDecoder::extractTile(int32_t tileX, int32_t tileY, 
